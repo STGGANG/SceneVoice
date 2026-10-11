@@ -1,0 +1,6859 @@
+@charset "UTF-8";
+/* Pretendard (dynamic subset: only the glyph ranges actually shown are downloaded). Falls back to system fonts offline. */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+
+/* =========================================================================
+   씬보이스 — 화면 디자인
+
+   색   실리태번 테마의 글자색·바탕색에서 선·면·흐린 글자를 만듭니다.
+        고정 색은 역할이 정해진 것만 씁니다.
+          청록 brand   실행 버튼, 켜짐·선택, 대사
+          보라 thought 생각 대사
+          초록 ok      정상, 켜짐 표시, 전화
+          주황 warn    주의, 비용 안내
+          빨강 danger  삭제, 초기화, 통화 종료
+        스마트폰 화면만은 기기처럼 보이도록 자체 색(어두운 휴대폰 화면)을 씁니다.
+   모양 스위치·체크박스·라디오·슬라이더는 테마 CSS보다 이 확장의 모양을 우선합니다.
+   글꼴 Pretendard
+   ========================================================================= */
+
+/* ----- 1. 디자인 토큰 ----- */
+#sv-overlay,
+.sv-dialog,
+.sv-inline-actions,
+.sv-message-generate,
+.sv-message-tool,
+.sv-chat-memory,
+#sv-phone-launcher,
+#sv-smartphone,
+.sv-toast {
+  --sv-font: "Pretendard Variable", Pretendard, -apple-system,
+    BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    system-ui, sans-serif;
+  --sv-mono: ui-monospace, "SF Mono", Menlo, Consolas, "D2Coding", monospace;
+
+  --sv-fg: var(--SmartThemeBodyColor, #dcdcd2);
+  --sv-muted: color-mix(in srgb, var(--sv-fg) 66%, transparent);
+  --sv-faint: color-mix(in srgb, var(--sv-fg) 44%, transparent);
+  --sv-placeholder: color-mix(in srgb, var(--sv-fg) 32%, transparent);
+  --sv-line: color-mix(in srgb, var(--sv-fg) 11%, transparent);
+  --sv-line-strong: color-mix(in srgb, var(--sv-fg) 22%, transparent);
+  --sv-soft: color-mix(in srgb, var(--sv-fg) 5%, transparent);
+  --sv-soft2: color-mix(in srgb, var(--sv-fg) 9%, transparent);
+  --sv-soft3: color-mix(in srgb, var(--sv-fg) 17%, transparent);
+  --sv-surface: var(--SmartThemeBlurTintColor, rgba(23, 23, 23, 0.94));
+  --sv-surface-solid: var(--sv-surface);
+  --sv-raised: color-mix(in srgb, var(--sv-surface-solid) 88%, var(--sv-fg));
+  --sv-blur: var(--SmartThemeBlurStrength, 10px);
+  --sv-shadow: 0 18px 50px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.45));
+  --sv-shadow-pop: 0 10px 28px
+    color-mix(in srgb, var(--SmartThemeShadowColor, #000) 70%, transparent);
+
+  --sv-brand: #13a094;
+  --sv-thought: #a77bf0;
+  --sv-ok: #2fb67c;
+  --sv-warn: #e3a33a;
+  --sv-danger: #e5484d;
+  --sv-brand-text: color-mix(in srgb, var(--sv-brand) 72%, var(--sv-fg));
+  --sv-brand-soft: color-mix(in srgb, var(--sv-brand) 15%, transparent);
+  --sv-brand-soft2: color-mix(in srgb, var(--sv-brand) 26%, transparent);
+  --sv-brand-line: color-mix(in srgb, var(--sv-brand) 48%, transparent);
+  --sv-thought-text: color-mix(in srgb, var(--sv-thought) 74%, var(--sv-fg));
+  --sv-thought-soft: color-mix(in srgb, var(--sv-thought) 16%, transparent);
+  --sv-ok-text: color-mix(in srgb, var(--sv-ok) 76%, var(--sv-fg));
+  --sv-ok-soft: color-mix(in srgb, var(--sv-ok) 15%, transparent);
+  --sv-warn-text: color-mix(in srgb, var(--sv-warn) 80%, var(--sv-fg));
+  --sv-warn-soft: color-mix(in srgb, var(--sv-warn) 15%, transparent);
+  --sv-danger-text: color-mix(in srgb, var(--sv-danger) 80%, var(--sv-fg));
+  --sv-danger-soft: color-mix(in srgb, var(--sv-danger) 12%, transparent);
+  --sv-danger-soft2: color-mix(in srgb, var(--sv-danger) 20%, transparent);
+  --sv-danger-line: color-mix(in srgb, var(--sv-danger) 42%, transparent);
+
+  --sv-r-window: 18px;
+  --sv-r-group: 14px;
+  --sv-r-card: 12px;
+  --sv-r-control: 10px;
+  --sv-r-small: 8px;
+
+  --sv-fs: clamp(13px, calc(var(--mainFontSize, 15px) * 0.93), 16px);
+  --sv-fs-lg: calc(var(--sv-fs) * 1.1);
+  --sv-fs-sm: calc(var(--sv-fs) * 0.93);
+  --sv-fs-xs: calc(var(--sv-fs) * 0.85);
+  --sv-fs-xxs: calc(var(--sv-fs) * 0.77);
+
+  --sv-control-h: 34px;
+  --sv-cols: 2;
+  --sv-ease: 0.15s ease;
+}
+
+/* In-chat pieces take their colour from the text around them (quotes keep the quote colour). */
+.sv-inline-actions,
+.sv-message-generate,
+.sv-message-tool,
+.sv-chat-memory {
+  --sv-fg: currentColor;
+}
+
+/* Opaque surface for popovers and dialogs when the theme tint is translucent. */
+@supports (color: rgb(from red r g b / 1)) {
+  #sv-overlay,
+  .sv-dialog,
+  #sv-phone-launcher,
+  .sv-toast {
+    /* Alpha must be explicit: an omitted alpha keeps the theme tint's transparency. */
+    --sv-surface-solid: rgb(
+      from var(--SmartThemeBlurTintColor, rgb(23, 23, 23)) r g b / 1
+    );
+  }
+}
+
+/* Browsers without color-mix(): plain translucent greys keep every surface readable. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  #sv-overlay,
+  .sv-dialog,
+  .sv-inline-actions,
+  .sv-message-generate,
+  .sv-chat-memory,
+  #sv-phone-launcher,
+  .sv-toast {
+    --sv-muted: var(--SmartThemeBodyColor, #dcdcd2);
+    --sv-faint: rgba(128, 128, 128, 0.9);
+    --sv-placeholder: rgba(128, 128, 128, 0.7);
+    --sv-line: rgba(128, 128, 128, 0.22);
+    --sv-line-strong: rgba(128, 128, 128, 0.4);
+    --sv-soft: rgba(128, 128, 128, 0.08);
+    --sv-soft2: rgba(128, 128, 128, 0.14);
+    --sv-soft3: rgba(128, 128, 128, 0.26);
+    --sv-raised: var(--sv-surface-solid);
+    --sv-brand-text: #2fb3a6;
+    --sv-brand-soft: rgba(19, 160, 148, 0.16);
+    --sv-brand-soft2: rgba(19, 160, 148, 0.26);
+    --sv-brand-line: rgba(19, 160, 148, 0.5);
+    --sv-thought-text: #b18ff2;
+    --sv-thought-soft: rgba(167, 123, 240, 0.16);
+    --sv-ok-text: #3cc68a;
+    --sv-ok-soft: rgba(47, 182, 124, 0.15);
+    --sv-warn-text: #e3a33a;
+    --sv-warn-soft: rgba(227, 163, 58, 0.15);
+    --sv-danger-text: #ee6a6e;
+    --sv-danger-soft: rgba(229, 72, 77, 0.12);
+    --sv-danger-soft2: rgba(229, 72, 77, 0.2);
+    --sv-danger-line: rgba(229, 72, 77, 0.42);
+  }
+}
+
+@media (max-width: 640px) {
+  #sv-overlay,
+  .sv-dialog {
+    --sv-cols: 1;
+  }
+}
+@media (pointer: coarse), (max-width: 640px) {
+  #sv-overlay,
+  .sv-dialog {
+    --sv-control-h: 40px;
+  }
+}
+
+/* ----- 2. 기본값과 테마 격리 ----- */
+:is(#sv-overlay, .sv-dialog, #sv-smartphone),
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) *,
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) *::before,
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) *::after {
+  box-sizing: border-box;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone),
+:is(#sv-overlay, .sv-dialog, #sv-smartphone)
+  *:not(i):not([class*="fa-"]):not(pre):not(code),
+:is(#sv-overlay, .sv-dialog, #sv-smartphone)
+  :is(input, select, textarea, button, option, label) {
+  font-family: var(--sv-font) !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none !important;
+  letter-spacing: normal;
+  text-transform: none;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) :is(pre, code) {
+  font-family: var(--sv-mono) !important;
+  text-shadow: none !important;
+}
+/* Font Awesome may load after this file; keep icon glyphs from falling back to the text font. */
+:is(#sv-overlay, .sv-dialog, #sv-smartphone, #sv-phone-launcher)
+  [class*="fa-"]::before {
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", "FontAwesome",
+    sans-serif !important;
+  font-weight: 900;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) .fa-regular::before {
+  font-weight: 400;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) i[class*="fa-"] {
+  text-shadow: none !important;
+  filter: none !important;
+}
+:where(#sv-overlay, .sv-dialog, #sv-smartphone)
+  :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, dd, figure, blockquote) {
+  margin: 0;
+}
+:where(#sv-overlay, .sv-dialog, #sv-smartphone) :where(h1, h2, h3, h4, h5, h6) {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  line-height: 1.4;
+}
+/* Resets are kept at zero specificity so every component class below can refine them. */
+:where(#sv-overlay, .sv-dialog, #sv-smartphone) :where(small) {
+  opacity: 1;
+  color: inherit;
+  font-size: inherit;
+}
+:where(#sv-overlay, .sv-dialog, #sv-smartphone) :where(label) {
+  margin: 0;
+}
+:where(#sv-overlay, .sv-dialog, #sv-smartphone) :where(button) {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) [hidden],
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) .hidden {
+  display: none !important;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+:is(#sv-overlay, .sv-dialog, #sv-smartphone)
+  details
+  > summary::-webkit-details-marker {
+  display: none;
+}
+:is(#sv-overlay, .sv-dialog) ::selection {
+  background: var(--sv-brand-soft2);
+  color: inherit;
+}
+:where(#sv-overlay, .sv-dialog) :where(a) {
+  color: var(--sv-brand-text);
+}
+:is(#sv-overlay, .sv-dialog) :focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 2px;
+}
+:is(#sv-overlay, .sv-dialog) ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+:is(#sv-overlay, .sv-dialog) ::-webkit-scrollbar-track {
+  background: transparent;
+}
+:is(#sv-overlay, .sv-dialog) ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--sv-soft3) padding-box;
+}
+:is(#sv-overlay, .sv-dialog) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sv-soft3) transparent;
+}
+
+/* ----- 3. 창 ----- */
+#sv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  animation: sv-fade 0.18s ease-out;
+}
+#sv-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(940px, 100%);
+  height: min(900px, calc(100vh - 40px));
+  height: min(900px, calc(100dvh - 40px));
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-window);
+  background: var(--sv-surface);
+  -webkit-backdrop-filter: blur(var(--sv-blur));
+  backdrop-filter: blur(var(--sv-blur));
+  box-shadow: var(--sv-shadow);
+  color: var(--sv-fg);
+  text-align: left;
+  animation: sv-rise 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes sv-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.sv-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 10px 18px;
+}
+.sv-logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #2cc3b2, #0e7c8b);
+  color: #fff;
+  font-size: 16px;
+}
+.sv-title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-title strong {
+  font-size: var(--sv-fs-lg);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.sv-title small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-icon-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sv-muted);
+  font-size: 1.05em;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+.sv-icon-btn:hover {
+  background: var(--sv-soft2);
+  color: var(--sv-fg);
+}
+
+/* Main tabs */
+.sv-tabs {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--sv-line);
+}
+/* The status line under the tabs: a dot for how things stand, then what is on. */
+.sv-statusbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 22px;
+  border-bottom: 1px solid var(--sv-line);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  cursor: pointer;
+}
+.sv-statusbar > strong {
+  flex: none;
+  color: var(--sv-fg);
+  font-weight: 600;
+}
+.sv-statusbar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sv-faint);
+}
+.sv-statusbar[data-tone="ok"] .sv-status-dot {
+  background: #34c759;
+}
+.sv-statusbar[data-tone="warn"] .sv-status-dot {
+  background: #f5a623;
+}
+.sv-statusbar[data-tone="error"] .sv-status-dot {
+  background: #ff3b30;
+}
+.sv-statusbar[data-tone="busy"] .sv-status-dot {
+  background: var(--sv-brand);
+  animation: sv-status-pulse 1s ease-in-out infinite;
+}
+@keyframes sv-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (max-width: 640px) {
+  .sv-statusbar {
+    padding: 7px 14px;
+  }
+}
+/* 설정: 공통 · 캐릭터 · 스마트폰, under the tabs on the settings tab only. */
+.sv-subtabs {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 12px 22px 8px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--sv-soft2);
+}
+#sv-panel:not([data-tab="settings"]) .sv-settings-subtabs,
+#sv-panel:not([data-tab="history"], [data-tab="favorites"]) .sv-history-subtabs {
+  display: none;
+}
+.sv-history-subtabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.sv-subtab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sv-muted);
+  font: 600 var(--sv-fs-sm) / 1.2 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+.sv-subtab:hover {
+  color: var(--sv-fg);
+}
+/* The part shown stands out like a raised card on the bar, lighter than it in any theme. */
+.sv-subtab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--sv-surface-solid) 80%, #fff);
+  color: var(--sv-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.sv-subtab[aria-selected="true"] > i {
+  color: var(--sv-brand-text);
+}
+.sv-subtab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sv-brand-soft2);
+}
+#sv-settings-tab > .sv-pane {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+#sv-settings-tab > .sv-pane:not(.sv-pane-on) {
+  display: none;
+}
+/* Where a group applies, in a quiet word after its name. */
+.sv-scope {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--sv-line);
+  border-radius: 999px;
+  color: var(--sv-faint);
+  font-size: var(--sv-fs-xxs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .sv-subtabs {
+    margin: 10px 14px 6px;
+  }
+}
+.sv-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+.sv-tab > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sv-tab:hover {
+  background: var(--sv-soft);
+  color: var(--sv-fg);
+}
+.sv-tab.active {
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+
+.sv-save-state {
+  display: none;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 360px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--sv-soft2);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sv-save-state > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sv-save-state > i {
+  flex: none;
+  font-size: 0.9em;
+}
+/* In the header: shown only while saving, just after a save, or when a save failed. */
+#sv-panel[data-tab="settings"] .sv-save-state:not([data-state="idle"]) {
+  display: inline-flex;
+}
+.sv-save-state[data-state="pending"] > i {
+  font-size: 6px;
+}
+.sv-save-state[data-state="saved"] {
+  background: var(--sv-ok-soft);
+  color: var(--sv-ok-text);
+}
+.sv-save-state[data-state="error"] {
+  background: var(--sv-danger-soft);
+  color: var(--sv-danger-text);
+  cursor: help;
+}
+
+/* Scrolling body */
+.sv-tab-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+  padding: 18px 22px 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.sv-tab-content > * {
+  flex: none;
+}
+
+/* ----- 4. 공통 글자 ----- */
+.sv-hint {
+  display: block;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 400;
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.sv-hint:empty {
+  display: none;
+}
+.sv-center {
+  text-align: center;
+}
+.sv-sr {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.sv-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--sv-r-control);
+  background: var(--sv-soft2);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.sv-notice > i {
+  flex: none;
+  margin-top: 0.22em;
+  color: var(--sv-brand-text);
+}
+.sv-notice b {
+  color: var(--sv-fg);
+  font-weight: 600;
+}
+.sv-notice-warn {
+  background: var(--sv-warn-soft);
+  color: var(--sv-warn-text);
+}
+.sv-notice-warn > i {
+  color: var(--sv-warn);
+}
+.sv-notice-danger {
+  background: var(--sv-danger-soft);
+  color: var(--sv-danger-text);
+}
+.sv-notice-danger > i {
+  color: var(--sv-danger);
+}
+.sv-notice-ok {
+  background: var(--sv-ok-soft);
+  color: var(--sv-ok-text);
+}
+.sv-notice-ok > i {
+  color: var(--sv-ok);
+}
+.sv-loading-line {
+  padding: 48px 12px;
+  color: var(--sv-muted);
+  text-align: center;
+}
+.sv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 16px 32px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+  text-align: center;
+}
+.sv-empty > i {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 6px;
+  border-radius: 17px;
+  background: var(--sv-soft2);
+  color: var(--sv-faint);
+  font-size: 1.3em;
+}
+.sv-empty > strong {
+  color: var(--sv-fg);
+  font-size: var(--sv-fs);
+  font-weight: 600;
+}
+.sv-empty > span {
+  max-width: 30em;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+/* ----- 5. 버튼 ----- */
+.sv-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: var(--sv-control-h);
+  margin: 0;
+  padding: 0 13px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+  background: var(--sv-soft);
+  box-shadow: none;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none !important;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 1;
+  transition:
+    background var(--sv-ease),
+    border-color var(--sv-ease),
+    color var(--sv-ease),
+    box-shadow var(--sv-ease);
+}
+.sv-btn > i {
+  flex: none;
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+.sv-btn:hover {
+  background: var(--sv-soft2);
+}
+.sv-btn:active {
+  background: var(--sv-soft3);
+}
+.sv-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sv-btn-primary {
+  border-color: transparent;
+  background: var(--sv-brand);
+  color: #fff;
+}
+.sv-btn-primary > i {
+  opacity: 1;
+}
+.sv-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sv-brand) 86%, #fff);
+}
+.sv-btn-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--sv-brand) 86%, #000);
+}
+.sv-btn-accent {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-btn-accent:hover:not(:disabled) {
+  background: var(--sv-brand-soft2);
+}
+.sv-btn-danger {
+  border-color: var(--sv-danger-line);
+  background: var(--sv-danger-soft);
+  color: var(--sv-danger-text);
+}
+.sv-btn-danger:hover:not(:disabled) {
+  background: var(--sv-danger-soft2);
+}
+.sv-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--sv-muted);
+}
+.sv-btn-ghost:hover:not(:disabled) {
+  background: var(--sv-soft2);
+  color: var(--sv-fg);
+}
+.sv-btn-ghost-danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--sv-danger-text);
+}
+.sv-btn-ghost-danger:hover:not(:disabled) {
+  background: var(--sv-danger-soft);
+}
+.sv-btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: var(--sv-fs-xs);
+}
+.sv-btn-lg {
+  height: 40px;
+  padding: 0 18px;
+  font-size: var(--sv-fs);
+}
+.sv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sv-spacer {
+  flex: 1 1 auto;
+}
+
+/* ----- 6. 입력칸 ----- */
+:is(#sv-overlay, .sv-dialog)
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+        [type="file"]
+      ),
+    select,
+    textarea
+  ) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--sv-control-h);
+  margin: 0;
+  padding: 0 11px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+  outline: none;
+  background-color: var(--sv-soft);
+  background-image: none;
+  box-shadow: none;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs);
+  line-height: 1.4;
+  filter: none;
+  transition:
+    border-color var(--sv-ease),
+    background-color var(--sv-ease),
+    box-shadow var(--sv-ease);
+}
+:is(#sv-overlay, .sv-dialog) :is(input, select, textarea):hover:not(:disabled) {
+  border-color: var(--sv-line-strong);
+}
+:is(#sv-overlay, .sv-dialog) :is(input, select, textarea):focus {
+  border-color: var(--sv-brand-line);
+  background-color: var(--sv-soft2);
+  outline: none;
+}
+:is(#sv-overlay, .sv-dialog) :is(input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--sv-brand-soft);
+}
+:is(#sv-overlay, .sv-dialog) :is(input, select, textarea):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:is(#sv-overlay, .sv-dialog) :is(input, textarea)::placeholder {
+  color: var(--sv-placeholder);
+  opacity: 1;
+}
+:is(#sv-overlay, .sv-dialog) textarea {
+  display: block;
+  height: auto;
+  min-height: 6em;
+  padding: 10px 12px;
+  font-size: var(--sv-fs-sm);
+  line-height: 1.65;
+  resize: vertical;
+}
+:is(#sv-overlay, .sv-dialog) select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 11px center;
+  background-repeat: no-repeat;
+  background-size: 10px 6px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+:is(#sv-overlay, .sv-dialog) select option {
+  background: var(--sv-surface-solid);
+  color: var(--sv-fg);
+}
+:is(#sv-overlay, .sv-dialog) input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- 7. 스위치 · 체크박스 · 라디오 · 슬라이더 (테마보다 우선) ----- */
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  display: inline-block !important;
+  flex: none !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  max-height: 23px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  outline: none !important;
+  background: var(--sv-soft3) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  font-size: 0 !important;
+  vertical-align: middle !important;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  top: 3px !important;
+  left: 3px !important;
+  width: 17px !important;
+  height: 17px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28) !important;
+  clip-path: none !important;
+  mask: none !important;
+  transform: none !important;
+  transition: transform 0.18s ease !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch::after {
+  content: none !important;
+  display: none !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch:checked {
+  background: var(--sv-brand) !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch:checked::before {
+  transform: translateX(17px) !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch:focus-visible {
+  outline: 2px solid var(--sv-brand-line) !important;
+  outline-offset: 2px !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"].sv-switch:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed;
+}
+
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch) {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  display: inline-grid !important;
+  flex: none !important;
+  place-content: center !important;
+  width: 17px !important;
+  min-width: 17px !important;
+  max-width: 17px !important;
+  height: 17px !important;
+  min-height: 17px !important;
+  max-height: 17px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1.5px solid var(--sv-line-strong) !important;
+  border-radius: 5px !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  font-size: 0 !important;
+  vertical-align: middle !important;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    border-color var(--sv-ease);
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch)::before {
+  content: "" !important;
+  display: block !important;
+  position: static !important;
+  width: 9px !important;
+  height: 9px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  clip-path: polygon(
+    14% 44%,
+    0 65%,
+    50% 100%,
+    100% 16%,
+    80% 0%,
+    43% 62%
+  ) !important;
+  mask: none !important;
+  transform: scale(0) !important;
+  transition: transform 0.12s ease !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch)::after {
+  content: none !important;
+  display: none !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch):checked {
+  border-color: var(--sv-brand) !important;
+  background: var(--sv-brand) !important;
+}
+:is(#sv-overlay, .sv-dialog)
+  input[type="checkbox"]:not(.sv-switch):checked::before {
+  transform: scale(1) !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch):focus-visible {
+  outline: 2px solid var(--sv-brand-line) !important;
+  outline-offset: 2px !important;
+}
+:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch):disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed;
+}
+.sv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: var(--sv-control-h);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  word-break: keep-all;
+}
+.sv-row > .sv-check {
+  align-self: end;
+}
+/* Segmented choice built from radios */
+.sv-swatch {
+  display: inline-block;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sv-fg) 22%, transparent);
+  vertical-align: -0.05em;
+}
+.sv-seg {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--sv-soft2);
+}
+.sv-seg > label {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+:is(#sv-overlay, .sv-dialog) .sv-seg input[type="radio"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  cursor: pointer;
+}
+.sv-seg span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(var(--sv-control-h) - 6px);
+  padding: 0 8px;
+  border-radius: 9px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+.sv-seg span > i {
+  font-size: 0.9em;
+}
+.sv-seg > label:hover span {
+  color: var(--sv-fg);
+}
+.sv-seg input:checked + span {
+  background: var(--sv-raised);
+  box-shadow: 0 1px 3px
+    color-mix(in srgb, var(--SmartThemeShadowColor, #000) 40%, transparent);
+  color: var(--sv-fg);
+}
+.sv-seg input:checked + span > i {
+  color: var(--sv-brand-text);
+}
+.sv-seg input:focus-visible + span {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 1px;
+}
+
+/* Range slider + number */
+.sv-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+:is(#sv-overlay, .sv-dialog) .sv-range > input[type="number"] {
+  flex: none;
+  width: 70px;
+  padding: 0 8px;
+  text-align: right;
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  accent-color: var(--sv-brand);
+  cursor: pointer;
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--sv-brand) var(--sv-fill, 50%),
+    var(--sv-soft3) var(--sv-fill, 50%)
+  );
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"]::-moz-range-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sv-soft3);
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sv-brand);
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 3px solid var(--sv-brand);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+:is(#sv-overlay, .sv-dialog) input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--sv-brand);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ----- 8. 툴팁(ⓘ) ----- */
+.sv-info {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--sv-faint) !important;
+  font-size: 13px !important;
+  font-weight: 400;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+  transition:
+    color var(--sv-ease),
+    background var(--sv-ease);
+}
+.sv-info:hover,
+.sv-info[aria-expanded="true"] {
+  background: var(--sv-brand-soft) !important;
+  color: var(--sv-brand-text) !important;
+}
+.sv-tip-pop {
+  position: absolute;
+  z-index: 60;
+  padding: 11px 13px;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 12px;
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow-pop);
+  color: var(--sv-fg);
+  font-size: max(12px, var(--sv-fs-xs));
+  font-weight: 400;
+  line-height: 1.62;
+  text-align: left;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  animation: sv-pop 0.12s ease-out;
+}
+.sv-tip-pop::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: var(--sv-arrow-x, 20px);
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid var(--sv-line-strong);
+  border-left: 1px solid var(--sv-line-strong);
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+}
+.sv-tip-pop.sv-tip-above::before {
+  top: auto;
+  bottom: -6px;
+  border: 0;
+  border-right: 1px solid var(--sv-line-strong);
+  border-bottom: 1px solid var(--sv-line-strong);
+}
+.sv-tip-pop ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding-left: 1.05em;
+}
+.sv-tip-pop li::marker {
+  color: var(--sv-brand-text);
+}
+@keyframes sv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+/* ----- 9. 그룹 · 행 · 필드 ----- */
+.sv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+}
+.sv-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  margin: 0 4px !important;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm) !important;
+  font-weight: 700 !important;
+}
+.sv-group-icon {
+  flex: none;
+  width: 16px;
+  color: var(--sv-brand-text);
+  font-size: 0.95em;
+  text-align: center;
+}
+.sv-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+}
+
+/* Folded optional features */
+.sv-fold-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sv-fold {
+  gap: 0;
+}
+.sv-fold > summary.sv-group-title {
+  min-height: 52px;
+  margin: 0 !important;
+  padding: 10px 16px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+  user-select: none;
+  transition: background var(--sv-ease);
+}
+.sv-fold > summary.sv-group-title:hover {
+  background: var(--sv-soft2);
+}
+.sv-fold > summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--sv-brand-soft2);
+}
+.sv-fold[open] > summary.sv-group-title {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.sv-fold > .sv-group-body {
+  border-top: 1px solid var(--sv-line);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.sv-fold-chevron {
+  flex: none;
+  color: var(--sv-faint);
+  font-size: 0.8em;
+  transition: transform var(--sv-ease);
+}
+.sv-fold[open] .sv-fold-chevron {
+  transform: rotate(180deg);
+}
+
+/* Rows of one to three fields; columns line up across the rows of a group. */
+.sv-row {
+  display: grid;
+  grid-template-columns: repeat(var(--sv-cols), minmax(0, 1fr));
+  align-items: start;
+  gap: 14px 28px;
+  min-width: 0;
+}
+.sv-row > * {
+  min-width: 0;
+}
+/* A row with one control uses the whole width. */
+.sv-row > :only-child {
+  grid-column: 1 / -1;
+}
+/* A light line between settings of a different kind inside one section. */
+.sv-divider {
+  height: 0;
+  margin: 2px 0 !important;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--sv-line) 75%, transparent);
+}
+.sv-divider.hidden {
+  display: none;
+}
+.sv-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 860px) {
+  .sv-row-3 {
+    grid-template-columns: repeat(var(--sv-cols), minmax(0, 1fr));
+  }
+}
+.sv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.sv-label-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-height: 20px;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.sv-label-line > label {
+  cursor: default;
+}
+.sv-field-action {
+  justify-content: center;
+  align-self: center;
+  align-items: flex-start;
+}
+.sv-row.sv-engine-section > .sv-field-action {
+  align-self: end;
+  min-height: var(--sv-control-h);
+}
+.sv-switch-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  min-height: 36px;
+  color: var(--sv-fg);
+  cursor: pointer;
+}
+.sv-switch-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sv-switch-text > .sv-label-line {
+  cursor: pointer;
+}
+:is(#sv-overlay, .sv-dialog) .sv-switch-row > input[type="checkbox"].sv-switch {
+  margin-top: -1px !important;
+}
+#sv-casting-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sv-combo {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.sv-combo > :is(select, input) {
+  flex: 1 1 auto;
+}
+.sv-combo > .sv-btn {
+  flex: none;
+}
+
+/* Badges */
+.sv-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--sv-soft2);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xxs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sv-badge > i {
+  font-size: 0.9em;
+}
+.sv-badge-on,
+.sv-badge-phone {
+  background: var(--sv-ok-soft);
+  color: var(--sv-ok-text);
+}
+.sv-badge-dialogue {
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-badge-thought {
+  background: var(--sv-thought-soft);
+  color: var(--sv-thought-text);
+}
+.sv-badge.sv-badge-warn {
+  background: var(--sv-warn-soft);
+  color: var(--sv-warn-text);
+}
+.sv-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sv-engine-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--sv-line);
+}
+.sv-engine-check-result {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin: 0;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.sv-engine-check-result[data-state="ok"] {
+  color: var(--sv-ok-text);
+}
+.sv-engine-check-result[data-state="error"] {
+  color: var(--sv-danger-text);
+}
+.sv-engine-check-result[data-state="ok"]::before,
+.sv-engine-check-result[data-state="error"]::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+  content: "";
+}
+
+/* ----- 10. 캐릭터별 목소리 ----- */
+.sv-cast-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+  box-shadow: inset 3px 0 0 var(--sv-brand-line);
+}
+
+/* ----- 11. 상태 탭 ----- */
+:is(#sv-overlay, .sv-dialog) .sv-phone-avatar {
+  display: grid;
+  flex: none;
+  grid-template: 100% / 100%;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--sv-soft2);
+  color: var(--sv-faint);
+  font-size: 1.1em;
+}
+:is(#sv-overlay, .sv-dialog) .sv-phone-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A tall picture (a card portrait) shows its upper part, where the face is. */
+  object-position: 50% 15%;
+}
+.sv-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.sv-page-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-page-head-text strong {
+  font-size: var(--sv-fs-lg);
+  font-weight: 700;
+}
+.sv-page-head-text small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-page-head > .sv-actions {
+  margin-left: auto;
+}
+/* One button per tracked person above their state. */
+.sv-state-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sv-state-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--sv-line);
+  border-radius: 999px;
+  background: var(--sv-soft);
+  color: var(--sv-muted);
+  font: inherit;
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+.sv-state-person > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(#sv-overlay, .sv-dialog) .sv-state-person .sv-phone-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: var(--sv-fs-xs);
+}
+.sv-state-person > .sv-badge {
+  font-style: normal;
+}
+.sv-state-person:hover {
+  color: var(--sv-fg);
+}
+.sv-state-person[aria-selected="true"] {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  color: var(--sv-fg);
+}
+.sv-state-person:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 1px;
+}
+.sv-state-view {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+/* A state too old to trust is shown faded: prompts don't use it. */
+.sv-state-uncertain {
+  opacity: 0.6;
+}
+.sv-state-summary {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-brand-soft);
+  font-size: var(--sv-fs);
+  line-height: 1.65;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.sv-state-summary > i {
+  flex: none;
+  margin-top: 0.35em;
+  color: var(--sv-brand-text);
+  font-size: 0.85em;
+}
+.sv-state-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--sv-cols), minmax(0, 1fr));
+  gap: 12px;
+}
+.sv-state-card {
+  --sv-tone: var(--sv-brand);
+  padding: 14px 16px 10px;
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--sv-tone) 70%, transparent);
+}
+.sv-state-body {
+  --sv-tone: var(--sv-ok);
+}
+.sv-state-emotional {
+  --sv-tone: #ec6a9c;
+}
+.sv-state-mind {
+  --sv-tone: var(--sv-thought);
+}
+.sv-state-social {
+  --sv-tone: var(--sv-warn);
+}
+.sv-state-card h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px !important;
+  font-size: var(--sv-fs-sm) !important;
+}
+.sv-state-card h4 > i {
+  color: color-mix(in srgb, var(--sv-tone) 80%, var(--sv-fg));
+}
+.sv-state-card dl > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+}
+.sv-state-card dl > div + div {
+  border-top: 1px solid var(--sv-line);
+}
+.sv-state-card dt {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-state-card dd {
+  font-size: var(--sv-fs-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sv-state-card dl > .sv-state-empty {
+  display: block;
+}
+.sv-state-empty {
+  padding: 6px 0;
+  color: var(--sv-faint);
+  font-size: var(--sv-fs-xs);
+}
+.sv-timeline {
+  margin: 0;
+  padding: 4px 18px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+  list-style: none;
+}
+.sv-timeline li {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  font-size: var(--sv-fs-sm);
+  line-height: 1.5;
+}
+.sv-timeline li.sv-timeline-gone > span {
+  color: var(--sv-faint);
+}
+.sv-timeline li > span > .sv-badge {
+  margin-right: 4px;
+  background: var(--sv-warn-soft);
+  color: var(--sv-warn-text);
+  font-style: normal;
+  vertical-align: 0.05em;
+}
+.sv-state-history-delete {
+  width: 28px;
+  height: 28px;
+  font-size: 0.95em;
+}
+.sv-state-history-delete:hover {
+  color: var(--sv-danger-text);
+}
+.sv-state-history .sv-group-title .sv-btn {
+  font-weight: 500;
+}
+.sv-timeline li + li {
+  border-top: 1px solid var(--sv-line);
+}
+.sv-timeline time {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  white-space: nowrap;
+}
+.sv-timeline-empty {
+  padding: 14px 18px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+}
+
+/* State editor */
+.sv-state-form {
+  display: grid;
+  gap: 14px;
+}
+.sv-state-form fieldset.sv-state-card {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+.sv-state-form legend {
+  display: flex;
+  float: left;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+}
+.sv-state-form legend > i {
+  color: color-mix(in srgb, var(--sv-tone) 80%, var(--sv-fg));
+}
+.sv-state-input {
+  display: grid;
+  clear: both;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.sv-state-input > span {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-state-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sv-state-stale {
+  color: var(--sv-warn-text);
+}
+
+/* ----- 12. 전화 탭(패널) ----- */
+.sv-phone-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: var(--sv-r-group);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, #34c759 18%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      120% 140% at 100% 100%,
+      var(--sv-brand-soft),
+      transparent 60%
+    ),
+    var(--sv-soft);
+}
+#sv-overlay .sv-phone-hero .sv-phone-avatar {
+  width: 64px;
+  height: 64px;
+  box-shadow: 0 0 0 3px var(--sv-soft2);
+}
+.sv-phone-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sv-phone-hero-text > small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-phone-hero-text > strong {
+  margin-bottom: 4px;
+  font-size: calc(var(--sv-fs) * 1.25);
+  font-weight: 700;
+}
+/* 연락처 현황판: a row per contact, its state and last call, and call/text buttons. */
+.sv-board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sv-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+.sv-board-head > strong {
+  margin-right: auto;
+  font-size: var(--sv-fs);
+  font-weight: 700;
+}
+.sv-board-head > strong > em {
+  margin-left: 4px;
+  color: var(--sv-faint);
+  font-style: normal;
+  font-weight: 600;
+}
+.sv-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none;
+}
+.sv-board-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 10px 10px 12px;
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+}
+#sv-overlay .sv-board-row > .sv-phone-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  font-size: 1.05em;
+}
+.sv-board-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sv-board-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.sv-board-name > strong {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-board-main > small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-badge.sv-badge-new {
+  background: color-mix(in srgb, #1f6bff 16%, transparent);
+  color: #4d8dff;
+}
+.sv-board-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+#sv-overlay .sv-board-actions > .sv-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--sv-soft2);
+}
+#sv-overlay .sv-board-actions > .sv-board-call {
+  background: color-mix(in srgb, #34c759 20%, transparent);
+  color: #28b04d;
+}
+#sv-overlay .sv-board-actions > .sv-board-text {
+  color: #4d8dff;
+}
+#sv-overlay .sv-board-actions > .sv-icon-btn:hover {
+  filter: brightness(1.12);
+}
+.sv-phone-actions {
+  justify-content: center;
+}
+
+/* ----- 13. 기록 · 보관함 ----- */
+.sv-history-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+}
+.sv-filter-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 200px) minmax(130px, 200px);
+  gap: 8px;
+}
+.sv-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.sv-search-box > i {
+  position: absolute;
+  left: 12px;
+  color: var(--sv-faint);
+  font-size: 0.9em;
+  pointer-events: none;
+}
+#sv-overlay .sv-search-box > input {
+  padding-left: 34px;
+}
+.sv-filter-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sv-date-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  white-space: nowrap;
+}
+#sv-overlay .sv-date-field > input {
+  width: 150px;
+}
+.sv-date-sep {
+  color: var(--sv-faint);
+}
+.sv-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sv-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+  transition: border-color var(--sv-ease);
+}
+.sv-history-item:hover {
+  border-color: var(--sv-line);
+}
+.sv-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-history-speaker-name {
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 700;
+}
+.sv-history-meta time {
+  margin-left: auto;
+  color: var(--sv-faint);
+  white-space: nowrap;
+}
+.sv-history-text {
+  font-size: var(--sv-fs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-applied {
+  display: flex;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--sv-r-small);
+  background: var(--sv-brand-soft);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sv-applied > b {
+  flex: none;
+  color: var(--sv-brand-text);
+  font-weight: 700;
+}
+.sv-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.sv-history-favorite.sv-is-kept {
+  color: var(--sv-warn-text);
+}
+.sv-no-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sv-faint);
+  font-size: var(--sv-fs-xs);
+}
+.sv-history-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#sv-overlay .sv-list-toolbar > select {
+  width: auto;
+  min-width: 160px;
+}
+.sv-path-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 11px;
+  border-radius: var(--sv-r-small);
+  background: var(--sv-soft);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+
+/* ----- 14. 대화상자 (대사 편집 · 백업 복원) ----- */
+#sv-line-editor.sv-dialog,
+#sv-restore-dialog.sv-dialog {
+  z-index: 2147483620;
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: var(--sv-r-window);
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs);
+  line-height: 1.5;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+.sv-dialog:focus,
+.sv-dialog:focus-visible {
+  outline: none;
+}
+.sv-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.sv-dialog > form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 20px 22px;
+}
+.sv-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sv-dialog-head > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-dialog-head h3 {
+  font-size: var(--sv-fs-lg) !important;
+}
+.sv-dialog-head small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  overflow-wrap: anywhere;
+}
+.sv-dialog-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-line-text {
+  max-height: 30vh;
+  padding: 12px 14px;
+  overflow: auto;
+  border-left: 3px solid var(--sv-brand);
+  border-radius: 0 var(--sv-r-small) var(--sv-r-small) 0;
+  background: var(--sv-soft);
+  font-size: var(--sv-fs);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.sv-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.sv-stats > div {
+  padding: 10px 12px;
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+}
+.sv-stats dt {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xxs);
+}
+.sv-stats dd {
+  font-size: var(--sv-fs-lg);
+  font-weight: 700;
+}
+.sv-stats .sv-stat-warn {
+  background: var(--sv-warn-soft);
+}
+.sv-stats .sv-stat-warn dd {
+  color: var(--sv-warn-text);
+}
+
+.sv-tag-group {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.sv-tag-group > span {
+  padding-top: 5px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-tag-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sv-script-check {
+  margin: -6px 0 0;
+  font-size: var(--sv-fs-xs);
+}
+.sv-script-check[data-state="ok"] {
+  color: var(--sv-ok-text);
+}
+.sv-script-check[data-state="error"] {
+  color: var(--sv-danger-text);
+}
+#sv-edit-script {
+  min-height: 84px;
+  line-height: 1.6;
+  resize: vertical;
+}
+:is(.sv-dialog) .sv-tag-pick {
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--sv-line-strong, var(--sv-line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease),
+    border-color var(--sv-ease);
+}
+:is(.sv-dialog) .sv-tag-pick:hover {
+  color: var(--sv-fg);
+}
+:is(.sv-dialog) .sv-tag-pick:active {
+  border-color: transparent;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+
+/* ----- 15. 채팅 안의 버튼 ----- */
+#sv-extension-menu-item,
+#sv-phone-menu-item {
+  cursor: pointer;
+}
+/* A small round count, its number centred. */
+#sv-phone-menu-item .sv-menu-badge {
+  /* Outside SceneVoice's own boxes (no tokens here): the brand colour and font given directly. The
+     line as tall as the circle puts the number in its middle whatever the theme's font. */
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  align-self: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #13a094;
+  color: #fff;
+  font: 700 11px / 18px "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  vertical-align: middle;
+}
+#sv-phone-menu-item .sv-menu-badge.hidden {
+  display: none;
+}
+#sv-extension-settings-block {
+  order: -10;
+}
+
+.sv-utterance {
+  display: inline;
+}
+.sv-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin: 0 3px;
+  padding: 1px 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-family: var(--sv-font);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  text-shadow: none;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.sv-inline-actions > button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 1;
+  transition:
+    color var(--sv-ease),
+    background var(--sv-ease);
+}
+.sv-inline-actions > button i {
+  color: inherit;
+  text-shadow: none;
+}
+.sv-inline-actions > button:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: currentColor;
+}
+.sv-inline-actions > button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--sv-brand) 60%, transparent);
+  outline-offset: 1px;
+}
+.sv-inline-actions > button:disabled {
+  opacity: 0.4;
+}
+.sv-inline-actions > .sv-play-btn {
+  color: currentColor;
+  font-size: 11px;
+}
+.sv-play-btn.sv-ready::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sv-ok);
+}
+.sv-play-btn.sv-playing {
+  background: var(--sv-brand) !important;
+  color: #fff !important;
+  animation: sv-play-pulse 1.2s ease-in-out infinite;
+}
+.sv-play-btn.sv-loading i {
+  animation: sv-spin 1s linear infinite;
+}
+.sv-play-btn.sv-queued {
+  opacity: 0.6;
+}
+.sv-play-btn.sv-error {
+  color: var(--sv-danger) !important;
+}
+@keyframes sv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sv-play-pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--sv-brand) 25%, transparent);
+  }
+}
+.sv-inline-actions > select.sv-speaker-select {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: inline-block !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 120px !important;
+  height: 20px !important;
+  min-height: 0 !important;
+  margin: 0 0 0 2px !important;
+  padding: 0 18px 0 7px !important;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent) !important;
+  border-radius: 999px !important;
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-position: right 7px center !important;
+  background-repeat: no-repeat !important;
+  background-size: 8px 5px !important;
+  box-shadow: none !important;
+  color: inherit !important;
+  font: 500 11px/18px var(--sv-font) !important;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  cursor: pointer;
+}
+/* Collapsed: only play and ⋯. */
+.sv-inline-actions:not(.sv-open) > :is(.sv-reroll-btn, .sv-edit-btn) {
+  display: none;
+}
+.sv-inline-actions:not(.sv-open) > select.sv-speaker-select {
+  display: none !important;
+}
+.sv-inline-actions > .sv-more-btn {
+  font-size: 11px;
+}
+.sv-inline-actions > .sv-more-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: currentColor;
+}
+.sv-inline-actions > .sv-more-btn.sv-attention::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sv-warn);
+}
+.sv-inline-actions > select.sv-speaker-select option {
+  background: var(--SmartThemeBlurTintColor, #222);
+  color: var(--SmartThemeBodyColor, #eee);
+}
+
+.mes_button.sv-message-tool[hidden] {
+  display: none !important;
+}
+.mes_button:is(.sv-message-generate, .sv-message-tool) {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  padding: 3px 9px !important;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--sv-font);
+  font-size: 12px !important;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0.85 !important;
+}
+.mes_button:is(.sv-message-generate, .sv-message-tool):hover {
+  opacity: 1 !important;
+}
+.mes_button.sv-message-tool:disabled {
+  opacity: 0.4 !important;
+  pointer-events: none;
+}
+.mes_button:is(.sv-message-generate, .sv-message-tool) > i {
+  font-size: 0.95em;
+}
+.mes_button.sv-message-generate.sv-queued {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  opacity: 1 !important;
+}
+
+/* Saved call/voice memory under a message */
+.sv-chat-memory {
+  margin: 8px 0 2px;
+  padding: 0;
+  border: 1px solid var(--sv-line);
+  border-radius: 10px;
+  background: var(--sv-soft);
+  color: inherit;
+  font: 12px/1.45 var(--sv-font);
+  text-shadow: none;
+}
+.sv-chat-memory > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  color: var(--sv-muted);
+  font-size: 11px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.sv-chat-memory > summary::-webkit-details-marker {
+  display: none;
+}
+.sv-chat-memory > summary::before {
+  content: "›";
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+.sv-chat-memory[open] > summary::before {
+  transform: rotate(90deg);
+}
+.sv-memory-icons {
+  display: inline-flex;
+  gap: 5px;
+  font-size: 10px;
+}
+.sv-memory-count {
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.sv-memory-records {
+  padding: 0 10px 8px;
+}
+.sv-memory-record {
+  padding: 8px 0;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-memory-record small {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--sv-faint);
+  font-size: 10px;
+}
+.sv-memory-record pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--sv-soft2);
+  color: inherit;
+  font:
+    11px/1.55 var(--sv-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-memory-editor {
+  width: 100%;
+  min-height: 132px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--sv-brand-line);
+  border-radius: 8px;
+  background: var(--sv-soft2);
+  color: inherit;
+  font:
+    11px/1.55 var(--sv-mono);
+  resize: vertical;
+}
+.sv-memory-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+}
+.sv-memory-actions button {
+  padding: 4px 10px;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: 600 11px/1.4 var(--sv-font);
+  cursor: pointer;
+}
+.sv-memory-actions button:hover {
+  background: var(--sv-soft2);
+}
+.sv-memory-actions .sv-danger {
+  border-color: var(--sv-danger-line);
+  color: var(--sv-danger-text);
+}
+.sv-memory-actions .hidden,
+.sv-memory-record .hidden {
+  display: none !important;
+}
+
+/* ----- 16. 플로팅 전화 버튼 ----- */
+#sv-phone-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 2147483500;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 16px;
+  background: var(--sv-surface);
+  -webkit-backdrop-filter: blur(var(--sv-blur));
+  backdrop-filter: blur(var(--sv-blur));
+  box-shadow: none;
+  color: var(--sv-fg);
+  cursor: pointer;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1),
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+#sv-phone-launcher:hover {
+  border-color: var(--sv-brand-line);
+  color: var(--sv-brand-text);
+  transform: translateY(-2px);
+}
+#sv-phone-launcher:active {
+  transform: scale(0.95);
+}
+#sv-phone-launcher:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 3px;
+}
+#sv-phone-launcher .sv-fab-icon {
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+}
+#sv-phone-launcher .sv-fab-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+}
+#sv-phone-launcher[data-alert="call"] {
+  border-color: transparent;
+  background: var(--sv-ok);
+  color: #fff;
+}
+#sv-phone-launcher[data-alert="call"] .sv-fab-icon {
+  animation: sv-wiggle 1.3s ease-in-out infinite;
+}
+#sv-phone-launcher[data-alert="call"] .sv-fab-ring {
+  border: 2px solid var(--sv-ok);
+  animation: sv-ring-out 1.4s ease-out infinite;
+}
+#sv-phone-launcher[data-alert="message"] {
+  border-color: var(--sv-brand-line);
+  color: var(--sv-brand-text);
+}
+#sv-phone-launcher.hidden,
+#sv-phone-launcher.sv-launcher-off {
+  display: none;
+}
+#sv-phone-launcher .sv-phone-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid var(--sv-surface-solid);
+  border-radius: 10px;
+  background: var(--sv-danger);
+  color: #fff;
+  font: 700 11px/16px var(--sv-font);
+  text-align: center;
+}
+#sv-phone-launcher .sv-phone-badge.hidden {
+  display: none;
+}
+@keyframes sv-wiggle {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0);
+  }
+  10%,
+  30% {
+    transform: rotate(-14deg);
+  }
+  20%,
+  40% {
+    transform: rotate(14deg);
+  }
+}
+@keyframes sv-ring-out {
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+/* ----- 17. 스마트폰 ----- */
+#sv-smartphone {
+  --ph-fg: #f5f5f7;
+  --ph-muted: rgba(235, 235, 245, 0.62);
+  --ph-faint: rgba(235, 235, 245, 0.32);
+  --ph-bg: #000;
+  --ph-surface: #1c1c1e;
+  --ph-surface2: #2c2c2e;
+  --ph-line: rgba(84, 84, 88, 0.55);
+  --ph-glass: rgba(255, 255, 255, 0.14);
+  --ph-green: #34c759;
+  --ph-red: #ff3b30;
+  --ph-blue: #0a84ff;
+  --ph-gray: #8e8e93;
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 2147483590;
+  width: 372px;
+  height: min(780px, calc(100vh - 40px));
+  height: min(780px, calc(100dvh - 40px));
+  color: var(--ph-fg);
+  font-size: 15px;
+  line-height: 1.4;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  filter: drop-shadow(0 28px 50px rgba(0, 0, 0, 0.5));
+}
+#sv-smartphone.hidden {
+  display: none;
+}
+.sv-phone-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 11px;
+  border-radius: 58px;
+  background: linear-gradient(145deg, #4a4b51 0%, #1b1c20 38%, #2c2d32 100%);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.14),
+    inset 0 0 0 4px #0c0c0e;
+  animation: sv-phone-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes sv-phone-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+}
+.sv-phone-key {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2a2b2f, #55565c);
+}
+.sv-phone-key-action {
+  top: 118px;
+  left: -2px;
+  height: 28px;
+}
+.sv-phone-key-up {
+  top: 166px;
+  left: -2px;
+  height: 50px;
+}
+.sv-phone-key-down {
+  top: 226px;
+  left: -2px;
+  height: 50px;
+}
+.sv-phone-key-power {
+  top: 180px;
+  right: -2px;
+  height: 78px;
+  background: linear-gradient(90deg, #55565c, #2a2b2f);
+}
+.sv-phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 47px;
+  background: var(--ph-bg);
+  isolation: isolate;
+}
+
+/* Status bar (also the drag handle on desktop) */
+.sv-phone-status {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 52px;
+  padding: 0 26px 0 34px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+#sv-smartphone.sv-dragging .sv-phone-status {
+  cursor: grabbing;
+}
+.sv-phone-clock {
+  justify-self: start;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.sv-phone-island {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 112px;
+  height: 32px;
+  margin-top: 2px;
+  padding-right: 11px;
+  border-radius: 20px;
+  background: #000;
+}
+.sv-phone-island > span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #2d3a5c 0, #0c1020 60%);
+  box-shadow: inset 0 0 0 1.5px #15182a;
+}
+.sv-phone-indicators {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  font-size: 12px;
+}
+.sv-phone-battery {
+  position: relative;
+  width: 25px;
+  height: 12px;
+  padding: 1.5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-radius: 4px;
+}
+.sv-phone-battery::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: -4px;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 1px 1px 0;
+  background: rgba(255, 255, 255, 0.45);
+}
+.sv-phone-battery > span {
+  display: block;
+  width: 76%;
+  height: 100%;
+  border-radius: 1.5px;
+  background: var(--ph-fg);
+}
+
+/* Navigation bar under the status bar */
+.sv-phone-nav {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  left: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px 0 8px;
+}
+.sv-smartphone-home {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 3px;
+  padding: 6px;
+  border: 0;
+  background: none;
+  color: var(--ph-blue);
+  font-size: 16px;
+  cursor: pointer;
+}
+.sv-smartphone-home > i {
+  font-size: 18px;
+}
+.sv-smartphone-home.sv-home-invisible {
+  visibility: hidden;
+}
+.sv-smartphone-title {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sv-smartphone-close {
+  display: grid;
+  justify-self: end;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(120, 120, 128, 0.32);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.sv-smartphone-close:hover {
+  background: rgba(120, 120, 128, 0.5);
+}
+#sv-smartphone[data-screen="app"] :is(.sv-phone-status, .sv-phone-nav) {
+  background: rgba(0, 0, 0, 0.82);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+#sv-smartphone[data-screen="app"] .sv-phone-nav {
+  border-bottom: 0.5px solid var(--ph-line);
+}
+#sv-smartphone:is([data-screen="home"], [data-screen="call"]) .sv-smartphone-title {
+  visibility: hidden;
+}
+/* On a call the background can be any shade, so the back button sits on its own glass pill. */
+#sv-smartphone[data-screen="call"] .sv-smartphone-home {
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: #fff;
+}
+.sv-smartphone-body {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 96px 0 30px;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.sv-smartphone-body::-webkit-scrollbar {
+  display: none;
+}
+#sv-smartphone:is([data-screen="home"], [data-screen="call"]) .sv-smartphone-body {
+  padding: 0;
+}
+.sv-phone-homebar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.sv-phone-homebar > span {
+  width: 136px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.86);
+  transition: width 0.15s ease;
+}
+.sv-phone-homebar:hover > span {
+  width: 150px;
+}
+#sv-smartphone :is(button, textarea):focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
+}
+
+/* Character portrait as a blurred wallpaper */
+[data-phone-wallpaper] {
+  position: relative;
+  isolation: isolate;
+}
+[data-phone-wallpaper].sv-has-wall::before {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  background: var(--sv-wall) center / cover no-repeat;
+  filter: blur(30px) saturate(1.3) brightness(0.58);
+}
+/* One cell the size of the circle: a tall picture is cropped to it (an auto-sized row grew to the
+   picture's own height, so only its top part showed in the circle). */
+#sv-smartphone .sv-phone-avatar {
+  display: grid;
+  flex: none;
+  grid-template: 100% / 100%;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #636b7c, #3a404d);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 34px;
+}
+#sv-smartphone .sv-phone-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A tall picture (a card portrait) shows its upper part, where the face is. */
+  object-position: 50% 15%;
+}
+
+/* Home screen */
+.sv-smartphone-app-home {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 74px 18px 34px;
+  overflow: hidden;
+  background:
+    radial-gradient(110% 70% at 15% 0%, #6a55e0 0%, transparent 62%),
+    radial-gradient(90% 60% at 100% 95%, #128a8a 0%, transparent 60%),
+    linear-gradient(165deg, #1d2142, #0b0d18);
+}
+.sv-phone-lock {
+  margin-top: 18px;
+  text-align: center;
+}
+.sv-phone-date {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 16px;
+  font-weight: 600;
+}
+.sv-phone-bigclock {
+  display: block;
+  margin-top: -2px;
+  font-size: 82px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.18) !important;
+}
+.sv-phone-widget {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 26px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  background: var(--ph-glass);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sv-phone-widget:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+/* Quick-call widgets stack under the clock. */
+.sv-phone-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 26px;
+}
+.sv-phone-widgets > .sv-phone-widget {
+  margin-top: 0;
+}
+#sv-smartphone .sv-phone-widget .sv-phone-avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+.sv-widget-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-widget-text strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-widget-text small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+.sv-widget-call {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--ph-green);
+  font-size: 15px;
+}
+.sv-widget-alert {
+  border-color: rgba(52, 199, 89, 0.6);
+  animation: sv-widget-glow 1.6s ease-in-out infinite;
+}
+@keyframes sv-widget-glow {
+  50% {
+    box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.25);
+  }
+}
+/* Dock */
+.sv-smartphone-app-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: auto;
+  padding: 14px 10px 12px;
+  border-radius: 32px;
+  background: var(--ph-glass);
+  -webkit-backdrop-filter: blur(26px);
+  backdrop-filter: blur(26px);
+}
+.sv-smartphone-app-grid > button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.sv-smartphone-app-grid > button > strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-smartphone-app-grid > button > em {
+  position: absolute;
+  top: -5px;
+  right: calc(50% - 36px);
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--ph-red);
+  color: #fff;
+  font: 700 12px/21px var(--sv-font);
+  font-style: normal;
+  text-align: center;
+}
+.sv-app-icon,
+.sv-empty-badge {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 15px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 4px 12px rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font-size: 25px;
+  transition: transform 0.15s ease;
+}
+.sv-smartphone-app-grid > button:hover .sv-app-icon {
+  transform: scale(1.06);
+}
+.sv-smartphone-app-grid > button:active .sv-app-icon {
+  transform: scale(0.94);
+  filter: brightness(0.85);
+}
+.sv-app-phone {
+  background: linear-gradient(180deg, #5af27a, #1fbf4a);
+}
+.sv-app-message {
+  background: linear-gradient(180deg, #5eb3ff, #1f6bff);
+}
+.sv-app-history {
+  background: linear-gradient(180deg, #ff9a6b, #f2553a);
+}
+.sv-app-settings {
+  background: linear-gradient(180deg, #a3a8b3, #5f6573);
+}
+
+/* Call screens */
+:is(.sv-incoming-call, .sv-call-screen, .sv-call-contact) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2a3651 0%, #121826 55%, #07090e 100%);
+  color: #fff;
+  text-align: center;
+}
+:is(.sv-incoming-call, .sv-call-screen, .sv-call-contact).sv-has-wall::before {
+  filter: blur(34px) saturate(1.2) brightness(0.42);
+}
+.sv-incoming-call {
+  justify-content: space-between;
+  padding: 104px 26px 58px;
+}
+.sv-call-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ph-muted);
+  font-size: 14px;
+}
+.sv-incoming-top h3 {
+  margin: 8px 0 4px !important;
+  font-size: 34px !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
+  overflow-wrap: anywhere;
+}
+.sv-incoming-top p {
+  color: var(--ph-muted);
+  font-size: 15px;
+}
+.sv-incoming-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+}
+#sv-smartphone .sv-incoming-avatar .sv-phone-avatar {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  font-size: 44px;
+}
+.sv-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(52, 199, 89, 0.65);
+  border-radius: 50%;
+  animation: sv-ring 2.2s ease-out infinite;
+}
+.sv-ring + .sv-ring {
+  animation-delay: 1.1s;
+}
+@keyframes sv-ring {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+.sv-incoming-actions {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 14px;
+}
+.sv-incoming-actions > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+.sv-incoming-actions small {
+  font-size: 14px;
+}
+.sv-reject-call,
+.sv-answer-call {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.sv-reject-call:active,
+.sv-answer-call:active {
+  transform: scale(0.92);
+}
+.sv-reject-call {
+  background: var(--ph-red);
+}
+.sv-answer-call {
+  background: var(--ph-green);
+  animation: sv-bob 1.5s ease-in-out infinite;
+}
+@keyframes sv-bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.sv-call-contact {
+  justify-content: center;
+  padding: 96px 26px 64px;
+}
+#sv-smartphone .sv-call-contact .sv-phone-avatar {
+  width: 118px;
+  height: 118px;
+  font-size: 42px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+.sv-call-contact h3 {
+  margin: 16px 0 4px !important;
+  font-size: 30px !important;
+  font-weight: 600 !important;
+  overflow-wrap: anywhere;
+}
+.sv-call-contact > p {
+  color: var(--ph-muted);
+  font-size: 14px;
+}
+.sv-contact-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 40px;
+}
+.sv-contact-action,
+.sv-contact-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 76px;
+}
+.sv-contact-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.sv-contact-action > span {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin: 9px 0;
+  border-radius: 50%;
+  background: var(--ph-glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  font-size: 19px;
+  transition: background 0.15s ease;
+}
+.sv-contact-action:hover > span {
+  background: rgba(255, 255, 255, 0.24);
+}
+:is(.sv-contact-action, .sv-contact-main) > small {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sv-call-start {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ph-green);
+  box-shadow: 0 10px 28px rgba(52, 199, 89, 0.42);
+  color: #fff;
+  font-size: 0;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.sv-call-start > i {
+  font-size: 28px;
+}
+.sv-call-start:active {
+  transform: scale(0.93);
+}
+.sv-call-start:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+.sv-call-screen {
+  padding: 98px 18px 34px;
+}
+.sv-call-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.sv-call-identity h2 {
+  margin: 12px 0 4px !important;
+  font-size: 28px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  overflow-wrap: anywhere;
+}
+.sv-call-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ph-muted);
+  font-size: 14px;
+}
+.sv-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ph-green);
+  animation: sv-live 1.6s ease-in-out infinite;
+}
+@keyframes sv-live {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sv-call-duration {
+  font-variant-numeric: tabular-nums;
+}
+.sv-call-live-line {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 120px;
+  padding: 18px 2px;
+  overflow: auto;
+}
+.sv-call-caption {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--ph-glass);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+  text-align: left;
+}
+.sv-call-caption small {
+  color: var(--ph-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sv-call-caption p {
+  margin-top: 4px !important;
+  font-size: 16px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-call-audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.sv-call-audio-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 17px;
+  background: var(--ph-glass);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-call-audio-actions button:first-child {
+  background: #fff;
+  color: #000;
+}
+.sv-call-audio-actions button:disabled {
+  opacity: 0.55;
+}
+.sv-call-thinking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--ph-muted);
+  font-size: 13px;
+}
+.sv-typing {
+  display: flex;
+  gap: 5px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: var(--ph-glass);
+}
+.sv-typing > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  animation: sv-typing 1.2s ease-in-out infinite;
+}
+.sv-typing > i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.sv-typing > i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes sv-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+.sv-call-waiting {
+  color: var(--ph-muted);
+  font-size: 13px;
+}
+.sv-call-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 5px 5px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: var(--ph-glass);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+#sv-smartphone .sv-call-compose textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 22px;
+  max-height: 76px;
+  margin: 0;
+  padding: 7px 0;
+  border: 0;
+  outline: none;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.4;
+  resize: none;
+}
+#sv-smartphone .sv-call-compose textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+.sv-call-compose button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ph-blue);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.sv-call-compose button:disabled {
+  opacity: 0.4;
+}
+.sv-call-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+}
+.sv-call-end {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ph-red);
+  box-shadow: 0 10px 26px rgba(255, 59, 48, 0.32);
+  color: #fff;
+  font-size: 25px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.sv-call-end:active {
+  transform: scale(0.93);
+}
+.sv-call-controls small {
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+
+/* Voice messages */
+
+.sv-vm-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sv-voice-message-play {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #000;
+  font-size: 13px;
+  cursor: pointer;
+}
+#sv-smartphone .sv-voice-message-play.sv-playing i::before {
+  content: "\f04c";
+}
+#sv-smartphone .sv-voice-message-play:disabled i::before {
+  content: "\f110";
+}
+#sv-smartphone .sv-voice-message-play:disabled i {
+  animation: sv-spin 1s linear infinite;
+}
+.sv-vm-wave {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 90px;
+  height: 26px;
+}
+.sv-vm-wave > i {
+  flex: 1 1 0;
+  max-width: 3px;
+  height: calc(var(--h, 0.5) * 100%);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.sv-vm-player:has(.sv-playing) .sv-vm-wave > i {
+  background: #fff;
+  animation: sv-wave 0.9s ease-in-out infinite;
+}
+.sv-vm-player:has(.sv-playing) .sv-vm-wave > i:nth-child(3n) {
+  animation-delay: 0.15s;
+}
+.sv-vm-player:has(.sv-playing) .sv-vm-wave > i:nth-child(3n + 1) {
+  animation-delay: 0.3s;
+}
+@keyframes sv-wave {
+  50% {
+    transform: scaleY(0.45);
+  }
+}
+.sv-vm-note {
+  flex: none;
+  color: var(--ph-muted);
+  font-size: 11px;
+}
+
+/* Recents and transcript */
+.sv-call-history-list {
+  padding: 6px 0 20px;
+}
+.sv-recents-title {
+  margin: 4px 18px 8px !important;
+  font-size: 30px !important;
+  font-weight: 700 !important;
+}
+/* One call: the row opens it; the trash button beside it removes it. */
+.sv-call-history-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 0.5px solid var(--ph-line);
+}
+.sv-call-history-delete {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 10px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ph-faint);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sv-call-history-delete:hover {
+  background: color-mix(in srgb, var(--ph-red) 12%, transparent);
+  color: var(--ph-red);
+}
+.sv-detail-delete {
+  margin: 0 0 0 auto;
+  color: var(--ph-muted);
+}
+.sv-call-history-session {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 26px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 6px 10px 18px;
+  border: 0;
+  background: none;
+  color: var(--ph-fg);
+  text-align: left;
+  cursor: pointer;
+}
+.sv-call-history-session:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.sv-recent-icon {
+  color: var(--ph-gray);
+  font-size: 14px;
+}
+.sv-recent-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-recent-main strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-recent-main small {
+  color: var(--ph-muted);
+  font-size: 13px;
+}
+.sv-missed .sv-recent-main strong,
+.sv-missed .sv-recent-icon {
+  color: var(--ph-red);
+}
+.sv-call-history-session > time {
+  color: var(--ph-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.sv-recent-chevron {
+  color: var(--ph-faint);
+  font-size: 12px;
+}
+.sv-phone-history-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.sv-phone-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  margin: 2px 0 0 10px;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--ph-blue);
+  font-size: 15px;
+  cursor: pointer;
+}
+.sv-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px 14px;
+  border-bottom: 0.5px solid var(--ph-line);
+}
+#sv-smartphone .sv-detail-head .sv-phone-avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+.sv-detail-head h3 {
+  font-size: 19px !important;
+  font-weight: 600 !important;
+}
+.sv-detail-head small {
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+.sv-call-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+.sv-call-transcript article {
+  position: relative;
+  align-self: flex-start;
+  max-width: 82%;
+  padding: 8px 12px 9px;
+  border-radius: 18px 18px 18px 6px;
+  background: var(--ph-surface2);
+}
+.sv-call-transcript article.sv-call-user {
+  align-self: flex-end;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--ph-blue);
+}
+.sv-call-transcript article:has(.sv-call-replay) {
+  padding-right: 44px;
+}
+.sv-call-transcript article small {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.sv-call-transcript article p {
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Korean translation under a line in another language (read only, not spoken) */
+#sv-smartphone p.sv-translation {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 0 !important;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#sv-smartphone p.sv-translation > i {
+  flex: none;
+  margin-top: 0.3em;
+  font-size: 0.85em;
+}
+.sv-call-replay {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+}
+.sv-call-replay.sv-playing {
+  background: #fff;
+  color: #000;
+}
+.sv-transcript-empty {
+  padding: 30px 0;
+  color: var(--ph-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.sv-phone-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 100%;
+  padding: 30px 28px 60px;
+  color: var(--ph-muted);
+  text-align: center;
+}
+.sv-phone-list-empty > i {
+  margin-bottom: 8px;
+  font-size: 28px;
+}
+.sv-phone-list-empty .sv-empty-badge {
+  width: 66px;
+  height: 66px;
+  margin-bottom: 10px;
+  border-radius: 17px;
+  font-size: 28px;
+}
+.sv-phone-list-empty strong {
+  color: var(--ph-fg);
+  font-size: 19px;
+  font-weight: 700;
+}
+.sv-phone-list-empty p {
+  font-size: 14px;
+}
+.sv-phone-list-empty small {
+  color: var(--ph-faint);
+  font-size: 12px;
+}
+
+/* ----- 17-1. 메시지 앱 (문자·음성 메시지) ----- */
+.sv-msg-threads {
+  display: grid;
+  padding: 4px 0 20px;
+}
+.sv-msg-thread {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  color: var(--ph-fg);
+  text-align: left;
+  cursor: pointer;
+}
+.sv-msg-thread + .sv-msg-thread {
+  box-shadow: inset 74px 0.5px 0 -74px var(--ph-line);
+}
+.sv-msg-thread:hover {
+  background: color-mix(in srgb, var(--ph-fg) 5%, transparent);
+}
+#sv-smartphone .sv-msg-thread .sv-phone-avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+.sv-msg-thread-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+/* A long room name ends in "…"; its head count stays. */
+.sv-msg-thread-main strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 15px;
+}
+.sv-msg-thread-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-msg-thread-main small {
+  overflow: hidden;
+  color: var(--ph-muted);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-msg-thread-meta {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+.sv-unread-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ph-blue);
+}
+
+/* Group conversations */
+.sv-msg-new-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 16px 8px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-blue) 13%, transparent);
+  color: var(--ph-blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-msg-new-group:hover {
+  background: color-mix(in srgb, var(--ph-blue) 20%, transparent);
+}
+.sv-room-avatar {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 46px;
+}
+#sv-smartphone .sv-room-avatar .sv-phone-avatar,
+#sv-smartphone .sv-msg-thread .sv-room-avatar .sv-phone-avatar {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  box-shadow: 0 0 0 2px var(--ph-bg);
+}
+#sv-smartphone .sv-room-avatar .sv-phone-avatar:first-child {
+  top: 0;
+  left: 0;
+}
+#sv-smartphone .sv-room-avatar .sv-phone-avatar:nth-child(2) {
+  right: 0;
+  bottom: 0;
+}
+#sv-smartphone .sv-msg-who .sv-room-avatar {
+  width: 54px;
+  height: 54px;
+}
+#sv-smartphone .sv-msg-who .sv-room-avatar .sv-phone-avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+.sv-msg-count {
+  margin-left: 6px;
+  color: var(--ph-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+.sv-msg-who small {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--ph-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-msg-group-edit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ph-fg) 7%, transparent);
+  color: var(--ph-fg);
+  cursor: pointer;
+}
+/* "이름 | 시간" above a run of messages (just the time in a one-to-one conversation). */
+.sv-msg-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 2px 1px;
+  color: var(--ph-muted);
+  font-size: 11.5px;
+}
+.sv-msg-mine > .sv-msg-label {
+  justify-content: flex-end;
+}
+.sv-msg-label b {
+  color: var(--ph-fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sv-msg-sep {
+  opacity: 0.45;
+}
+#sv-smartphone .sv-msg-label .sv-phone-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+.sv-room-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  padding-bottom: 18px;
+}
+.sv-room-editor-title {
+  font-size: 15px;
+}
+.sv-room-name {
+  display: grid;
+  gap: 6px;
+  margin: 0 16px;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+#sv-smartphone .sv-room-name input {
+  height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0.5px solid var(--ph-line);
+  border-radius: 10px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 14px;
+}
+#sv-smartphone .sv-room-hint {
+  margin: 0 16px !important;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+.sv-room-people {
+  display: grid;
+  margin: 0 12px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--ph-surface);
+}
+.sv-room-person {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 12px;
+  color: var(--ph-fg);
+  font-size: 14px;
+  cursor: pointer;
+}
+.sv-room-person + .sv-room-person {
+  border-top: 0.5px solid var(--ph-line);
+}
+.sv-room-person input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+#sv-smartphone .sv-room-person .sv-phone-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+.sv-room-person > i {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--ph-faint);
+  border-radius: 50%;
+  color: transparent;
+  font-size: 11px;
+}
+.sv-room-person:has(input:checked) > i {
+  border-color: var(--ph-blue);
+  background: var(--ph-blue);
+  color: #fff;
+}
+.sv-room-person:has(input:focus-visible) {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: -2px;
+}
+.sv-room-actions {
+  display: flex;
+  gap: 8px;
+  margin: auto 16px 0;
+}
+.sv-room-actions button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  margin: 0;
+  border: 0;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-room-save {
+  background: var(--ph-blue);
+  color: #fff;
+}
+.sv-room-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.sv-room-leave {
+  background: color-mix(in srgb, var(--ph-red) 13%, transparent);
+  color: var(--ph-red);
+}
+
+/* One conversation */
+#sv-smartphone .sv-smartphone-body:has(.sv-msg-thread-view) {
+  padding-bottom: 0;
+}
+.sv-msg-thread-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+/* The conversation's head stays put under the phone's bar while the messages scroll. */
+.sv-msg-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 16px 12px;
+  border-bottom: 0.5px solid var(--ph-line);
+  background: var(--ph-bg);
+}
+.sv-msg-head .sv-phone-back {
+  align-self: flex-start;
+}
+.sv-msg-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+#sv-smartphone .sv-msg-who .sv-phone-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+.sv-msg-who strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.sv-msg-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px 12px;
+}
+#sv-smartphone .sv-msg-empty {
+  margin: auto !important;
+  color: var(--ph-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.sv-msg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 82%;
+}
+.sv-msg-mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.sv-msg-theirs {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+#sv-smartphone .sv-msg-bubble {
+  margin: 0 !important;
+  padding: 8px 13px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-msg-theirs .sv-msg-bubble {
+  background: var(--ph-surface2);
+  color: var(--ph-fg);
+}
+.sv-msg-mine .sv-msg-bubble {
+  background: var(--ph-blue);
+  color: #fff;
+}
+#sv-smartphone .sv-msg-voice {
+  display: grid;
+  gap: 6px;
+  min-width: 210px;
+  padding: 10px 13px;
+}
+#sv-smartphone .sv-msg-voice p {
+  margin: 0 !important;
+  font-size: 14px;
+  line-height: 1.45;
+}
+#sv-smartphone .sv-msg-translation > p.sv-translation {
+  margin: 0 !important;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-fg) 6%, transparent);
+  font-size: 12px;
+}
+.sv-msg-translation[hidden] {
+  display: none;
+}
+.sv-msg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  /* The buttons may use the conversation's width, not only the bubble column's. */
+  width: max-content;
+  max-width: 122%;
+  padding: 0 4px;
+  color: var(--ph-muted);
+  font-size: 11px;
+}
+.sv-msg-mine > .sv-msg-meta {
+  justify-content: flex-end;
+}
+/* Icon buttons; what each does is in its tooltip. */
+.sv-msg-meta button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ph-fg) 8%, transparent);
+  color: var(--ph-fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+.sv-msg-meta button:disabled {
+  opacity: 0.5;
+}
+.sv-msg-meta button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--ph-blue) 22%, transparent);
+  color: var(--ph-blue);
+}
+.sv-msg-meta time {
+  margin-left: 2px;
+}
+/* The newest message names its main buttons. */
+.sv-msg-meta button.sv-labeled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 0 9px 0 8px;
+  border-radius: 13px;
+  font: 600 11px / 1 var(--sv-font);
+  white-space: nowrap;
+}
+/* ‹ 2/3 ›: the message's other answers, on a line of their own under its buttons. */
+.sv-msg-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  color: var(--ph-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sv-msg-versions button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ph-fg);
+  font-size: 10px;
+  cursor: pointer;
+}
+.sv-msg-versions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.sv-msg-versions > small {
+  min-width: 26px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+#sv-smartphone .sv-msg-typing {
+  padding: 4px 6px;
+}
+#sv-smartphone .sv-msg-typing .sv-typing {
+  padding: 8px 10px;
+  background: none;
+}
+#sv-smartphone .sv-msg-typing .sv-typing > i {
+  background: var(--ph-muted);
+}
+.sv-msg-compose {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px 30px;
+  background: color-mix(in srgb, var(--ph-bg) 90%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+#sv-smartphone .sv-msg-compose textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  max-height: 110px;
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--ph-line);
+  border-radius: 19px;
+  outline: none;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font: 15px/1.35 var(--sv-font);
+  resize: none;
+}
+#sv-smartphone .sv-msg-compose textarea::placeholder {
+  color: var(--ph-faint);
+}
+.sv-msg-compose button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ph-blue);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ----- 17-2. 스마트폰 색 테마 (베이지 · 핑크 · 블루) -----
+   The default look stays dark. The three light themes share a white body and light screens;
+   each brings its own wallpaper, accent (--ph-blue) and app-icon colors. */
+#sv-smartphone[data-phone-theme="white"] {
+  --ph-fg: #3d3631;
+  --ph-muted: rgba(61, 54, 49, 0.62);
+  --ph-faint: rgba(61, 54, 49, 0.36);
+  --ph-bg: #faf6f0;
+  --ph-surface: #ffffff;
+  --ph-surface2: #f2ebe2;
+  --ph-line: rgba(120, 98, 78, 0.18);
+  --ph-blue: #b08968;
+  --ph-green: #a9876b;
+  --ph-red: #c9705f;
+  --ph-wall:
+    radial-gradient(90% 60% at 15% 0%, #fde8de 0%, transparent 65%),
+    radial-gradient(80% 55% at 100% 100%, #e9efe3 0%, transparent 60%),
+    linear-gradient(170deg, #f8f2ea 0%, #efe5d8 60%, #e9dccc 100%);
+  --ph-call-bg: linear-gradient(180deg, #f8f1e8 0%, #efe3d5 60%, #e7d8c6 100%);
+  --ph-app-phone: linear-gradient(180deg, #b9ccb1, #8fa888);
+  --ph-app-message: linear-gradient(180deg, #e6d3b8, #c9ad8a);
+  --ph-app-history: linear-gradient(180deg, #e8bfb5, #cf9488);
+  --ph-app-settings: linear-gradient(180deg, #d6cfc6, #aca398);
+  --ph-avatar: linear-gradient(160deg, #e2d2c0, #bfa68d);
+}
+#sv-smartphone[data-phone-theme="pink"] {
+  /* Dreamy pastel: #f7a0b8 · #fbb6c4 pinks on #faf5ec cream and #fae9d7 peach, with soft sparkles. */
+  --ph-fg: #6b3a4c;
+  --ph-muted: rgba(107, 58, 76, 0.62);
+  --ph-faint: rgba(107, 58, 76, 0.34);
+  --ph-bg: #faf5ec;
+  --ph-surface: #fffdf8;
+  --ph-surface2: #fae9d7;
+  --ph-line: rgba(247, 160, 184, 0.34);
+  --ph-blue: #ee8aa7;
+  --ph-green: #f7a0b8;
+  --ph-red: #e9768f;
+  --ph-sparkle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fffaf0' d='M12 0C12.8 7.6 16.4 11.2 24 12C16.4 12.8 12.8 16.4 12 24C11.2 16.4 7.6 12.8 0 12C7.6 11.2 11.2 7.6 12 0Z'/%3E%3C/svg%3E");
+  --ph-wall:
+    var(--ph-sparkle) 84% 9% / 26px 26px no-repeat,
+    var(--ph-sparkle) 9% 46% / 14px 14px no-repeat,
+    var(--ph-sparkle) 76% 71% / 18px 18px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23cfe0ff' d='M12 0C12.8 7.6 16.4 11.2 24 12C16.4 12.8 12.8 16.4 12 24C11.2 16.4 7.6 12.8 0 12C7.6 11.2 11.2 7.6 12 0Z'/%3E%3C/svg%3E") 18% 90% / 11px 11px no-repeat,
+    radial-gradient(60% 40% at 16% 8%, #faf5ec 0%, transparent 70%),
+    radial-gradient(55% 38% at 90% 34%, #fbb6c4 0%, transparent 72%),
+    radial-gradient(60% 42% at 18% 80%, #fae9d7 0%, transparent 70%),
+    radial-gradient(36% 26% at 74% 82%, #fbefd0 0%, transparent 72%),
+    linear-gradient(168deg, #fde5eb 0%, #fbc6d2 55%, #f7a0b8 100%);
+  --ph-call-bg:
+    var(--ph-sparkle) 86% 8% / 22px 22px no-repeat,
+    var(--ph-sparkle) 10% 30% / 12px 12px no-repeat,
+    linear-gradient(180deg, #faf5ec 0%, #fde6ea 48%, #fbc3cf 100%);
+  --ph-app-phone: linear-gradient(180deg, #fbb6c4, #f491ad);
+  --ph-app-message: linear-gradient(180deg, #fcc6d1, #f7a0b8);
+  --ph-app-history: linear-gradient(180deg, #fbdcc8, #f3b29b);
+  --ph-app-settings: linear-gradient(180deg, #fffaf2, #fae9d7);
+  --ph-avatar: linear-gradient(160deg, #fbc8d3, #f7a0b8);
+}
+#sv-smartphone[data-phone-theme="pink"] .sv-app-settings {
+  color: #ef8fab;
+}
+#sv-smartphone[data-phone-theme="blue"] {
+  /* Clear sky: #e2eff6 → #b7d7ea → #8dbedc → #64a4ce → #4893c6. */
+  --ph-fg: #1f3d57;
+  --ph-muted: rgba(31, 61, 87, 0.62);
+  --ph-faint: rgba(31, 61, 87, 0.34);
+  --ph-bg: #f3f8fb;
+  --ph-surface: #ffffff;
+  --ph-surface2: #e2eff6;
+  --ph-line: rgba(100, 164, 206, 0.26);
+  --ph-blue: #4893c6;
+  --ph-green: #64a4ce;
+  --ph-red: #e5899a;
+  --ph-wall:
+    radial-gradient(70% 45% at 14% 4%, #ffffff 0%, transparent 66%),
+    radial-gradient(60% 40% at 92% 40%, #e2eff6 0%, transparent 70%),
+    radial-gradient(75% 50% at 88% 100%, #8dbedc 0%, transparent 70%),
+    linear-gradient(172deg, #e2eff6 0%, #b7d7ea 58%, #8dbedc 100%);
+  --ph-call-bg: linear-gradient(180deg, #f3f8fb 0%, #e2eff6 45%, #b7d7ea 100%);
+  --ph-app-phone: linear-gradient(180deg, #8dbedc, #4893c6);
+  --ph-app-message: linear-gradient(180deg, #b7d7ea, #64a4ce);
+  --ph-app-history: linear-gradient(180deg, #64a4ce, #3f86b9);
+  --ph-app-settings: linear-gradient(180deg, #ffffff, #e2eff6);
+  --ph-avatar: linear-gradient(160deg, #b7d7ea, #64a4ce);
+}
+#sv-smartphone[data-phone-theme="blue"] .sv-app-settings {
+  color: #4893c6;
+}
+/* Pastel icons cast a tinted shadow instead of a grey one. */
+#sv-smartphone:is([data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-icon {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 5px 14px color-mix(in srgb, var(--ph-blue) 30%, transparent);
+}
+
+/* Shared by the three light themes */
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-answer-call, .sv-call-start, .sv-widget-call) {
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--ph-green) 35%, transparent);
+  color: #fff;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-end {
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--ph-red) 32%, transparent);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) {
+  --ph-glass: rgba(255, 255, 255, 0.62);
+  --ph-glass-strong: rgba(255, 255, 255, 0.82);
+  filter: drop-shadow(0 24px 44px rgba(60, 50, 70, 0.22));
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-frame {
+  background: linear-gradient(145deg, #ffffff 0%, #eef0f4 45%, #f9fafb 100%);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 4px #e8eaee;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-phone-key, .sv-phone-key-power) {
+  background: linear-gradient(90deg, #d8dbe1, #f3f4f6);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-battery {
+  border-color: color-mix(in srgb, var(--ph-fg) 45%, transparent);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-battery::after {
+  background: color-mix(in srgb, var(--ph-fg) 45%, transparent);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-smartphone-close {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="app"] :is(.sv-phone-status, .sv-phone-nav) {
+  background: color-mix(in srgb, var(--ph-bg) 86%, transparent);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-smartphone-home {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  color: var(--ph-blue);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-homebar > span {
+  background: color-mix(in srgb, var(--ph-fg) 70%, transparent);
+}
+/* Initials too: this has to outrank the dark default for initials further down. */
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-phone-avatar, .sv-avatar-initial) {
+  background: var(--ph-avatar) !important;
+  color: #fff !important;
+}
+/* Wallpapers: the character's portrait shows through softly instead of darkened. */
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-smartphone-app-home {
+  background: var(--ph-wall);
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) [data-phone-wallpaper].sv-has-wall::before {
+  filter: blur(34px) saturate(1.05) brightness(1.12);
+  opacity: 0.4;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-date {
+  color: var(--ph-muted);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-bigclock {
+  color: var(--ph-fg);
+  text-shadow: none !important;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-widget {
+  border-color: rgba(255, 255, 255, 0.7);
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-widget:hover {
+  background: var(--ph-glass-strong);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-widget-text small {
+  color: var(--ph-muted);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-smartphone-app-grid > button {
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-phone {
+  background: var(--ph-app-phone);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-message {
+  background: var(--ph-app-message);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-history {
+  background: var(--ph-app-history);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-settings {
+  background: var(--ph-app-settings);
+}
+/* Call screens */
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-incoming-call, .sv-call-screen, .sv-call-contact) {
+  background: var(--ph-call-bg);
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-action {
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-action:hover > span {
+  background: var(--ph-glass-strong);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-contact-action, .sv-contact-main) > small {
+  color: var(--ph-muted);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-audio-actions button {
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-audio-actions button:first-child {
+  background: var(--ph-blue);
+  color: #fff;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-typing > i {
+  background: var(--ph-muted);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea {
+  color: var(--ph-fg);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea::placeholder {
+  color: var(--ph-faint);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-pill {
+  color: var(--ph-fg);
+}
+/* Lists, voice messages and transcripts */
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-call-history-session, .sv-contact-row):hover {
+  background: color-mix(in srgb, var(--ph-fg) 5%, transparent);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-voice-message-play {
+  background: var(--ph-blue);
+  color: #fff;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-vm-wave > i {
+  background: color-mix(in srgb, var(--ph-fg) 35%, transparent);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-vm-player:has(.sv-playing) .sv-vm-wave > i {
+  background: var(--ph-blue);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-transcript article.sv-call-user {
+  color: #fff;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay.sv-playing {
+  background: var(--ph-blue);
+  color: #fff;
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-ph-sheet {
+  background: color-mix(in srgb, var(--ph-fg) 25%, transparent);
+}
+
+/* ----- 18. 알림 ----- */
+.sv-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  z-index: 2147483646;
+  max-width: min(520px, 90vw);
+  padding: 11px 16px;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 12px;
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow-pop);
+  color: var(--sv-fg);
+  font: 500 13px/1.5 var(--sv-font);
+  transform: translateX(-50%);
+}
+.sv-toast-error {
+  border-color: var(--sv-danger-line);
+  color: var(--sv-danger-text);
+}
+
+/* ----- 19. 백업·초기화 메뉴 ----- */
+.sv-more {
+  position: relative;
+  flex: none;
+}
+.sv-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 14px;
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow-pop);
+}
+.sv-menu > button,
+.sv-menu > label {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.sv-menu > :is(button, label):hover,
+.sv-menu > :is(button, label):focus-visible {
+  outline: none;
+  background: var(--sv-soft2);
+}
+.sv-menu > :is(button, label) > i {
+  width: 16px;
+  color: var(--sv-muted);
+  text-align: center;
+}
+.sv-menu span {
+  display: flex;
+  flex-direction: column;
+}
+.sv-menu small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xxs);
+  font-weight: 400;
+}
+.sv-menu hr {
+  width: 100%;
+  margin: 5px 0;
+  border: 0;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-menu .sv-menu-danger,
+.sv-menu .sv-menu-danger > i {
+  color: var(--sv-danger-text);
+}
+.sv-menu-file > input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.sv-dialog-icon-danger {
+  background: var(--sv-danger-soft) !important;
+  color: var(--sv-danger-text) !important;
+}
+.sv-reset-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sv-reset-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+  cursor: pointer;
+}
+.sv-reset-option:hover {
+  background: var(--sv-soft);
+}
+.sv-reset-option:has(input:checked) {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+}
+.sv-reset-option > input {
+  margin-top: 2px !important;
+}
+.sv-reset-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sv-reset-option strong {
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+}
+.sv-reset-option small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+
+/* ----- 20. 봇카드별 화자 ----- */
+.sv-cast-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sv-cast-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-cast-title strong {
+  font-size: var(--sv-fs);
+  font-weight: 700;
+}
+.sv-cast-title small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-avatar-initial {
+  background: var(--sv-brand-soft) !important;
+  color: var(--sv-brand-text) !important;
+  font-weight: 700;
+}
+.sv-members {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.sv-members-off .sv-member-list,
+.sv-members-off .sv-member-add {
+  opacity: 0.5;
+}
+.sv-members-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 2px 0 !important;
+  font-size: var(--sv-fs-sm) !important;
+}
+.sv-member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sv-member {
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+}
+.sv-member > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  /* Set, not inherited: a summary sits in its details' slot and "inherit" gave square corners. */
+  border-radius: calc(var(--sv-r-card) - 1px);
+}
+.sv-member[open] > summary {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.sv-member > summary:hover {
+  background: var(--sv-soft2);
+}
+.sv-member-avatar {
+  display: grid;
+  flex: none;
+  grid-template: 100% / 100%;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  font-size: var(--sv-fs-sm);
+  font-weight: 700;
+}
+.sv-member-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-member-main strong {
+  font-size: var(--sv-fs-sm);
+  font-weight: 700;
+}
+.sv-member-main small {
+  overflow: hidden;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Choices as a list (a row each: icon, title and line, round radio). */
+.sv-choices {
+  overflow: hidden;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+}
+.sv-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+/* Two choices side by side (one under the other on a phone). */
+.sv-choices-across .sv-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.sv-choices-across .sv-choice + .sv-choice {
+  border-top: 0;
+  border-left: 1px solid var(--sv-line);
+}
+@media (max-width: 640px) {
+  .sv-choices-across .sv-choices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sv-choices-across .sv-choice + .sv-choice {
+    border-top: 1px solid var(--sv-line);
+    border-left: 0;
+  }
+}
+.sv-choice + .sv-choice {
+  border-top: 1px solid var(--sv-line);
+}
+.sv-choice:hover {
+  background: var(--sv-soft2);
+}
+.sv-choice-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--sv-soft3);
+  color: var(--sv-fg);
+  font-size: 0.85em;
+}
+.sv-choice-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sv-choice-text strong {
+  font-size: var(--sv-fs-sm);
+  font-weight: 700;
+}
+.sv-choice-text small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.4;
+}
+:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"] {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 1.5px solid var(--sv-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    border-color var(--sv-ease),
+    border-width var(--sv-ease);
+}
+:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"]:checked {
+  border: 6px solid var(--sv-brand);
+}
+:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"]:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 2px;
+}
+/* A small button beside a switch's label (재연동). */
+.sv-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+  padding: 1px 7px;
+  border: 1px solid var(--sv-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sv-muted);
+  font: 600 var(--sv-fs-xs) / 1.6 var(--sv-font);
+  cursor: pointer;
+}
+.sv-mini-btn:hover {
+  border-color: var(--sv-brand-line);
+  color: var(--sv-brand-text);
+}
+.sv-mini-btn.sv-busy {
+  pointer-events: none;
+  opacity: 0.6;
+}
+.sv-multicast-import {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 14px;
+}
+.sv-multicast-import > .sv-switch-row {
+  align-self: stretch;
+}
+/* A global person's "이 봇카드에서 사용" switch, right on its row. */
+.sv-use-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--sv-line);
+  border-radius: 999px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-use-chip span {
+  order: -1;
+}
+.sv-use-chip:has(input:checked) {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-member-off > summary .sv-member-avatar,
+.sv-member-off > summary .sv-member-main {
+  opacity: 0.55;
+}
+@media (max-width: 480px) {
+  .sv-use-chip {
+    padding-left: 8px;
+    font-size: 11px;
+  }
+}
+.sv-member-chevron {
+  color: var(--sv-faint);
+  font-size: 0.8em;
+  transition: transform var(--sv-ease);
+}
+.sv-member[open] .sv-member-chevron {
+  transform: rotate(180deg);
+}
+.sv-member-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-member-body > :first-child {
+  margin-top: 10px;
+}
+.sv-member-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sv-member-empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--sv-line-strong);
+  border-radius: var(--sv-r-card);
+}
+.sv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  cursor: pointer;
+}
+
+/* ----- 21. 스마트폰 연락처 ----- */
+.sv-contacts {
+  padding: 6px 0 20px;
+}
+.sv-contact-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 16px 9px 18px;
+  border: 0;
+  border-bottom: 0.5px solid var(--ph-line);
+  background: none;
+  color: var(--ph-fg);
+  text-align: left;
+  cursor: pointer;
+}
+.sv-contact-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+#sv-smartphone .sv-contact-row .sv-phone-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+#sv-smartphone .sv-avatar-initial {
+  background: linear-gradient(160deg, #7c8496, #4b5262) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.sv-contacts-note {
+  margin: 12px 18px 0 !important;
+  color: var(--ph-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sv-contact-top {
+  position: absolute;
+  top: 100px;
+  right: 18px;
+  left: 18px;
+  display: flex;
+  justify-content: space-between;
+}
+.sv-contact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--ph-glass);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.sv-contact-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px 20px;
+}
+.sv-contact-edit-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+#sv-smartphone .sv-contact-edit-head .sv-phone-avatar {
+  width: 84px;
+  height: 84px;
+  font-size: 30px;
+}
+.sv-ph-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--ph-surface);
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+#sv-smartphone .sv-ph-field input {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  box-shadow: none;
+  color: var(--ph-fg);
+  font-size: 16px;
+}
+.sv-ph-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 15px;
+  cursor: pointer;
+}
+/* ST draws its checkmark by clipping ::before into a tick; the knob undoes all of that. */
+#sv-smartphone .sv-ph-toggle input {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  display: inline-block !important;
+  flex: none !important;
+  width: 46px !important;
+  min-width: 46px !important;
+  max-width: 46px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  outline: none !important;
+  background: rgba(120, 120, 128, 0.36) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  font-size: 0 !important;
+  cursor: pointer;
+  transition: background 0.18s ease !important;
+}
+#sv-smartphone .sv-ph-toggle input::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  top: 2px !important;
+  left: 2px !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  clip-path: none !important;
+  mask: none !important;
+  transform: none !important;
+  transform-origin: center !important;
+  transition: transform 0.18s ease !important;
+}
+#sv-smartphone .sv-ph-toggle input::after {
+  content: none !important;
+}
+#sv-smartphone .sv-ph-toggle input:checked {
+  background: var(--ph-green) !important;
+}
+#sv-smartphone .sv-ph-toggle input:checked::before {
+  transform: translateX(18px) !important;
+}
+.sv-contact-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+.sv-contact-edit-actions button {
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ph-surface2);
+  color: var(--ph-fg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-contact-edit-actions button[type="submit"] {
+  background: var(--ph-blue);
+  color: #fff;
+}
+
+/* Edit sheet over the phone screen */
+#sv-smartphone .sv-ph-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+  animation: sv-sheet-fade 0.16s ease;
+}
+#sv-smartphone .sv-ph-sheet-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 18px 16px 30px;
+  border-radius: 22px 22px 0 0;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+}
+#sv-smartphone .sv-ph-sheet-card strong {
+  font-size: 16px;
+}
+#sv-smartphone .sv-ph-sheet-card textarea {
+  width: 100% !important;
+  min-height: 120px;
+  margin: 0 !important;
+  padding: 12px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  outline: none !important;
+  background: var(--ph-surface2) !important;
+  color: var(--ph-fg) !important;
+  font: 15px/1.55 var(--sv-font) !important;
+  resize: vertical;
+}
+#sv-smartphone .sv-ph-sheet-card small {
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@keyframes sv-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.sv-contact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: -8px;
+}
+.sv-contact-decision {
+  flex-basis: 100%;
+}
+
+/* ----- 22. 읽을 구간 ----- */
+.sv-read-lead {
+  margin: 0;
+}
+.sv-read-lead b {
+  color: var(--sv-fg);
+  font-weight: 600;
+}
+.sv-read-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+  list-style: none;
+  overflow: hidden;
+}
+.sv-read-rule {
+  display: grid;
+  grid-template-columns: auto minmax(64px, 1fr) auto minmax(132px, 168px) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 8px 8px 12px;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-read-rule:first-child {
+  border-top: 0;
+}
+.sv-read-rule:has(> .sv-switch:not(:checked)) .sv-read-name,
+.sv-read-rule:has(> .sv-switch:not(:checked)) .sv-read-marks {
+  opacity: 0.5;
+}
+.sv-read-name {
+  min-width: 0;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sv-read-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+:is(#sv-overlay) .sv-read-marks input[type="text"] {
+  width: 56px;
+  padding-inline: 6px;
+  font-size: 1.05em;
+  text-align: center;
+}
+.sv-read-dots {
+  color: var(--sv-faint);
+}
+.sv-read-incomplete .sv-read-marks input[type="text"]:placeholder-shown {
+  border-color: var(--sv-warn) !important;
+}
+.sv-read-remove {
+  width: 30px;
+  height: 30px;
+}
+.sv-read-remove:hover {
+  color: var(--sv-danger-text);
+}
+.sv-read-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ----- 23. 좁은 화면 · 터치 ----- */
+@media (max-width: 700px), (pointer: coarse) {
+  #sv-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  #sv-panel {
+    width: 100%;
+    height: calc(100vh - max(12px, env(safe-area-inset-top)));
+    height: calc(100dvh - max(12px, env(safe-area-inset-top)));
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+  }
+  .sv-header {
+    padding: 12px 10px 8px 14px;
+  }
+  .sv-tabs {
+    gap: 2px;
+    padding: 0 8px 8px;
+  }
+  .sv-tab {
+    flex-direction: column;
+    gap: 3px;
+    height: 50px;
+    padding: 0 4px;
+    font-size: var(--sv-fs-xxs);
+  }
+  .sv-tab > i {
+    font-size: 1.15em;
+  }
+  .sv-tab-content {
+    gap: 18px;
+    padding: 14px 14px 24px;
+  }
+  .sv-group-body {
+    padding: 14px;
+  }
+  .sv-fold > summary.sv-group-title {
+    padding: 10px 14px;
+  }
+  #sv-panel {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  :is(#sv-overlay, .sv-dialog) :is(input, textarea, select) {
+    font-size: 16px;
+  }
+  .sv-inline-actions {
+    gap: 2px;
+  }
+  .sv-inline-actions > button {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .sv-inline-actions > .sv-play-btn {
+    font-size: 13px;
+  }
+  .sv-inline-actions > select.sv-speaker-select {
+    height: 28px !important;
+    max-width: 112px !important;
+    font-size: 16px !important;
+    line-height: 26px !important;
+  }
+
+  /* The phone becomes the whole screen; the device's own status bar takes over. */
+  #sv-smartphone {
+    top: 0 !important;
+    right: auto;
+    bottom: auto;
+    left: 0 !important;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    filter: none;
+  }
+  .sv-phone-frame {
+    padding: 0;
+    border-radius: 0;
+    background: #000;
+    box-shadow: none;
+    animation-name: sv-fade;
+  }
+  .sv-phone-key,
+  .sv-phone-homebar {
+    display: none;
+  }
+  .sv-phone-screen {
+    border-radius: 0;
+  }
+  .sv-phone-status {
+    height: env(safe-area-inset-top);
+    padding: 0;
+    cursor: default;
+  }
+  .sv-phone-status > * {
+    display: none;
+  }
+  .sv-phone-nav {
+    top: env(safe-area-inset-top);
+  }
+  .sv-smartphone-body {
+    padding-top: calc(44px + env(safe-area-inset-top));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .sv-smartphone-app-home,
+  .sv-incoming-call,
+  .sv-call-screen,
+  .sv-call-contact {
+    padding-top: calc(70px + env(safe-area-inset-top));
+    padding-bottom: calc(30px + env(safe-area-inset-bottom));
+  }
+  #sv-smartphone .sv-call-compose textarea {
+    font-size: 16px;
+  }
+  /* Measured from the top: ST's mobile layout pins <body> (position: fixed) under a transformed
+     <html>, and mobile WebKit then measures bottom offsets from the collapsed page, off screen. */
+  #sv-phone-launcher {
+    top: calc(100vh - 134px);
+    top: calc(100dvh - 134px - env(safe-area-inset-bottom));
+    right: 14px;
+    bottom: auto;
+  }
+  .sv-toast {
+    top: calc(100vh - 96px);
+    top: calc(100dvh - 96px - env(safe-area-inset-bottom));
+    bottom: auto;
+    transform: translate(-50%, -100%);
+  }
+}
+@media (max-width: 640px) {
+  .sv-read-rule {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "toggle name name remove"
+      "marks marks kind kind";
+    padding: 10px 6px 10px 12px;
+  }
+  .sv-read-rule > .sv-switch {
+    grid-area: toggle;
+  }
+  .sv-read-name {
+    grid-area: name;
+  }
+  .sv-read-marks {
+    grid-area: marks;
+  }
+  .sv-read-rule > select {
+    grid-area: kind;
+  }
+  .sv-read-remove {
+    grid-area: remove;
+  }
+  /* Search on a line of its own, the two choices side by side under it. */
+  .sv-filter-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sv-filter-main > .sv-search-box {
+    grid-column: 1 / -1;
+  }
+  #sv-overlay .sv-date-field {
+    flex: 1 1 130px;
+  }
+  #sv-overlay .sv-date-field > input {
+    width: 100%;
+  }
+  .sv-date-sep {
+    display: none;
+  }
+  .sv-timeline li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+  .sv-timeline li > time {
+    grid-column: 1;
+  }
+  .sv-timeline li > span {
+    grid-column: 1;
+  }
+  .sv-timeline li > .sv-state-history-delete {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .sv-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sv-history-meta time {
+    width: 100%;
+    margin-left: 0;
+  }
+  .sv-page-head > .sv-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .sv-dialog > form {
+    padding: 18px 16px;
+  }
+}
+@media (hover: none) {
+  .sv-btn:hover {
+    background: var(--sv-soft);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class^="sv-"],
+  [class*=" sv-"],
+  [id^="sv-"],
+  [id^="sv-"] *,
+  .sv-phone-frame {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ----- 24. 그 밖의 화면 요소 (좁은 화면 규칙 뒤에 와야 하는 것들) ----- */
+
+/* Storage use against the size limit */
+.sv-storage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sv-storage-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-storage-line strong {
+  color: var(--sv-fg);
+  font-weight: 600;
+}
+.sv-storage-bar {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sv-soft2);
+}
+.sv-storage-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sv-brand);
+  transition: width 0.3s ease;
+}
+.sv-storage-meter[data-level="high"] .sv-storage-bar > i {
+  background: var(--sv-warn, #d9a23b);
+}
+.sv-storage-meter[data-level="full"] .sv-storage-bar > i {
+  background: var(--sv-danger, #d9534f);
+}
+
+/* Adding a person: name, where it belongs, and the button. */
+#sv-cast-panel > .sv-member-add {
+  margin-top: 14px;
+}
+#sv-cast-scope {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
+}
+.sv-member-quick {
+  display: flex;
+}
+/* A person's switches and actions share one line on wide screens. */
+.sv-member-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+}
+.sv-member-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.sv-inline-actions.sv-line-hidden {
+  display: none !important;
+}
+
+/* 대필: a quiet pen beside the send button. */
+:is(.sv-msg-compose, .sv-call-compose) button.sv-ghostwrite {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+}
+.sv-call-compose button.sv-ghostwrite {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose button.sv-ghostwrite {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+}
+
+/* One line at the top of a conversation: back, who it is with, and (in a group) its settings. */
+.sv-msg-head {
+  flex-direction: row;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.sv-msg-head .sv-msg-back {
+  align-self: center;
+  margin: 0;
+  padding: 4px 6px;
+}
+.sv-msg-who {
+  flex: 1 1 auto;
+  flex-direction: row;
+  gap: 10px;
+  min-width: 0;
+}
+.sv-msg-who-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-msg-who-text strong {
+  overflow: hidden;
+  font-size: 14px !important;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sv-msg-who-text small {
+  max-width: none;
+}
+#sv-smartphone .sv-msg-who .sv-phone-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+}
+#sv-smartphone .sv-msg-who .sv-room-avatar {
+  width: 38px;
+  height: 38px;
+}
+#sv-smartphone .sv-msg-who .sv-room-avatar .sv-phone-avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+.sv-msg-group-edit {
+  position: static;
+  flex: none;
+}
+
+/* A settings row whose every control the chosen model doesn't take. */
+.sv-row.sv-row-empty {
+  display: none;
+}
+#sv-eleven-model-custom {
+  margin-top: 6px;
+}
+
+/* Loading the account's voices, for the Voice ID boxes' suggestions. */
+.sv-voice-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.sv-voice-tools.hidden {
+  display: none;
+}
+
+/* A person's picture: shown in the speaker list, changed from the phone's contact editor. */
+.sv-member-avatar {
+  overflow: hidden;
+}
+.sv-member-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A tall picture (a card portrait) shows its upper part, where the face is. */
+  object-position: 50% 15%;
+}
+.sv-contact-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+:is(.sv-contact-photo-pick, .sv-contact-photo-actions button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+  color: var(--ph-blue);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Group room settings: a room without the user, and how it talks by itself. */
+.sv-room-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px;
+  color: var(--ph-fg);
+  font-size: 13px;
+}
+.sv-room-alone-options {
+  display: grid;
+  gap: 8px;
+  margin: 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ph-surface);
+}
+.sv-room-alone-options[hidden] {
+  display: none;
+}
+.sv-room-alone-options .sv-room-check {
+  margin: 0;
+}
+.sv-room-num {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+#sv-smartphone .sv-room-num input {
+  width: 52px;
+  height: 28px;
+  margin: 0;
+  padding: 0 6px;
+  border: 0.5px solid var(--ph-line);
+  border-radius: 8px;
+  background: var(--ph-bg);
+  color: var(--ph-fg);
+  font-size: 13px;
+  text-align: center;
+}
+/* In a room without the user: watching, and a button to let them talk on. */
+.sv-msg-observer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 0.5px solid var(--ph-line);
+  background: var(--ph-bg);
+}
+.sv-msg-observer small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+.sv-msg-observer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ph-blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-msg-observer button:disabled {
+  opacity: 0.6;
+}
+.sv-msg-compose[hidden] {
+  display: none;
+}
+
+/* 로어북 참고: books for this bot card, and their entries. */
+.sv-lore-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card, 12px);
+}
+.sv-lore-picker[hidden] {
+  display: none;
+}
+.sv-lore-books {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.sv-lore-book {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sv-line) 60%, transparent);
+}
+.sv-lore-book > .sv-check {
+  flex: 1 1 180px;
+}
+.sv-lore-entries {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 4px 26px;
+}
+.sv-lore-entries[hidden] {
+  display: none;
+}
+.sv-lore-entry small {
+  color: var(--sv-muted);
+}
+
+/* Incoming-call banner: under the top bar while the phone is closed. */
+#sv-call-banner {
+  position: fixed;
+  top: calc(var(--topBarBlockSize, 46px) + 10px);
+  top: calc(var(--topBarBlockSize, 46px) + 10px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 2147483550;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, calc(100vw - 24px));
+  margin: 0;
+  padding: 10px 12px 10px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  background: rgba(28, 28, 30, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  color: #f5f5f7;
+  font: 500 14px/1.35 "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transform: translateX(-50%);
+  animation: sv-call-banner-in 0.32s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#sv-call-banner:hover {
+  background: rgba(44, 44, 46, 0.94);
+}
+#sv-call-banner:focus-visible {
+  outline: 2px solid #34c759;
+  outline-offset: 3px;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-avatar {
+  display: grid;
+  flex: none;
+  grid-template: 100% / 100%;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #3a3a3c;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A tall picture (a card portrait) shows its upper part, where the face is. */
+  object-position: 50% 15%;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-text strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-text small {
+  color: rgba(235, 235, 245, 0.66);
+  font-size: 12.5px;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #34c759;
+  color: #fff;
+  font-size: 16px;
+}
+:is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-icon i {
+  animation: sv-wiggle 1.3s ease-in-out infinite;
+}
+/* A message: blue, still, and the line under the name kept to one row (a voicemail or an
+   overheard call: indigo, still). */
+:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-icon {
+  background: #0a84ff;
+}
+:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-icon i {
+  animation: none;
+}
+:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-text small {
+  overflow: hidden;
+  max-width: 46vw;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(#sv-call-banner, #sv-phone-notice):is([data-kind="voicemail"], [data-kind="overheard"]) .sv-call-banner-icon {
+  background: #5e5ce6;
+}
+:is(#sv-call-banner, #sv-phone-notice):is([data-kind="voicemail"], [data-kind="overheard"]) .sv-call-banner-icon i {
+  animation: none;
+}
+@keyframes sv-call-banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+/* The same notice inside the phone while it is open: under its status bar, as a phone shows it. */
+#sv-smartphone #sv-phone-notice {
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  left: 10px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(28, 28, 30, 0.92);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  color: #f5f5f7;
+  font: 500 13px / 1.35 var(--sv-font);
+  text-align: left;
+  cursor: pointer;
+  animation: sv-phone-notice-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#sv-smartphone #sv-phone-notice .sv-call-banner-avatar {
+  width: 36px;
+  height: 36px;
+}
+#sv-smartphone #sv-phone-notice .sv-call-banner-text small {
+  max-width: none;
+}
+@keyframes sv-phone-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-call-banner,
+  #sv-phone-notice,
+  :is(#sv-call-banner, #sv-phone-notice) .sv-call-banner-icon i {
+    animation: none;
+  }
+}
+
+/* Segmented choices: the chosen part in the brand colour, readable on any theme. */
+.sv-seg {
+  box-shadow: inset 0 0 0 1px var(--sv-line);
+}
+.sv-seg input:checked + span {
+  background: var(--sv-brand-soft2);
+  box-shadow: inset 0 0 0 1.5px var(--sv-brand-line);
+  color: var(--sv-brand-text);
+  font-weight: 700;
+}
+.sv-seg input:checked + span > i {
+  color: inherit;
+}
+
+/* Voice picker: a dropdown of voice names; the IDs stay out of sight. */
+.sv-voice-pick {
+  position: relative;
+  min-width: 0;
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick .sv-voice-pick-text {
+  padding-right: 32px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick .sv-voice-pick-text:focus {
+  cursor: text;
+}
+.sv-voice-pick-caret {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: var(--sv-control-h);
+  color: var(--sv-faint);
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform var(--sv-ease), color var(--sv-ease);
+}
+.sv-voice-pick.sv-open .sv-voice-pick-caret {
+  color: var(--sv-brand-text);
+  transform: rotate(180deg);
+}
+.sv-voice-pick-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  max-height: 264px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: var(--sv-r-control);
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow-pop);
+  list-style: none;
+}
+.sv-voice-pick-menu[hidden] {
+  display: none;
+}
+.sv-voice-pick-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: calc(var(--sv-r-control) - 3px);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.sv-voice-pick-option small {
+  color: var(--sv-faint);
+  font-size: var(--sv-fs-xs);
+}
+.sv-voice-pick-option:hover,
+.sv-voice-pick-option.sv-active {
+  background: var(--sv-soft2);
+}
+.sv-voice-pick-option[aria-selected="true"] {
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  font-weight: 600;
+}
+.sv-voice-pick-empty {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+}
+.sv-voice-pick-note {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--sv-faint);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.45;
+  cursor: default;
+}
+
+/* A switch alone in its row keeps one column, lining up with the rows above and below. */
+.sv-row > .sv-switch-row:only-child {
+  grid-column: auto;
+}
+@media (min-width: 641px) {
+  .sv-group-body > .sv-switch-row,
+  .sv-basic-on > .sv-switch-row {
+    width: calc((100% - 28px) / 2);
+  }
+}
+/* A switch with no line under it is as tall as its switch, so the group doesn't gape below it. */
+:is(.sv-group-body, .sv-basic-on, .sv-basic-chat) > .sv-switch-row:not(:has(.sv-hint)) {
+  align-items: center;
+  min-height: 0;
+}
+
+/* Texts: play-all in the header, and the message being played. */
+.sv-msg-aloud {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ph-fg) 7%, transparent);
+  color: var(--ph-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sv-msg-aloud + .sv-msg-group-edit {
+  margin-left: 6px;
+}
+/* The playing message's button lights up like a pressed button, and pulses. */
+#sv-smartphone .sv-msg-meta .sv-msg-play.sv-playing,
+#sv-smartphone .sv-msg-aloud.sv-playing {
+  background: color-mix(in srgb, var(--ph-blue) 24%, transparent);
+  color: var(--ph-blue);
+  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sv-msg-play-pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ph-blue) 22%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-smartphone .sv-msg-meta .sv-msg-play.sv-playing,
+  #sv-smartphone .sv-msg-aloud.sv-playing {
+    animation: none;
+  }
+}
+
+/* 스마트폰 사용 off: the phone settings and the 전화 tab fold away. */
+/* 기본: what hangs on 씬보이스 사용, 채팅 대사 음성 and 음성 준비 folds away with it. */
+/* Settings only the chat's lines use are out of the way while 채팅 대사 음성 is off. */
+#sv-panel:is(.sv-chat-off, .sv-inactive) :is(.sv-chat-only, #sv-group-reading),
+#sv-panel:not(.sv-chat-off) .sv-chat-off-only,
+#sv-panel:not(.sv-chat-off.sv-mc-engine) .sv-mc-engine-note,
+#sv-panel.sv-chat-off.sv-mc-engine #sv-group-engine .sv-group-body > :not(.sv-mc-engine-note),
+#sv-panel.sv-sfx-off .sv-sfx-only,
+#sv-panel.sv-casting-off .sv-casting-only,
+#sv-panel.sv-inactive .sv-basic-on,
+#sv-panel.sv-chat-off .sv-basic-chat,
+#sv-panel.sv-prepare-off .sv-basic-prepare {
+  display: none;
+}
+.sv-basic-on > .sv-notice {
+  margin-top: 12px;
+}
+.sv-basic-on > .sv-divider {
+  margin: 4px 0 18px !important;
+}
+.sv-basic-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-left: 14px;
+  border-left: 2px solid var(--sv-line);
+}
+/* 대사 옆 재생 버튼 off: the buttons stay in place (음성 준비 reads them) but out of sight. */
+body.sv-hide-line-buttons .sv-inline-actions {
+  display: none !important;
+}
+#sv-panel.sv-phone-off #sv-fold-smartphone .sv-group-body > :not(.sv-phone-app-row),
+#sv-panel.sv-phone-off #sv-fold-phone,
+#sv-panel.sv-phone-off #sv-fold-voice-message,
+#sv-panel.sv-phone-off .sv-tab[data-tab="phone"] {
+  display: none !important;
+}
+
+/* Text and call inputs grow without a scrollbar. */
+#sv-smartphone :is(.sv-msg-compose, .sv-call-compose) textarea {
+  scrollbar-width: none;
+}
+#sv-smartphone :is(.sv-msg-compose, .sv-call-compose) textarea::-webkit-scrollbar {
+  display: none;
+}
+/* The triangle beats while its message is read, and the message's bubbles are outlined. */
+#sv-smartphone .sv-msg-play.sv-playing i {
+  animation: sv-msg-icon-beat 0.8s ease-in-out infinite;
+}
+@keyframes sv-msg-icon-beat {
+  50% {
+    transform: scale(1.3);
+  }
+}
+#sv-smartphone .sv-msg-row.sv-msg-reading .sv-msg-bubble {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ph-blue) 50%, transparent);
+  transition: box-shadow 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-smartphone .sv-msg-play.sv-playing i {
+    animation: none;
+  }
+}
+
+/* A line button whose work is running: it spins and can't be pressed twice. */
+.sv-inline-actions .sv-busy {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Call screens sit on a picture or a plain theme colour, light or dark: their labels and the
+   reply box carry their own dark glass so white text reads on either. */
+#sv-smartphone .sv-incoming-actions small {
+  padding: 2px 11px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.38);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-weight: 600;
+}
+#sv-smartphone .sv-call-compose {
+  background: rgba(0, 0, 0, 0.28);
+}
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea {
+  color: #fff;
+}
+#sv-smartphone .sv-call-compose textarea::placeholder,
+#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea::placeholder {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* 읽는 대사 자막: ── the line being read ── in a strip under the top bar (no clicks, no layout). */
+#sv-now-reading {
+  --sv-now-ink: var(--SmartThemeBodyColor, #e6e6e6);
+  position: fixed;
+  top: calc(var(--topBarBlockSize, 46px) + 8px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 2147483540;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--sv-now-ink) 16%, transparent);
+  /* Opaque: the theme tint is often see-through, and the words must read over any chat. */
+  background: #1d1f24;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.14);
+  color: var(--sv-now-ink);
+  font: 500 14px/1.55 "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+#sv-now-reading::before,
+#sv-now-reading::after {
+  content: "";
+  flex: 0 1 auto;
+  width: 40px;
+  min-width: 14px;
+  height: 1px;
+  background: color-mix(in srgb, var(--sv-now-ink) 38%, transparent);
+}
+#sv-now-reading.sv-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+@supports (color: rgb(from red r g b / 1)) {
+  #sv-now-reading {
+    background: rgb(from var(--SmartThemeBlurTintColor, #1d1f24) r g b / 1);
+  }
+}
+/* Under the incoming-call banner when both are up. */
+body:has(#sv-call-banner) #sv-now-reading {
+  top: calc(var(--topBarBlockSize, 46px) + 84px + env(safe-area-inset-top));
+}
+/* The speaker's name sits on the strip's top edge, small. */
+#sv-now-reading .sv-now-reading-who {
+  position: absolute;
+  top: 0;
+  left: 18px;
+  max-width: 60%;
+  overflow: hidden;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #13a094;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(-55%);
+}
+#sv-now-reading .sv-now-reading-who[hidden] {
+  display: none;
+}
+#sv-now-reading .sv-now-reading-window {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+#sv-now-reading.sv-long .sv-now-reading-window {
+  flex: 1 1 auto;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+#sv-now-reading .sv-now-reading-text {
+  display: inline-block;
+  padding: 0 2px;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+#sv-now-reading.sv-long .sv-now-reading-text {
+  padding: 0 14px;
+}
+#sv-now-reading .sv-now-reading-text.sv-swap {
+  opacity: 0;
+  transform: translateY(4px);
+}
+#sv-now-reading .sv-now-reading-text.sv-thought {
+  font-style: italic;
+  opacity: 0.88;
+}
+#sv-now-reading .sv-now-reading-text.sv-scroll {
+  animation: sv-now-scroll var(--sv-scroll-time, 8s) linear 1s 1 both;
+}
+@keyframes sv-now-scroll {
+  0%,
+  6% {
+    transform: translateX(0);
+  }
+  94%,
+  100% {
+    transform: translateX(var(--sv-shift, 0));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-now-reading,
+  #sv-now-reading .sv-now-reading-text {
+    transition: none;
+  }
+  #sv-now-reading .sv-now-reading-text.sv-scroll {
+    animation: none;
+  }
+}
+
+/* 월드인포 참고 under a bot card: its list folded until opened. */
+.sv-lore-fold {
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+}
+.sv-lore-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: calc(var(--sv-r-card) - 1px);
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  cursor: pointer;
+}
+.sv-lore-fold > summary:hover {
+  background: var(--sv-soft2);
+  color: var(--sv-fg);
+}
+.sv-lore-chevron {
+  margin-left: auto;
+  font-size: 0.8em;
+  transition: transform var(--sv-ease);
+}
+.sv-lore-fold[open] .sv-lore-chevron {
+  transform: rotate(180deg);
+}
+.sv-lore-fold > .sv-lore-picker {
+  padding: 4px 12px 12px;
+}
+
+/* 통화로 돌아가기: on a call, elsewhere on the phone, in the title's place. */
+#sv-smartphone .sv-call-return {
+  display: inline-flex;
+  justify-self: center;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background: #34c759;
+  color: #fff;
+  font: 600 13px / 1 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+  animation: sv-call-return-pulse 2s ease-in-out infinite;
+}
+#sv-smartphone .sv-call-return > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes sv-call-return-pulse {
+  50% {
+    background: #2fb350;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-smartphone .sv-call-return {
+    animation: none;
+  }
+}
+
+/* 적용 기억 | 미적용 기억: a phone-style segmented control over the conversation list and the
+   call history, there only while some records are out of the chat now. */
+#sv-smartphone .sv-shelf {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 6px 16px 10px;
+  padding: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+}
+#sv-smartphone .sv-shelf-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ph-muted);
+  font: 600 13px / 1.2 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#sv-smartphone .sv-shelf-tab > i {
+  font-size: 12px;
+}
+/* The tab shown is filled: 적용 기억 in the phone's color, 미적용 기억 in gray (put away). */
+#sv-smartphone .sv-shelf-tab[aria-selected="true"] {
+  background: var(--ph-blue);
+  color: #fff;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ph-blue) 35%, transparent);
+}
+#sv-smartphone .sv-shelf-tab[data-shelf="unapplied"][aria-selected="true"] {
+  background: var(--ph-gray, #8e8e93);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+#sv-smartphone .sv-shelf-tab:not([aria-selected="true"]):hover {
+  color: var(--ph-fg);
+}
+#sv-smartphone .sv-shelf-tab[aria-selected="true"] .sv-shelf-count {
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+#sv-smartphone .sv-shelf-empty {
+  padding-top: 40px;
+}
+#sv-smartphone .sv-shelf-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ph-fg) 14%, transparent);
+  color: var(--ph-muted);
+  font: 600 11px / 1 var(--sv-font);
+  font-style: normal;
+}
+#sv-smartphone .sv-shelf-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-fg) 6%, transparent);
+}
+#sv-smartphone .sv-shelf-note > p {
+  flex: 1 1 auto;
+  margin: 0 !important;
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+#sv-smartphone .sv-shelf-clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ph-red) 14%, transparent);
+  color: var(--ph-red);
+  font: 600 12px / 1 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+#sv-smartphone .sv-shelf-clear:hover {
+  background: color-mix(in srgb, var(--ph-red) 22%, transparent);
+}
+/* A conversation in 미적용 기억: where in the chat each part was made, and no sending. */
+#sv-smartphone .sv-msg-point {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 4px 0;
+  color: var(--ph-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+#sv-smartphone .sv-msg-point::before,
+#sv-smartphone .sv-msg-point::after {
+  flex: 1;
+  height: 0.5px;
+  background: var(--ph-line);
+  content: "";
+}
+#sv-smartphone .sv-msg-away .sv-msg-list {
+  filter: saturate(0.6);
+}
+#sv-smartphone .sv-msg-frozen {
+  position: sticky;
+  bottom: 0;
+  margin: 0 !important;
+  padding: 10px 16px 30px;
+  border-top: 0.5px solid var(--ph-line);
+  background: var(--ph-bg);
+  color: var(--ph-muted);
+  font-size: 12px;
+  text-align: center;
+}
+#sv-smartphone .sv-msg-frozen > i {
+  margin-right: 6px;
+}
+
+/* 음성 사서함: the message left after an unanswered call, marked in the call's transcript. */
+#sv-smartphone .sv-voicemail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  color: var(--ph-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+#sv-smartphone .sv-call-history-session time .sv-unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+/* Touch screens: the small line buttons answer a finger a little above and below them too. */
+@media (pointer: coarse) {
+  .sv-inline-actions > button::before {
+    position: absolute;
+    inset: -7px -1px;
+    content: "";
+  }
+}
+
+/* 전체 듣기 on a past call: the button over its lines, and the line being read. */
+#sv-smartphone .sv-call-aloud-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px 8px;
+}
+#sv-smartphone .sv-call-aloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ph-blue) 14%, transparent);
+  color: var(--ph-blue);
+  font: 600 12px / 1 var(--sv-font);
+  cursor: pointer;
+}
+#sv-smartphone .sv-call-aloud.sv-playing {
+  background: var(--ph-blue);
+  color: #fff;
+}
+#sv-smartphone .sv-history-transcript article.sv-call-reading {
+  outline: 2px solid color-mix(in srgb, var(--ph-blue) 65%, transparent);
+  outline-offset: 2px;
+}
+#sv-smartphone .sv-room-name select {
+  height: 38px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0.5px solid var(--ph-line);
+  border-radius: 10px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 14px;
+}
+#sv-smartphone .sv-call-history-list > .sv-overheard-new {
+  width: calc(100% - 32px);
+}
+
+/* 엿듣기: a call between two people on a call screen, both of them at the top. */
+#sv-smartphone .sv-overheard-screen .sv-call-identity .sv-room-avatar {
+  display: flex;
+  gap: 18px;
+  width: auto;
+  height: auto;
+}
+#sv-smartphone .sv-overheard-screen .sv-call-identity .sv-room-avatar .sv-phone-avatar {
+  position: static;
+  width: 80px;
+  height: 80px;
+  font-size: 28px;
+  box-shadow: none;
+}
+#sv-smartphone .sv-overheard-screen .sv-call-identity h2 {
+  font-size: 22px !important;
+  text-align: center;
+}
+#sv-smartphone .sv-overheard-controls {
+  flex-direction: row;
+  justify-content: center;
+  gap: 32px;
+}
+#sv-smartphone .sv-overheard-controls > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+#sv-smartphone .sv-overheard-again {
+  background: var(--ph-green);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ph-green) 35%, transparent);
+}
+#sv-smartphone .sv-overheard-back {
+  background: var(--ph-glass);
+  box-shadow: none;
+}
