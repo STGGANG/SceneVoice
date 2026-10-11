@@ -6,7 +6,7 @@ import {
   messageSystem,
   textFinal,
   textSystem,
-  userPrompt,
+  phoneMessages,
 } from "./prompts.js";
 import { escapeHtml, normalizeTags } from "./common.js";
 
@@ -866,48 +866,42 @@ export const messages = {
       );
       const emotions = Array.from(this.analysisEmotionCandidates()).sort();
       const canCall = this.canCallAfterText(key);
-      const messages = [
-        {
-          role: "system",
-          content: textSystem({
-            emotions,
-            language,
-            translation: this.wantsTranslation(language),
-            replying: true,
-            allowVoice,
-            soundEffects: this.phoneSoundEffects(character.key),
-            fixedLanguage: this.languageIsFixed(key),
-            absent,
-            unknown,
-            canCall,
+      const me = this.userCharacterName();
+      const messages = phoneMessages(
+        textSystem({
+          emotions,
+          language,
+          translation: this.wantsTranslation(language),
+          replying: true,
+          allowVoice,
+          soundEffects: this.phoneSoundEffects(character.key),
+          fixedLanguage: this.languageIsFixed(key),
+          absent,
+          unknown,
+          canCall,
+        }),
+        [
+          dataBlock("user_character", me),
+          dataBlock("target_character", character.name),
+          dataBlock("profile", this.phoneRoleplayProfile()),
+          dataBlock("performance_note", character.note, {
+            range: this.emotionalRange(character.key),
           }),
-        },
-        {
-          role: "user",
-          content: userPrompt(
-            [
-              dataBlock("target_character", character.name),
-              dataBlock("profile", this.getRoleplayProfileContext()),
-              dataBlock("performance_note", character.note, {
-                range: this.emotionalRange(character.key),
-              }),
-              ...stateBlocks,
-              dataBlock(
-                "recent_chat",
-                this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
-              ),
-              ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
-              ...this.currentTimeBlocks([key]),
-              dataBlock("previous_calls", await this.loadPreviousCalls(key)),
-              dataBlock(
-                "text_thread",
-                this.textThreadData(thread, character.name, this.realtimeFor(key)),
-              ),
-            ],
-            textFinal(character.name, language),
+          ...stateBlocks,
+          dataBlock(
+            "recent_chat",
+            this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
           ),
-        },
-      ];
+          ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
+          ...this.currentTimeBlocks([key]),
+          dataBlock("previous_calls", await this.loadPreviousCalls(key)),
+          dataBlock(
+            "text_thread",
+            this.textThreadData(thread, character.name, this.realtimeFor(key)),
+          ),
+        ],
+        textFinal(character.name, language, me),
+      );
       this.assertChat(operation);
       const parsed = await this.requestSpokenReply(profileId, messages, 900);
       this.assertChat(operation);
@@ -1112,10 +1106,14 @@ export const messages = {
     return [...rounds.values()].sort((a, b) => String(a[0].created_at).localeCompare(String(b[0].created_at)));
   },
 
-  /** The thread as the prompt sees it: who wrote, text or voice, and (with real time on) when. */
+  /**
+   * The thread as the prompt sees it: who wrote (the user's lines under their character's name),
+   * text or voice, and (with real time on) when.
+   */
   textThreadData(thread, name, timed = false) {
+    const me = this.userCharacterName?.() || "User";
     return thread.map((item) => ({
-      from: item.role === "user" ? "USER" : item.thread_key ? item.character_name : name,
+      from: item.role === "user" ? me : item.thread_key ? item.character_name : name,
       kind: item.kind || "voice",
       text: item.text,
       ...(timed ? { sent_at: this.realTimeLabel(item.created_at) } : {}),
@@ -1285,67 +1283,57 @@ export const messages = {
           )
         : this.conversationLanguage([], "", character.key);
     const translation = this.wantsTranslation(language);
-    const messages = [
-      {
-        role: "system",
-        content:
-          kind === "text"
-            ? textSystem({
-                emotions,
-                language,
-                translation,
-                replying: false,
-                fixedLanguage: this.languageIsFixed(character.key),
-                absent,
-                unknown,
-                canCall: this.canCallAfterText(character.key),
-              })
-            : messageSystem({
-                emotions,
-                language,
-                translation,
-                soundEffects: this.phoneSoundEffects(character.key),
-                fixedLanguage: this.languageIsFixed(character.key),
-                absent,
-                unknown,
-              }),
-      },
-      {
-        role: "user",
-        content: userPrompt(
-          [
-            dataBlock("target_character", character.name),
-            dataBlock("profile", this.getRoleplayProfileContext()),
-            dataBlock("performance_note", character.note, {
-              range: this.emotionalRange(character.key),
-            }),
-            ...stateBlocks,
-            dataBlock(
-              "recent_chat",
-              this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
-            ),
-            ...((await this.worldInfoBlocks?.([
-              ...thread.map((item) => item.text),
-              reason,
-            ])) || []),
-            ...this.currentTimeBlocks([character.key]),
-            dataBlock("previous_calls", await this.loadPreviousCalls(character.key)),
-            ...(kind === "text"
-              ? [
-                  dataBlock(
-                    "text_thread",
-                    this.textThreadData(thread, character.name, this.realtimeFor(character.key)),
-                  ),
-                ]
-              : []),
-            dataBlock("reason_to_send", reason || "(decide from context)"),
-          ],
-          kind === "text"
-            ? textFinal(character.name, language)
-            : messageFinal(character.name, language),
+    const me = this.userCharacterName();
+    const messages = phoneMessages(
+      kind === "text"
+        ? textSystem({
+            emotions,
+            language,
+            translation,
+            replying: false,
+            fixedLanguage: this.languageIsFixed(character.key),
+            absent,
+            unknown,
+            canCall: this.canCallAfterText(character.key),
+          })
+        : messageSystem({
+            emotions,
+            language,
+            translation,
+            soundEffects: this.phoneSoundEffects(character.key),
+            fixedLanguage: this.languageIsFixed(character.key),
+            absent,
+            unknown,
+          }),
+      [
+        dataBlock("user_character", me),
+        dataBlock("target_character", character.name),
+        dataBlock("profile", this.phoneRoleplayProfile()),
+        dataBlock("performance_note", character.note, {
+          range: this.emotionalRange(character.key),
+        }),
+        ...stateBlocks,
+        dataBlock(
+          "recent_chat",
+          this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
         ),
-      },
-    ];
+        ...((await this.worldInfoBlocks?.([...thread.map((item) => item.text), reason])) || []),
+        ...this.currentTimeBlocks([character.key]),
+        dataBlock("previous_calls", await this.loadPreviousCalls(character.key)),
+        ...(kind === "text"
+          ? [
+              dataBlock(
+                "text_thread",
+                this.textThreadData(thread, character.name, this.realtimeFor(character.key)),
+              ),
+            ]
+          : []),
+        dataBlock("reason_to_send", reason || "(decide from context)"),
+      ],
+      kind === "text"
+        ? textFinal(character.name, language, me)
+        : messageFinal(character.name, language, me),
+    );
     return this.requestSpokenReply(profileId, messages, 850);
   },
 

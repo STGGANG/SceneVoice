@@ -7,7 +7,7 @@ import {
   languageName,
   overheardCallFinal,
   overheardCallSystem,
-  userPrompt,
+  phoneMessages,
 } from "./prompts.js";
 import {
   FINAL_CALL_STATUSES,
@@ -611,7 +611,8 @@ export const calls = {
       throw new Error("전화 대화 연결 프로필이 없습니다.");
     const sessionId = this.phoneSession.id;
     const character = this.phoneContact(this.phoneSession.character_key);
-    const roleplayProfile = this.getRoleplayProfileContext();
+    const roleplayProfile = this.phoneRoleplayProfile();
+    const me = this.userCharacterName();
     // The callee's own state, or only that nobody knows where they are.
     const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(
       await this.stateForPrompt(character.key),
@@ -624,7 +625,7 @@ export const calls = {
       .slice(-30)
       .map((turn) => ({
         role: turn.role,
-        speaker: turn.role === "user" ? "USER" : character.name,
+        speaker: turn.role === "user" ? me : character.name,
         text: turn.text,
       }));
     // Answer in the language the user is speaking on the call.
@@ -650,54 +651,49 @@ export const calls = {
             },
           }
         : {}),
-      ...(roleplayProfile.user ? { user: roleplayProfile.user } : {}),
+      ...(roleplayProfile.user_character ? { user_character: roleplayProfile.user_character } : {}),
     };
     if (!profile.character.description) delete profile.character.description;
-    const messages = [
-      {
-        role: "system",
-        content: callSystem({
-          emotions,
-          opening,
-          direction: this.phoneSession.call_direction,
-          language,
-          member,
-          translation: this.wantsTranslation(language),
-          soundEffects: this.phoneSoundEffects(character.key),
-          fixedLanguage: this.languageIsFixed(character.key),
-          absent,
-          unknown,
+    const messages = phoneMessages(
+      callSystem({
+        emotions,
+        opening,
+        direction: this.phoneSession.call_direction,
+        language,
+        member,
+        translation: this.wantsTranslation(language),
+        soundEffects: this.phoneSoundEffects(character.key),
+        fixedLanguage: this.languageIsFixed(character.key),
+        absent,
+        unknown,
+      }),
+      [
+        dataBlock("user_character", me),
+        dataBlock("target_character", character.name),
+        dataBlock("profile", profile),
+        dataBlock("performance_note", character.note, {
+          range: this.emotionalRange(character.key),
         }),
-      },
-      {
-        role: "user",
-        content: userPrompt(
-          [
-            dataBlock("target_character", character.name),
-            dataBlock("profile", profile),
-            dataBlock("performance_note", character.note, {
-              range: this.emotionalRange(character.key),
-            }),
-            ...stateBlocks,
-            dataBlock("recent_chat", recent),
-            ...((await this.worldInfoBlocks?.(transcript.map((turn) => turn.text))) || []),
-            ...this.currentTimeBlocks([character.key]),
-            dataBlock(
-              "previous_calls",
-              await this.loadPreviousCalls(this.phoneSession.character_key, sessionId),
-            ),
-            dataBlock(
-              "call_situation",
-              this.phoneSession.situation ||
-                "(natural continuation of the chat)",
-              { direction: this.phoneSession.call_direction },
-            ),
-            dataBlock("call_transcript", transcript),
-          ],
-          callFinal(character.name, language),
+        ...stateBlocks,
+        dataBlock("recent_chat", recent),
+        ...((await this.worldInfoBlocks?.(transcript.map((turn) => turn.text))) || []),
+        ...this.currentTimeBlocks([character.key]),
+        dataBlock(
+          "previous_calls",
+          await this.loadPreviousCalls(this.phoneSession.character_key, sessionId),
         ),
-      },
-    ];
+        dataBlock(
+          "call_situation",
+          this.phoneSession.situation || "(natural continuation of the chat)",
+          { direction: this.phoneSession.call_direction },
+        ),
+        dataBlock(
+          "call_transcript",
+          transcript.map(({ speaker, text }) => ({ speaker, text })),
+        ),
+      ],
+      callFinal(character.name, language, me),
+    );
     this.assertChat(operation);
     const parsed = await this.requestSpokenReply(profileId, messages, 900);
     if (
@@ -1028,45 +1024,38 @@ export const calls = {
     const people = [caller, callee].map((person) => this.phoneContact(person.key));
     const states = await Promise.all(people.map((person) => this.stateForPrompt(person.key)));
     const languages = people.map((person) => this.conversationLanguage([], "", person.key));
-    const messages = [
-      {
-        role: "system",
-        content: overheardCallSystem({
-          emotions: Array.from(this.analysisEmotionCandidates()).sort(),
-          translation: languages.some((language) => this.wantsTranslation(language)),
-          soundEffects: people.every((person) => this.phoneSoundEffects(person.key)),
-          length: size,
-        }),
-      },
-      {
-        role: "user",
-        content: userPrompt(
-          [
-            dataBlock("profile", this.getRoleplayProfileContext()),
-            dataBlock(
-              "people_on_call",
-              people.map((person, index) => ({
-                key: person.key,
-                name: person.name,
-                language: `${languageName(languages[index])} (${languages[index]})`,
-                emotional_range: this.emotionalRange(person.key),
-                performance_note: person.note || "",
-                ...(states[index]?.unknown
-                  ? { unknown_whereabouts: true }
-                  : states[index]?.state
-                    ? { state: { summary: states[index].state.summary || "", contact: states[index].state.contact || {} } }
-                    : {}),
-              })),
-            ),
-            dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
-            ...((await this.worldInfoBlocks?.([reason])) || []),
-            ...this.currentTimeBlocks(people.map((person) => person.key)),
-            dataBlock("reason_to_call", reason || "(decide from context)"),
-          ],
-          overheardCallFinal(people[0].name, people[1].name),
+    const messages = phoneMessages(
+      overheardCallSystem({
+        emotions: Array.from(this.analysisEmotionCandidates()).sort(),
+        translation: languages.some((language) => this.wantsTranslation(language)),
+        soundEffects: people.every((person) => this.phoneSoundEffects(person.key)),
+        length: size,
+      }),
+      [
+        dataBlock("user_character", this.userCharacterName()),
+        dataBlock("profile", this.phoneRoleplayProfile()),
+        dataBlock(
+          "people_on_call",
+          people.map((person, index) => ({
+            key: person.key,
+            name: person.name,
+            language: `${languageName(languages[index])} (${languages[index]})`,
+            emotional_range: this.emotionalRange(person.key),
+            performance_note: person.note || "",
+            ...(states[index]?.unknown
+              ? { unknown_whereabouts: true }
+              : states[index]?.state
+                ? { state: { summary: states[index].state.summary || "", contact: states[index].state.contact || {} } }
+                : {}),
+          })),
         ),
-      },
-    ];
+        dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        ...((await this.worldInfoBlocks?.([reason])) || []),
+        ...this.currentTimeBlocks(people.map((person) => person.key)),
+        dataBlock("reason_to_call", reason || "(decide from context)"),
+      ],
+      overheardCallFinal(people[0].name, people[1].name),
+    );
     this.assertChat(operation);
     const parsed = await this.requestSpokenReply(profileId, messages, OVERHEARD_REPLY_TOKENS[size]);
     this.assertChat(operation);

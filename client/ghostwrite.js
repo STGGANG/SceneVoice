@@ -1,4 +1,4 @@
-import { dataBlock, ghostwriteFinal, ghostwriteSystem, userPrompt } from "./prompts.js";
+import { dataBlock, ghostwriteFinal, ghostwriteSystem, phoneMessages } from "./prompts.js";
 import { stripTags } from "../shared/providers.js";
 
 /**
@@ -59,32 +59,28 @@ export const ghostwrite = {
     }
     // The language the other side speaks in this conversation.
     const language = this.conversationLanguage(lines.slice(-6), "", otherKey);
-    const messages = [
-      { role: "system", content: ghostwriteSystem({ mode, language }) },
-      {
-        role: "user",
-        content: userPrompt(
-          [
-            dataBlock("persona", persona),
-            dataBlock(
-              "other",
-              other.group
-                ? { group: other.name, members: other.members.map((member) => member.name) }
-                : { name: other.name, description: String(other.description || "").slice(0, 1500) },
-            ),
-            dataBlock(
-              "recent_chat",
-              this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
-            ),
-            ...((await this.worldInfoBlocks?.(lines)) || []),
-            ...this.currentTimeBlocks(otherKey ? [otherKey] : []),
-            conversation,
-            ...(draft.trim() ? [dataBlock("user_draft", draft.trim())] : []),
-          ],
-          ghostwriteFinal(persona.name, language),
+    // What the user typed goes in a user message of its own; the rest is data after the rules.
+    const messages = phoneMessages(
+      ghostwriteSystem({ mode, language }),
+      [
+        dataBlock("persona", persona),
+        dataBlock(
+          "other",
+          other.group
+            ? { group: other.name, members: other.members.map((member) => member.name) }
+            : { name: other.name, description: String(other.description || "").slice(0, 1500) },
         ),
-      },
-    ];
+        dataBlock(
+          "recent_chat",
+          this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
+        ),
+        ...((await this.worldInfoBlocks?.(lines)) || []),
+        ...this.currentTimeBlocks(otherKey ? [otherKey] : []),
+        conversation,
+      ],
+      ghostwriteFinal(persona.name, language),
+      draft.trim() ? [dataBlock("user_draft", draft.trim())] : [],
+    );
     this.assertChat(operation);
     const parsed = await this.requestSpokenReply(profileId, messages, 600);
     this.assertChat(operation);

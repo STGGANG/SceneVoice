@@ -3,7 +3,7 @@ import {
   groupTextFinal,
   groupTextSystem,
   languageName,
-  userPrompt,
+  phoneMessages,
 } from "./prompts.js";
 import { escapeHtml } from "./common.js";
 
@@ -441,63 +441,56 @@ export const groups = {
               ...(found.away ? { away: true } : {}),
             }
           : {};
-    const messages = [
-      {
-        role: "system",
-        content: groupTextSystem({
-          emotions: Array.from(this.analysisEmotionCandidates()).sort(),
-          translation: languages.some((language) => this.wantsTranslation(language)),
-          allowVoice,
-          soundEffects: members.every((member) => this.soundEffectsFor(member.key)),
-          states: states.some((found) => found?.state),
-          absent: states.some((found) => found?.unknown || found?.away),
-          unknown: states.some((found) => found?.unknown),
-          withoutUser: Boolean(burst),
-          count: burst?.count || null,
-          optional: Boolean(burst?.optional),
-        }),
-      },
-      {
-        role: "user",
-        content: userPrompt(
-          [
-            dataBlock("group_name", group.name),
-            dataBlock(
-              "members",
-              members.map((member, index) => ({
-                name: member.name,
-                language: `${languageName(languages[index])} (${languages[index]})`,
-                emotional_range: this.emotionalRange(member.key),
-                ...(this.realtimeFor(member.key) ? { knows_real_time: true } : {}),
-                performance_note: member.note || "",
-                // Someone from another card brings that card's description; the open card's
-                // people are described in <profile>.
-                ...(member.description && member.cardKey && member.cardKey !== openCard
-                  ? { profile: member.description.slice(0, 1200) }
-                  : {}),
-                ...memberState(states[index]),
-              })),
-            ),
-            dataBlock("profile", this.getRoleplayProfileContext()),
-            dataBlock(
-              "recent_chat",
-              this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
-            ),
-            ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
-            ...this.currentTimeBlocks(members.map((member) => member.key)),
-            dataBlock(
-              "text_thread",
-              this.textThreadData(
-                thread,
-                "",
-                members.some((member) => this.realtimeFor(member.key)),
-              ),
-            ),
-          ],
-          groupTextFinal(group.name),
+    const messages = phoneMessages(
+      groupTextSystem({
+        emotions: Array.from(this.analysisEmotionCandidates()).sort(),
+        translation: languages.some((language) => this.wantsTranslation(language)),
+        allowVoice,
+        soundEffects: members.every((member) => this.soundEffectsFor(member.key)),
+        states: states.some((found) => found?.state),
+        absent: states.some((found) => found?.unknown || found?.away),
+        unknown: states.some((found) => found?.unknown),
+        withoutUser: Boolean(burst),
+        count: burst?.count || null,
+        optional: Boolean(burst?.optional),
+      }),
+      [
+        dataBlock("user_character", this.userCharacterName()),
+        dataBlock("group_name", group.name),
+        dataBlock(
+          "members",
+          members.map((member, index) => ({
+            name: member.name,
+            language: `${languageName(languages[index])} (${languages[index]})`,
+            emotional_range: this.emotionalRange(member.key),
+            ...(this.realtimeFor(member.key) ? { knows_real_time: true } : {}),
+            performance_note: member.note || "",
+            // Someone from another card brings that card's description; the open card's
+            // people are described in <profile>.
+            ...(member.description && member.cardKey && member.cardKey !== openCard
+              ? { profile: member.description.slice(0, 1200) }
+              : {}),
+            ...memberState(states[index]),
+          })),
         ),
-      },
-    ];
+        dataBlock("profile", this.phoneRoleplayProfile()),
+        dataBlock(
+          "recent_chat",
+          this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
+        ),
+        ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
+        ...this.currentTimeBlocks(members.map((member) => member.key)),
+        dataBlock(
+          "text_thread",
+          this.textThreadData(
+            thread,
+            "",
+            members.some((member) => this.realtimeFor(member.key)),
+          ),
+        ),
+      ],
+      groupTextFinal(group.name),
+    );
     this.assertChat(operation);
     const most = burst?.count?.max || 6;
     const parsed = await this.requestSpokenReply(profileId, messages, 600 + 170 * most);

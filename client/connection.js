@@ -1,11 +1,13 @@
 // 실리태번 연결 프로필: helper-model requests go through the connection profile the user picked.
 import { contentKey } from "../shared/hash.js";
-// Prompts are untagged instruction lines and tagged data blocks (see prompts.js). Only data
-// blocks are shortened: never the target lines and speaker list, and never the settings the
-// user put in (character profile, world info, performance notes, people's records).
-const KEPT_BLOCK =
-  /^<(dialogues|speakers|speaker_background|profile|performance_note|world_info|persona|other|people|target_character|group_name|members|people_on_call)[\s>]/;
-const isRequiredSection = (section) => !section.startsWith("<") || KEPT_BLOCK.test(section);
+// Prompts are instruction lines, tagged rule sections and tagged data blocks (see prompts.js),
+// in system and user messages alike. Only these data blocks are shortened: the story and the
+// conversation, past calls, saved states and the like. Everything else stays whole: the
+// instructions and rules, the target lines and speaker list, and the settings the user put in
+// (character profile, world info, performance notes, people's records).
+const TRIMMED_BLOCK =
+  /^<(recent_chat|call_transcript|text_thread|previous_calls|recent_calls|state|current_time|call_situation|reason_to_call|reason_to_send|user_draft|current_message)[\s>]/;
+const isRequiredSection = (section) => !TRIMMED_BLOCK.test(section);
 // Conversations lose their oldest messages: the chat so far, a call, a text thread.
 const NEWEST_KEPT = /^<(recent_chat|call_transcript|text_thread)[\s>]/;
 /**
@@ -38,63 +40,49 @@ const truncateSection = (section, allowance) => {
     closing
   );
 };
-/** Characters that are never shortened: system instructions and the required sections. */
+/** Characters that are never shortened: everything but the data blocks that may be. */
 export function requiredPromptSize(messages) {
-  return messages.reduce((total, message) => {
-    const content = String(message.content);
-    if (message.role === "system") return total + content.length;
-    return (
-      total +
-      content
-        .split("\n\n")
-        .filter(isRequiredSection)
-        .reduce((size, section) => size + section.length, 0)
-    );
-  }, 0);
+  return messages
+    .flatMap((message) => String(message.content).split("\n\n"))
+    .filter(isRequiredSection)
+    .reduce((total, section) => total + section.length, 0);
 }
 /**
- * Fits the messages into `budget` characters. System instructions and required sections stay
- * whole; small data blocks too, and the room left is shared evenly by the big ones.
+ * Fits the messages into `budget` characters. Required sections stay whole, and so do small
+ * data blocks; the room left is shared evenly by the big ones, whichever message holds them.
  */
 export function limitPrompt(messages, budget) {
-  let remaining = budget;
-  return messages.map((message) => {
-    if (message.role === "system") {
-      remaining -= String(message.content).length;
-      return message;
+  const split = messages.map((message) => String(message.content).split("\n\n"));
+  const sections = split.flat();
+  const requiredSize = sections
+    .filter(isRequiredSection)
+    .reduce((total, section) => total + section.length, 0);
+  if (requiredSize > budget)
+    throw new Error("지시문·캐릭터 설정·분석할 대사만으로 요청 한도를 넘었습니다.");
+  // Small sections stay whole; the room they leave goes to the big ones, shared evenly.
+  const others = sections.filter((section) => !isRequiredSection(section));
+  let allowance = Infinity;
+  let left = budget - requiredSize;
+  let count = others.length;
+  for (const size of others.map((x) => x.length).sort((a, b) => a - b)) {
+    const share = Math.floor(left / count);
+    if (size > share) {
+      allowance = Math.max(0, share);
+      break;
     }
-    const sections = String(message.content).split("\n\n");
-    const required = sections.filter(isRequiredSection);
-    const requiredSize = required.reduce((n, x) => n + x.length, 0);
-    if (requiredSize > remaining)
-      throw new Error(
-        "지시문·캐릭터 설정·분석할 대사만으로 요청 한도를 넘었습니다.",
-      );
-    remaining -= requiredSize;
-    const others = sections.filter((x) => !required.includes(x));
-    // Small sections stay whole; the room they leave goes to the big ones, shared evenly.
-    let allowance = Infinity;
-    let left = remaining;
-    let count = others.length;
-    for (const size of others.map((x) => x.length).sort((a, b) => a - b)) {
-      const share = Math.floor(left / count);
-      if (size > share) {
-        allowance = Math.max(0, share);
-        break;
-      }
-      left -= size;
-      count -= 1;
-    }
-    const content = sections
+    left -= size;
+    count -= 1;
+  }
+  return messages.map((message, index) => ({
+    ...message,
+    content: split[index]
       .map((section) =>
-        required.includes(section) || section.length <= allowance
+        isRequiredSection(section) || section.length <= allowance
           ? section
           : truncateSection(section, allowance),
       )
-      .join("\n\n");
-    remaining = Math.max(0, remaining - content.length + requiredSize);
-    return { ...message, content };
-  });
+      .join("\n\n"),
+  }));
 }
 /** The connection profile's completion preset (chat or text completion), if it can be read. */
 function profilePreset(service, profileId) {
