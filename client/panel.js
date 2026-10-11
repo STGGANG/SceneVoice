@@ -227,7 +227,7 @@ export const panel = {
         ${fieldHtml({ id: "sv-context-messages", cls: "sv-chat-only", label: "참고할 직전 메시지 수", control: number("sv-context-messages", Number(config.context_messages ?? 4), 'min="0" max="12"') })}
       </div>
       <div class="sv-row">
-        ${fieldHtml({ id: "sv-max-input", label: "최대 입력 토큰", tip: "보낼 자료가 이 크기를 넘을 때만 오래된 참고 자료부터 줄입니다. 분석할 대사와 화자 목록은 줄이지 않습니다.", control: number("sv-max-input", Number(config.llm?.max_input_tokens ?? 0), 'min="0" max="2000000" step="1000"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
+        ${fieldHtml({ id: "sv-max-input", label: "최대 입력 토큰", tip: "보낼 자료가 이 크기를 넘을 때만 참고 자료를 줄입니다.\n지시문, 캐릭터 설정(프로필·월드 인포·연기 메모), 분석할 대사와 화자 목록은 줄이지 않습니다.\n채팅과 통화·문자 내용은 남은 자리를 나눠 쓰고, 오래된 것부터 잘립니다.", control: number("sv-max-input", Number(config.llm?.max_input_tokens ?? 0), 'min="0" max="2000000" step="1000"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
         ${fieldHtml({ id: "sv-max-output", label: "최대 출력 토큰", tip: "보조모델 답의 최대 길이입니다. 0이면 프리셋 값을 쓰되 작업에 모자라면 필요한 만큼 늘립니다. 추론(생각하는) 모델은 넉넉하게 두세요.", control: number("sv-max-output", Number(config.llm?.max_output_tokens ?? 0), 'min="0" max="200000" step="100"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
       </div>
       ${divider}
@@ -355,7 +355,7 @@ export const panel = {
         ${divider}
         <div class="sv-row">
           ${fieldHtml({ id: "sv-phone-profile", label: "연결 프로필", control: profileSelect("sv-phone-profile", config.phone?.connection_profile_id, "보조모델 분석과 같게") })}
-          ${fieldHtml({ id: "sv-phone-context", label: "참고할 최근 메시지 수", control: number("sv-phone-context", Number(config.phone?.context_messages ?? 10), 'min="1"'), hint: "실리태번 채팅 메시지 수입니다. 최대 입력 토큰을 넘으면 오래된 메시지부터 잘립니다.", tip: "개수 제한은 없습니다. 많이 넣을수록 요청 비용이 늘어납니다.\n보낼 자료가 ‘보조모델 분석 → 최대 입력 토큰’(0이면 연결 프로필 프리셋의 컨텍스트 크기)을 넘으면 오래된 채팅 메시지부터 잘라 냅니다.\n지금 주고받는 통화·문자는 한도 내에서 전부 넣습니다." })}
+          ${fieldHtml({ id: "sv-phone-context", label: "참고할 최근 메시지 수", control: number("sv-phone-context", Number(config.phone?.context_messages ?? 10), 'min="1"'), hint: "실리태번 채팅 메시지 수입니다. 최대 입력 토큰을 넘으면 오래된 메시지부터 잘립니다.", tip: "개수 제한은 없습니다. 많이 넣을수록 요청 비용이 늘어납니다.\n보낼 자료가 ‘보조모델 분석 → 최대 입력 토큰’(0이면 연결 프로필 프리셋의 컨텍스트 크기)을 넘으면, 지시문과 캐릭터 설정(프로필·월드 인포·연기 메모)은 그대로 두고 채팅과 지금 주고받는 통화·문자가 남은 자리를 나눠 씁니다. 둘 다 오래된 것부터 잘립니다." })}
         </div>
         <div class="sv-row">
           ${fieldHtml({ id: "sv-default-language", label: "통화·메시지 언어", control: `<select id="sv-default-language">${options(LANGUAGES, config.default_language)}</select>`, hint: "자동이면 인물마다 정한 언어, 정하지 않았으면 대화 언어로 말합니다.", tip: "여기서 언어를 고르면 인물 설정과 상관없이 모든 인물이 그 언어로 말합니다." })}

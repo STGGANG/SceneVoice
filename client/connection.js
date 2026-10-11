@@ -1,22 +1,36 @@
 // 실리태번 연결 프로필: helper-model requests go through the connection profile the user picked.
 import { contentKey } from "../shared/hash.js";
 // Prompts are untagged instruction lines and tagged data blocks (see prompts.js). Only data
-// blocks are shortened, and never the target lines or the speaker list.
-const isRequiredSection = (section) =>
-  !section.startsWith("<") ||
-  section.startsWith("<dialogues>") ||
-  section.startsWith("<speakers>");
+// blocks are shortened: never the target lines and speaker list, and never the settings the
+// user put in (character profile, world info, performance notes, people's records).
+const KEPT_BLOCK =
+  /^<(dialogues|speakers|speaker_background|profile|performance_note|world_info|persona|other|people|target_character|group_name|members|people_on_call)[\s>]/;
+const isRequiredSection = (section) => !section.startsWith("<") || KEPT_BLOCK.test(section);
+// Conversations lose their oldest messages: the chat so far, a call, a text thread.
+const NEWEST_KEPT = /^<(recent_chat|call_transcript|text_thread)[\s>]/;
 /**
- * Shortens one section, keeping a data block's tags so the block stays well formed. The chat
- * so far keeps its newest messages (its oldest go); other material keeps its beginning.
+ * Shortens one section, keeping a data block's tags so the block stays well formed. A
+ * conversation keeps its newest messages, starting at a whole one; other material keeps its
+ * beginning.
  */
 const truncateSection = (section, allowance) => {
   const closing = section.match(/\n<\/[\w-]+>$/)?.[0] || "";
-  if (/^<recent_chat[\s>]/.test(section)) {
+  if (NEWEST_KEPT.test(section)) {
     const opening = section.match(/^<[^>\n]*>\n?/)[0];
     const body = section.slice(opening.length, section.length - closing.length);
-    const keep = Math.max(0, allowance - opening.length - closing.length - 32);
-    return `${opening}[older messages truncated]\n${body.slice(body.length - keep)}${closing}`;
+    const marker = "[older messages truncated]\n";
+    const cut =
+      body.length - Math.max(0, allowance - opening.length - closing.length - marker.length - 1);
+    let tail;
+    if (body.startsWith("[")) {
+      // A JSON list (see dataBlock): its items start on lines indented by two.
+      const start = body.indexOf("\n  {", cut);
+      tail = start < 0 ? "[]" : `[${body.slice(start)}`;
+    } else {
+      const start = body.indexOf("\n", Math.max(0, cut - 1));
+      tail = start < 0 ? "" : body.slice(start + 1);
+    }
+    return `${opening}${marker}${tail}${closing}`;
   }
   return (
     section.slice(0, Math.max(0, allowance - 24 - closing.length)) +
@@ -24,24 +38,37 @@ const truncateSection = (section, allowance) => {
     closing
   );
 };
-/** Characters of the sections that are never shortened (instructions, target lines and the speaker list). */
+/** Characters that are never shortened: system instructions and the required sections. */
 export function requiredPromptSize(messages) {
-  return messages
-    .filter((message) => message.role !== "system")
-    .flatMap((message) => String(message.content).split("\n\n"))
-    .filter(isRequiredSection)
-    .reduce((total, section) => total + section.length, 0);
+  return messages.reduce((total, message) => {
+    const content = String(message.content);
+    if (message.role === "system") return total + content.length;
+    return (
+      total +
+      content
+        .split("\n\n")
+        .filter(isRequiredSection)
+        .reduce((size, section) => size + section.length, 0)
+    );
+  }, 0);
 }
+/**
+ * Fits the messages into `budget` characters. System instructions and required sections stay
+ * whole; small data blocks too, and the room left is shared evenly by the big ones.
+ */
 export function limitPrompt(messages, budget) {
   let remaining = budget;
   return messages.map((message) => {
-    if (message.role === "system") return message;
+    if (message.role === "system") {
+      remaining -= String(message.content).length;
+      return message;
+    }
     const sections = String(message.content).split("\n\n");
     const required = sections.filter(isRequiredSection);
     const requiredSize = required.reduce((n, x) => n + x.length, 0);
     if (requiredSize > remaining)
       throw new Error(
-        "분석할 대사·화자 목록이 요청 한도를 넘었습니다.",
+        "지시문·캐릭터 설정·분석할 대사만으로 요청 한도를 넘었습니다.",
       );
     remaining -= requiredSize;
     const others = sections.filter((x) => !required.includes(x));
@@ -194,7 +221,7 @@ export function createConnectionBridge(service, app) {
           preset?.max_length,
         );
         // Material is sent whole. Only a request that would not fit the context is
-        // shortened, keeping the target lines and speaker list intact.
+        // shortened (see limitPrompt), keeping instructions, settings and target lines intact.
         let prompt = messages;
         if (contextTokens) {
           const budget = Math.max(1000, contextTokens - outputTokens);
