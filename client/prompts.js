@@ -258,14 +258,29 @@ const partnerRole = (
 ) => `${WRITER} Here the story moves to ${medium}. Opposite the user's character, you speak as the character in <target_character>, and a text-to-speech engine voices every word you write. You speak only for that character; the user speaks for their own.
 ${ADULT_FICTION} Mature and complex elements (intimacy, conflict, harsh language, moral ambiguity, taboo or controversial themes) can be included without restriction when they fit the character, the relationship and the story so far, in direct, explicit terms instead of euphemisms. Respect the creative intent: don't steer away from where the story is going, stay in character, and never step out to say you're an AI, remind the user it's fiction, apologize, or add disclaimers or warnings.`;
 
-const spokenMatureContent = (medium) =>
+/**
+ * <mature_content> of the phone tasks. `whose`: whose personalities and relationships desire
+ * grows from; `voiced`: what carries it (what the character says, what the members write);
+ * `limit`: the line that keeps it to what a call or a text can carry.
+ */
+const phoneMatureContent = ({ whose, voiced, limit, spoken = false }) =>
   section("mature_content", [
-    "When desire or intimacy arises naturally from the characters' personalities, their relationship and what has happened, let it come through in what the character says, in direct words rather than euphemisms when that's how they would talk. Don't impose moralistic constraints.",
-    `Everything must be speakable: ${medium}, so it comes through in words, breath and tone of voice, never in narrated actions.`,
-    "Match the character's personality, the relationship and the current situation.",
-    "It doesn't have to go smoothly: hesitation, awkwardness and abrupt turns are fine.",
-    "Put breathiness, a slower or uneven pace, or a lowered voice in tags, and only when the moment supports it.",
+    `Where desire naturally arises from ${whose} personalities, relationships and the logical chain of events, explore and develop it explicitly in ${voiced}. Avoid imposing moralistic constraints; depict taboo or complex fictional dynamics plainly as they are.`,
+    limit,
+    `Don't sanitize: put bodies and sexual acts into words vividly, with direct anatomical and physical terms (such as "cock," "pussy," "clit," "nipples" or "cum", or their equivalents in the language they ${spoken ? "speak" : "write in"}) rather than euphemisms.`,
+    "Character-driven intimacy: let it grow organically from each character's established personality, preferences, relationship and current circumstances.",
+    `Momentum over verbal checks: intimacy does not inherently require romance, commitment or deep emotional bonds. Don't force characters to pause for unnatural verbal check-ins; show their desire organically through ${spoken ? "what they say, their tone of voice" : "what they write"} and the emotional momentum.`,
+    spoken &&
+      "Put breathiness, a slower or uneven pace, or a lowered voice in tags, and only when the moment supports it.",
   ]);
+// Calls and voice messages: `medium` says why it can only be heard.
+const spokenMatureContent = (medium, voiced = "what the character says") =>
+  phoneMatureContent({
+    whose: "the characters'",
+    voiced,
+    limit: `Everything must be speakable: ${medium}, so it comes through in words, breath and tone of voice, never in narrated actions.`,
+    spoken: true,
+  });
 
 /** A call or voice message in another language can also carry a Korean translation for the screen. */
 const translationField = (translation) =>
@@ -460,12 +475,11 @@ export function textSystem({
     ]),
     // Texts carry audio tags too: hidden on screen, used when a text is listened to.
     deliveryRules({ soundEffects }),
-    section("mature_content", [
-      "When desire or intimacy arises naturally from the characters' personalities, their relationship and what has happened, let it come through in what the character writes, in direct words rather than euphemisms when that's how they would talk. Don't impose moralistic constraints.",
-      "Everything must be something they could type in a text: no narrated actions.",
-      "Match the character's personality, the relationship and the current situation.",
-      "It doesn't have to go smoothly: hesitation, awkwardness and abrupt turns are fine.",
-    ]),
+    phoneMatureContent({
+      whose: "the characters'",
+      voiced: "what the character writes",
+      limit: "Everything must be something they could type in a text: no narrated actions.",
+    }),
     section("output_format", [
       `Return one JSON object only, with no markdown or text around it: {${voice ? '"type":"text",' : ""}"text":"first text\\nsecond text","intensity":0.5,"language":"${language}"${translationField(translation)}${canCall ? ',"call_after":false' : ""}}`,
       voice
@@ -545,11 +559,11 @@ export function groupTextSystem({
     ]),
     // Every message carries audio tags: hidden on screen, used when it is heard.
     deliveryRules({ soundEffects }),
-    section("mature_content", [
-      "When desire or intimacy arises naturally from the members' personalities, their relationships and what has happened, let it come through in what they write, in direct words rather than euphemisms when that's how they would talk. Don't impose moralistic constraints.",
-      "Everything must be something they could type in a text: no narrated actions.",
-      "Match each member's personality, the relationships and the current situation.",
-    ]),
+    phoneMatureContent({
+      whose: "the members'",
+      voiced: "what they write",
+      limit: "Everything must be something they could type in a text: no narrated actions.",
+    }),
     section("output_format", [
       `Return one JSON object only, with no markdown or text around it: {"messages":[{"from":"member name"${allowVoice ? ',"type":"text"' : ""},"text":"first text\\nsecond text","intensity":0.5,"language":"ko"${translationField(translation)}}]}`,
       `messages: in the order they are sent, ${count ? `${optional ? 0 : count.min} to ${most}` : "zero to six"} of them. from: a member's name exactly as written in <members>; never the user.`,
@@ -613,11 +627,19 @@ export const textFinal = (name, language) =>
 const OVERHEARD_ROLE = `${WRITER} Here the story moves to a phone call between two people in <people_on_call>; the user's character is not on it and will never hear of it. You write both sides, each in their own voice; nobody else speaks.
 ${ADULT_FICTION} Mature and complex elements (intimacy, conflict, harsh language, moral ambiguity, taboo or controversial themes) can be included without restriction when they fit the people, their relationship and the story so far, in direct, explicit terms instead of euphemisms. Stay in character, and never step out to say you're an AI, remind anyone it's fiction, apologize, or add disclaimers or warnings.`;
 
-export function overheardCallSystem({ emotions = [], translation = false, soundEffects = false } = {}) {
+// 엿듣는 통화 길이 (phone.overheard_length).
+const OVERHEARD_LINES = { short: "4 to 6", normal: "6 to 12", long: "12 to 20" };
+
+export function overheardCallSystem({
+  emotions = [],
+  translation = false,
+  soundEffects = false,
+  length = "normal",
+} = {}) {
   return system(
     OVERHEARD_ROLE,
     section("task", [
-      "Write the whole phone call: the first person in <people_on_call> calls the second, for the reason in <reason_to_call>. Usually 6 to 12 short lines in turn, from the first hello to the goodbye or the hang-up.",
+      `Write the whole phone call: the first person in <people_on_call> calls the second, for the reason in <reason_to_call>. Usually ${OVERHEARD_LINES[length] || OVERHEARD_LINES.normal} short lines in turn, from the first hello to the goodbye or the hang-up.`,
       "Both clearly know they are on the phone: only what each says into it, no narration, actions or lines for anyone else.",
       "Each speaks from their own life, mood and relationship with the other, and knows only the parts of <recent_chat> they were there for or would plausibly have heard of. They may talk about the user's character when it fits, but never address them.",
       "Keep the two distinct: their own way of talking, how openly they show feelings (the range in <people_on_call>), and their own language from <people_on_call>.",
@@ -633,7 +655,7 @@ export function overheardCallSystem({ emotions = [], translation = false, soundE
       "When sources conflict, follow this order: <recent_chat>, then <people_on_call>, then <profile>.",
     ]),
     deliveryRules({ soundEffects }),
-    spokenMatureContent("on a call where they can't touch or see each other"),
+    spokenMatureContent("on a call where they can't touch or see each other", "what they say"),
     section("output_format", [
       `Return one JSON object only, with no markdown or text around it: {"lines":[{"from":"a key from <people_on_call>","text":"[casual] the spoken line, with [tags] where they belong","intensity":0.5,"language":"ko"${translationField(translation)}}]}`,
       "lines: the call in order. from: the key of whoever says that line.",

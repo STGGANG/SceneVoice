@@ -21,6 +21,9 @@ import { SPEECH_LANGUAGES } from "../shared/settings.js";
 
 // How long a call of theirs rings before it counts as missed (and they may leave a voicemail).
 const RING_SECONDS = 60;
+// Reply room for a whole overheard call, by 엿듣는 통화 길이 (a line with its tags and
+// translation runs about 150 tokens).
+const OVERHEARD_REPLY_TOKENS = { short: 1400, normal: 2200, long: 4000 };
 // A goodbye in the last lines of a call (Korean, Japanese, English, Chinese).
 const FAREWELL =
   /(?:안녕|잘\s*자|잘\s*있어|다음에\s*(?:보자|봐|통화)|나중에\s*(?:보자|봐|통화)|들어가|끊을게|끊자|끊는다|이만|じゃあね|またね|おやすみ|バイバイ|切るね|失礼します|再见|拜拜|晚安)|\b(?:bye|goodbye|good night|see you|see ya|talk (?:to you )?later|gotta go)\b/iu;
@@ -1002,9 +1005,23 @@ export const calls = {
    * 기록, anchored where the chat stands, with its chat memory (the user's character didn't hear
    * it). Their voices are made only when it is listened to there (전체 듣기).
    */
-  /** `announce: false` when the user asked for it (통화 엿듣기) and it opens at once. Returns it. */
-  async writeOverheardCall(caller, callee, reason = "", sourceMessageId = "", { announce = true } = {}) {
+  /**
+   * `announce: false` when the user asked for it (통화 엿듣기) and it opens at once; `length`
+   * (short, normal, long) overrides the setting for that one call. Returns it.
+   */
+  async writeOverheardCall(
+    caller,
+    callee,
+    reason = "",
+    sourceMessageId = "",
+    { announce = true, length = "" } = {},
+  ) {
     const operation = this.captureChat();
+    const size = OVERHEARD_REPLY_TOKENS[length]
+      ? length
+      : OVERHEARD_REPLY_TOKENS[this.config.phone?.overheard_length]
+        ? this.config.phone.overheard_length
+        : "normal";
     const profileId =
       this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService) return;
@@ -1018,6 +1035,7 @@ export const calls = {
           emotions: Array.from(this.analysisEmotionCandidates()).sort(),
           translation: languages.some((language) => this.wantsTranslation(language)),
           soundEffects: people.every((person) => this.phoneSoundEffects(person.key)),
+          length: size,
         }),
       },
       {
@@ -1050,7 +1068,7 @@ export const calls = {
       },
     ];
     this.assertChat(operation);
-    const parsed = await this.requestSpokenReply(profileId, messages, 2200);
+    const parsed = await this.requestSpokenReply(profileId, messages, OVERHEARD_REPLY_TOKENS[size]);
     this.assertChat(operation);
     const speakerOf = (from) => {
       const value = String(from || "").trim().toLowerCase();

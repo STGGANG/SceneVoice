@@ -1,5 +1,5 @@
 // 설정 창: its tabs, the settings form (saved automatically) and applying saved settings.
-import { escapeHtml, mergeConfig, contentKey, LANGUAGE_CHOICES } from "./common.js";
+import { escapeHtml, mergeConfig, contentKey, LANGUAGE_CHOICES, OVERHEARD_LENGTH_CHOICES } from "./common.js";
 import { elevenModelTraits } from "../shared/settings.js";
 import { infoTip, groupHtml, fieldHtml, switchHtml, rangeHtml, badgeHtml, bindInfoTips, bindRanges, bindStateBadges, closeTips, choiceListHtml, emptyHtml } from "./ui.js";
 import { voicePickHtml } from "./voice-picker.js";
@@ -393,6 +393,15 @@ export const panel = {
         <div class="sv-row">
           ${switchHtml({ id: "sv-phone-voicemail", label: "음성 사서함", hint: "걸려 온 전화를 거절하거나 1분 안에 받지 않으면 상대가 짧은 음성 메시지를 남깁니다.", tip: "남길 때마다 보조모델 요청이 한 번 들고, ‘통화 음성 만들기’가 ‘바로 생성’이면 목소리도 바로 만듭니다.\n통화 기록에서 듣고, 채팅 기억에도 그 통화와 함께 남습니다. 다시 전화하면 상대는 내가 전화를 못 받은 걸 압니다.", checked: config.phone?.voicemail !== false })}
           ${switchHtml({ id: "sv-phone-overheard", label: "엿듣는 통화", hint: "켜면 떨어져 있는 인물들끼리 가끔 알아서 통화하고, 통화 기록에서 엿들을 수 있습니다.", tip: "상태를 갱신할 때 둘이 지금 통화할 만하다고 판단되면, 거는 사람의 ‘먼저 연락하는 빈도’만큼의 확률로 생깁니다. 꺼 두어도 통화 기록의 ‘통화 엿듣기’로 직접 만들 수 있습니다.\n대사는 요청 한 번에 받아 두고, 목소리는 ‘전체 듣기’를 누를 때 만듭니다. 내 캐릭터는 이 통화를 모르고, 채팅 기억에도 ‘내 캐릭터는 듣지 못한 통화’로 남습니다.", checked: config.phone?.overheard_calls === true })}
+        </div>
+        <div class="sv-row">
+          <div class="sv-field">
+            <div class="sv-label-line"><span id="sv-phone-overheard-length-label">엿듣는 통화 길이</span>${infoTip("자동으로 생기는 통화와 통화 기록의 ‘통화 엿듣기’로 직접 만드는 통화에 모두 씁니다. 직접 만들 때는 그 자리에서 그 통화만 따로 고를 수 있습니다.\n줄 수는 대략이라 조금 넘나들 수 있습니다.", "엿듣는 통화 길이 설명")}</div>
+            <div class="sv-seg" role="radiogroup" aria-labelledby="sv-phone-overheard-length-label">
+              ${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<label><input type="radio" name="sv-phone-overheard-length" value="${value}" ${(config.phone?.overheard_length || "normal") === value ? "checked" : ""}><span>${label.split(" (")[0]}</span></label>`).join("")}
+            </div>
+            <small class="sv-hint">짧게 4~6줄 · 보통 6~12줄 · 길게 12~20줄. 길수록 요청·음성 비용이 늘어납니다.</small>
+          </div>
         </div>
         ${divider}
         <div class="sv-row sv-row-3">
@@ -1006,6 +1015,9 @@ export const panel = {
         ringtone: document.getElementById("sv-phone-ringtone").checked,
         voicemail: document.getElementById("sv-phone-voicemail").checked,
         overheard_calls: document.getElementById("sv-phone-overheard").checked,
+        overheard_length:
+          document.querySelector('input[name="sv-phone-overheard-length"]:checked')
+            ?.value || "normal",
         vibration: document.getElementById("sv-phone-vibration").checked,
         audio_filter: document.getElementById("sv-phone-filter").checked,
         sfx_in_file:

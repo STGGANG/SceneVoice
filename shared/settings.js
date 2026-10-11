@@ -71,6 +71,8 @@ export const PHONE_LAUNCHERS = ["floating", "menu", "both"];
 export const SPEECH_LANGUAGES = ["ko", "ja", "en", "zh", "fr", "es", "de", "it", "pt", "ru"];
 // Smartphone colors: the dark default, or one of the light themes with a white body.
 export const PHONE_THEMES = ["default", "white", "pink", "blue"];
+// 엿듣는 통화 길이: about how many lines the call runs (see overheardCallSystem).
+export const OVERHEARD_LENGTHS = ["short", "normal", "long"];
 export const DEFAULT_SETTINGS = {
   // 씬보이스 사용: off, nothing runs (line buttons, phone, analysis, chat memory); records stay.
   active: true,
@@ -144,6 +146,8 @@ export const DEFAULT_SETTINGS = {
     voicemail: true,
     // 엿듣는 통화: now and then two people phone each other, written out for the user to hear.
     overheard_calls: false,
+    // How long an overheard call runs: short, normal or long (자동·직접 둘 다).
+    overheard_length: "normal",
     theme: "default",
     // 월드인포 참고, per bot card (switched on there): entries the call or text conversation
     // triggers go to the prompt, from the books and entries chosen for the card:
@@ -299,6 +303,8 @@ export function validateSettings(current, patch) {
     next.phone.launcher = DEFAULT_SETTINGS.phone.launcher;
   if (!PHONE_THEMES.includes(next.phone.theme))
     next.phone.theme = DEFAULT_SETTINGS.phone.theme;
+  if (!OVERHEARD_LENGTHS.includes(next.phone.overheard_length))
+    next.phone.overheard_length = DEFAULT_SETTINGS.phone.overheard_length;
   next.phone.auto_cooldown_messages = bounded(
     next.phone.auto_cooldown_messages,
     0,

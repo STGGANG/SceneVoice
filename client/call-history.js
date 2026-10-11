@@ -1,4 +1,4 @@
-import { escapeHtml } from "./common.js";
+import { escapeHtml, OVERHEARD_LENGTH_CHOICES } from "./common.js";
 
 // 통화 기록: the phone's list of past calls, one call's transcript, and deleting a call.
 
@@ -74,7 +74,13 @@ export const callHistory = {
       this.bindPhoneShelf(body, "history");
       body.querySelector("[data-overheard-new]")?.addEventListener("click", () => {
         const [first, second] = this.phoneContacts();
-        this.overheardEditor = { caller: first.key, callee: second.key, reason: "", busy: false };
+        this.overheardEditor = {
+          caller: first.key,
+          callee: second.key,
+          reason: "",
+          length: this.config.phone?.overheard_length || "normal",
+          busy: false,
+        };
         this.renderOverheardEditor(body);
       });
       body
@@ -121,6 +127,7 @@ export const callHistory = {
         <label class="sv-room-name"><span>거는 사람</span><select id="sv-overheard-caller" ${editor.busy ? "disabled" : ""}>${options(editor.caller)}</select></label>
         <label class="sv-room-name"><span>받는 사람</span><select id="sv-overheard-callee" ${editor.busy ? "disabled" : ""}>${options(editor.callee)}</select></label>
         <label class="sv-room-name"><span>무슨 통화인지</span><input id="sv-overheard-reason" maxlength="300" placeholder="비워 두면 지금 이야기에 맞게 정합니다" value="${escapeHtml(editor.reason)}" autocomplete="off" ${editor.busy ? "disabled" : ""}></label>
+        <label class="sv-room-name"><span>통화 길이</span><select id="sv-overheard-length" ${editor.busy ? "disabled" : ""}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${label}</option>`).join("")}</select></label>
         <p class="sv-room-hint">대사는 요청 한 번에 받고, 목소리는 ‘전체 듣기’를 누를 때 만듭니다. 내 캐릭터는 이 통화를 모릅니다.</p>
         <div class="sv-room-actions">
           <button type="button" class="sv-room-save" data-overheard-make ${editor.busy || editor.caller === editor.callee ? "disabled" : ""}>${editor.busy ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 통화 받아 오는 중…' : "통화 만들기"}</button>
@@ -133,6 +140,7 @@ export const callHistory = {
     };
     body.querySelector("#sv-overheard-caller").addEventListener("change", pick("caller"));
     body.querySelector("#sv-overheard-callee").addEventListener("change", pick("callee"));
+    body.querySelector("#sv-overheard-length").addEventListener("change", pick("length"));
     body.querySelector("#sv-overheard-reason").addEventListener("input", (event) => {
       editor.reason = event.target.value;
     });
@@ -151,7 +159,7 @@ export const callHistory = {
             this.phoneContact(editor.callee),
             editor.reason.trim(),
             "",
-            { announce: false },
+            { announce: false, length: editor.length },
           );
           if (this.overheardEditor !== editor) return;
           this.overheardEditor = null;
