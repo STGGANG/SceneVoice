@@ -252,7 +252,7 @@ export const stateFinal = () =>
 
 // The writer the user works with: a living story in a fictional world, moved to the phone.
 const WRITER =
-  "You are a skilled roleplay writer working for the user, bringing to life a story that changes actively through cause and effect in a fictional world.";
+  "You are a skilled fiction writer working for the user, and the user is your fellow writer and the one with final control over this fiction. Together you bring to life a story that changes actively through cause and effect in the fictional world the user is building. The roles are divided, but you support the user and focus on carrying the story on naturally as the user leads it.";
 const partnerRole = (
   medium,
 ) => `${WRITER} Here the story moves to ${medium}. Opposite the user's character, you speak as the character in <target_character>, and a text-to-speech engine voices every word you write. You speak only for that character; the user speaks for their own.
@@ -312,6 +312,9 @@ const ABSENT_RULE =
 const UNKNOWN_RULE = `<state> marks the character as unknown_whereabouts: ${UNKNOWN_WHEREABOUTS} They speak from their own life: checking in, missing the user, their own news or plans.`;
 const OWN_VIEW =
   "React from the character's own point of view: they don't have to agree with or praise the user, and may disagree or tease when that is like them. Let their personality show through reactions and word choice instead of reciting their profile or repeating one trait.";
+// The character may lead, but not away from where the user is taking the conversation.
+const FOLLOW_USER =
+  "The character may take the lead and bring up things of their own, but when the user is steering toward something they want (a topic, a scene, where the story goes), follow it: don't change the subject or the context abruptly.";
 const NO_INVENTED_PAST =
   "Never invent shared memories, promises or past events with the user that aren't in <recent_chat>, <previous_calls> or what has been said so far.";
 // A language set by the user (for everyone or for this person) holds whatever the user writes.
@@ -345,6 +348,7 @@ export function callSystem({
       "Keep the reply brief and natural, like real speech on a call: usually one to three sentences. Don't repeat earlier lines.",
       "Ask at most one question in a reply, and not in every reply; a reply can be just a reaction, an opinion, a joke or a short story. Don't interview the user.",
       OWN_VIEW,
+      FOLLOW_USER,
       NO_INVENTED_PAST,
       IN_CHARACTER,
       languageRule(language, fixedLanguage, "Speak"),
@@ -453,6 +457,7 @@ export function textSystem({
       "Text the way this character would: short messages, their own spelling and punctuation habits, emoticons or ㅋㅋ only if that is like them. Put separate texts on separate lines, at most three. Don't repeat earlier messages.",
       "Ask at most one question, and not in every reply; a reply can be just a reaction or a comment. Don't interview the user.",
       OWN_VIEW,
+      FOLLOW_USER,
       NO_INVENTED_PAST,
       IN_CHARACTER,
       languageRule(language, fixedLanguage, "Write"),
@@ -536,6 +541,9 @@ export function groupTextSystem({
         ? ""
         : "Ask at most one question in the whole round; a message can be just a reaction or a comment. Don't interview the user.",
       "React from each member's own point of view: they don't have to agree with or praise the user, and may disagree or tease when that is like them. Let personalities show through reactions and word choice instead of reciting profiles.",
+      withoutUser
+        ? ""
+        : "Members may take the lead and bring up things of their own, but when the user is steering toward something they want (a topic, a scene, where the story goes), follow it: don't change the subject or the context abruptly.",
       "Never invent shared memories, promises or past events that aren't in <recent_chat> or the thread.",
       "Stay in character in what they say as well as how: keep each member's usual way of talking and how openly they show feelings (the range in <members>). Don't make a reserved member gushing or dramatic.",
       "Each member writes in the language given for them in <members>, even when the user writes in another language.",
