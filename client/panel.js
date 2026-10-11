@@ -351,6 +351,7 @@ export const panel = {
         </div>
         <div class="sv-row">
           ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
+          ${fieldHtml({ id: "sv-launcher-reset", label: "플로팅 버튼 위치", control: '<button type="button" id="sv-launcher-reset" class="sv-btn sv-btn-sm"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>처음 자리로</span></button>', hint: "버튼을 끌어서 옮길 수 있어요. 기기마다 따로 기억합니다." })}
         </div>
         ${divider}
         <div class="sv-row">
@@ -790,6 +791,10 @@ export const panel = {
     document
       .getElementById("sv-engine-check")
       ?.addEventListener("click", () => this.checkEngineConnection());
+    document.getElementById("sv-launcher-reset")?.addEventListener("click", () => {
+      this.resetLauncherSpot();
+      this.notify("플로팅 버튼을 처음 자리로 돌렸습니다.", "info");
+    });
     document
       .getElementById("sv-load-voices")
       ?.addEventListener("click", () =>

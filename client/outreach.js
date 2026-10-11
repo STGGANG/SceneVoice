@@ -388,29 +388,19 @@ export const outreach = {
     const sourceIndex = String(this.phoneAnchorFromSource(sourceMessageId).index);
     let sessionId = "";
     try {
-      const response = await this.request(
-        "/api/plugins/scenevoice/phone/sessions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: identity.chatId,
-            anchor_message_id: sourceIndex,
-            ...this.anchorStamp(sourceIndex),
-            character_key: callerKey,
-            character_name: caller,
-            direction: "incoming",
-            status: "ringing",
-            situation: candidate.reason || "",
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.detail || `수신 전화 저장 실패 (${response.status})`);
-      // Another call still holds the line (one left ringing on another swipe): no new one.
-      if (data.status === "exists") return;
-      sessionId = data.session?.id || "";
+      const made = await this.createPhoneSession({
+        chat_id: identity.chatId,
+        anchor_message_id: sourceIndex,
+        ...this.anchorStamp(sourceIndex),
+        character_key: callerKey,
+        character_name: caller,
+        direction: "incoming",
+        status: "ringing",
+        situation: candidate.reason || "",
+      });
+      // The user is on (or being rung by) a call the chat shows: the line is busy.
+      if (made.existing) return;
+      sessionId = made.session?.id || "";
     } catch (error) {
       if (error.name === "AbortError") throw error;
       console.warn("[SceneVoice] 수신 전화 기록 생성 실패", error);

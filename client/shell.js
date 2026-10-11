@@ -2,6 +2,10 @@
 // home screen, dragging and fitting to the window.
 import { escapeHtml, clamp, mergeConfig } from "./common.js";
 
+// Where the floating phone button was dragged to, on this device: a side and how far down (0–1).
+const LAUNCHER_SPOT_KEY = "scenevoice_launcher_spot";
+const LAUNCHER_MARGIN = 14;
+
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -98,10 +102,116 @@ export const shell = {
       launcher.setAttribute("aria-label", "씬보이스 스마트폰 열기");
       launcher.innerHTML =
         '<span class="sv-fab-ring" aria-hidden="true"></span><span class="sv-fab-icon" aria-hidden="true"><i class="fa-solid fa-phone"></i></span><span class="sv-phone-badge hidden">0</span>';
-      launcher.addEventListener("click", () => this.openSmartphone());
+      // The click that ends a drag doesn't open the phone.
+      launcher.addEventListener("click", () => {
+        if (!this.launcherDragged) this.openSmartphone();
+      });
       document.body.appendChild(launcher);
+      this.enableLauncherDragging(launcher);
+      this.placeLauncher(launcher);
     }
     this.updatePhoneLauncherVisibility();
+  },
+
+  /** The spot the floating button was dragged to on this device, or null for the default one. */
+  launcherSpot() {
+    let spot = this.launcherSpotHere || null;
+    try {
+      spot = JSON.parse(localStorage.getItem(LAUNCHER_SPOT_KEY) || "null") || spot;
+    } catch {
+      /* Storage blocked (a private window): the spot is kept only while the page is open. */
+    }
+    return spot && ["left", "right"].includes(spot.side) && Number.isFinite(spot.top) ? spot : null;
+  },
+
+  /** Puts the floating button on its side at its height, inside the window (default spot without one). */
+  placeLauncher(launcher = document.getElementById("sv-phone-launcher")) {
+    if (!launcher) return;
+    const spot = this.launcherSpot();
+    if (!spot) {
+      for (const side of ["left", "top", "right", "bottom"]) launcher.style[side] = "";
+      return;
+    }
+    const size = launcher.offsetWidth || 50;
+    launcher.style.top = `${clamp(spot.top * window.innerHeight, 8, Math.max(8, window.innerHeight - size - 8))}px`;
+    launcher.style.left = `${spot.side === "left" ? LAUNCHER_MARGIN : Math.max(LAUNCHER_MARGIN, window.innerWidth - size - LAUNCHER_MARGIN)}px`;
+    launcher.style.right = "auto";
+    launcher.style.bottom = "auto";
+  },
+
+  /** Back to the default spot (설정 → 스마트폰 → 처음 자리로). */
+  resetLauncherSpot() {
+    this.launcherSpotHere = null;
+    try {
+      localStorage.removeItem(LAUNCHER_SPOT_KEY);
+    } catch {
+      /* nothing kept */
+    }
+    this.placeLauncher();
+  },
+
+  /**
+   * The floating button moves with a drag (a press that travels more than a few pixels; a tap
+   * still opens the phone) and settles on the nearer side when let go.
+   */
+  enableLauncherDragging(launcher) {
+    let press = null;
+    launcher.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const rect = launcher.getBoundingClientRect();
+      press = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        dx: event.clientX - rect.left,
+        dy: event.clientY - rect.top,
+        moved: false,
+      };
+      // Held from the press, so a quick move that leaves the small button still drags it.
+      launcher.setPointerCapture?.(event.pointerId);
+    });
+    launcher.addEventListener("pointermove", (event) => {
+      if (!press || event.pointerId !== press.id) return;
+      if (!press.moved) {
+        if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 8) return;
+        press.moved = true;
+        launcher.classList.add("sv-dragging");
+      }
+      const size = launcher.offsetWidth;
+      launcher.style.left = `${clamp(event.clientX - press.dx, 4, window.innerWidth - size - 4)}px`;
+      launcher.style.top = `${clamp(event.clientY - press.dy, 4, window.innerHeight - size - 4)}px`;
+      launcher.style.right = "auto";
+      launcher.style.bottom = "auto";
+    });
+    const finish = (event) => {
+      if (!press || event.pointerId !== press.id) return;
+      const moved = press.moved;
+      press = null;
+      if (!moved) return;
+      launcher.classList.remove("sv-dragging");
+      this.launcherDragged = true;
+      setTimeout(() => {
+        this.launcherDragged = false;
+      }, 0);
+      const rect = launcher.getBoundingClientRect();
+      const spot = {
+        side: rect.left + rect.width / 2 < window.innerWidth / 2 ? "left" : "right",
+        top: rect.top / window.innerHeight,
+      };
+      this.launcherSpotHere = spot;
+      try {
+        localStorage.setItem(LAUNCHER_SPOT_KEY, JSON.stringify(spot));
+      } catch {
+        /* kept for this page only */
+      }
+      this.placeLauncher(launcher);
+    };
+    launcher.addEventListener("pointerup", finish);
+    launcher.addEventListener("pointercancel", finish);
+    // Turning a phone or resizing the window keeps the button on its side, inside the window.
+    window.addEventListener("resize", () => this.placeLauncher(launcher), {
+      signal: this.lifetimeController?.signal,
+    });
   },
 
   /**
@@ -552,9 +662,18 @@ export const shell = {
             // An app opens on 적용 기억.
             this.phoneShelf = {};
             this.overheardEditor = null;
-            // The dock opens the contact list; a widget or contact row opens that person.
-            if (app.dataset.phoneApp === "call")
+            // The dock opens the contact list; a widget or contact row opens that person. A call
+            // still open in this chat (one the phone lost track of) comes back first.
+            if (app.dataset.phoneApp === "call") {
               this.phoneContactKey = app.dataset.contactKey || "";
+              if (!this.phoneSession && !this.phonePendingEvent) {
+                this.run(async () => {
+                  await this.restorePhoneSession();
+                  await this.renderSmartphone();
+                });
+                return;
+              }
+            }
             // The dock opens the conversation list; an alert or a contact opens that conversation.
             if (app.dataset.phoneApp === "message")
               this.messageThreadKey = app.dataset.threadKey || "";

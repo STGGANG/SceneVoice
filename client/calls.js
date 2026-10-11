@@ -127,10 +127,11 @@ export const calls = {
                     }
                 </div>
                 <form class="sv-call-compose">
-                    <textarea id="sv-call-reply" rows="1" maxlength="2000" placeholder="${unanswered ? "비워 두고 보내면 답을 다시 받아요" : "통화로 대답하기"}" aria-label="통화로 대답하기" ${this.phoneBusy ? "disabled" : ""}></textarea>
+                    <textarea id="sv-call-reply" rows="1" maxlength="2000" placeholder="${unanswered ? "비워 두고 보내면 답을 다시 받아요" : "대답 입력 혹은 대필 지시문 입력"}" aria-label="통화로 대답하기" ${this.phoneBusy ? "disabled" : ""}></textarea>
                     <button type="button" class="sv-ghostwrite" data-call-ghostwrite aria-label="대필" title="대필: 내 페르소나가 할 말을 대신 써 줍니다. 입력칸에 ‘늦는다고 사과해 줘’처럼 원하는 내용을 적어 두면 그 뜻대로 자연스럽게 쓰고, 써 둔 초안이면 다듬습니다. 비워 두면 알아서 씁니다." ${this.phoneBusy || this.ghostwriteBusy ? "disabled" : ""}><i class="fa-solid ${this.ghostwriteBusy === "call" ? "fa-spinner fa-spin" : "fa-pen-nib"}" aria-hidden="true"></i></button>
                     <button type="submit" ${this.phoneBusy ? "disabled" : ""} aria-label="통화 답변 보내기" title="${unanswered ? "보내기 · 비워 두고 누르면 상대의 답을 다시 받습니다" : "보내기"}"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
                 </form>
+                ${this.draftTranslationHtml?.("call", this.callReplyDraft) || ""}
                 <div class="sv-call-controls"><button type="button" class="sv-call-end" aria-label="통화 종료"><i class="fa-solid fa-phone-slash" aria-hidden="true"></i></button><small>통화 종료</small></div>
             </div>`;
     body
@@ -204,8 +205,15 @@ export const calls = {
       event.preventDefault();
       this.sendPhoneReply();
     });
+    // Grows with its lines up to three; measured again only when the text may have changed height.
+    let lastLength = reply?.value.length || 0;
+    const draftBox = body.querySelector("[data-draft-translation]");
     reply?.addEventListener("input", () => {
       this.callReplyDraft = reply.value;
+      this.syncDraftTranslation?.(draftBox, "call", reply.value);
+      const shorter = reply.value.length < lastLength;
+      lastLength = reply.value.length;
+      if (!shorter && reply.scrollHeight <= reply.clientHeight) return;
       reply.style.height = "auto";
       reply.style.height = `${Math.min(reply.scrollHeight, 76)}px`;
     });
@@ -470,6 +478,37 @@ export const calls = {
     this.phoneTimer = setInterval(update, 1000);
   },
 
+  /**
+   * Starts a call record. A call still open in this chat holds the line: one the chat shows now
+   * comes back as `existing`; one left on another swipe or in a part of the chat taken back,
+   * which nobody can see or hang up, is closed first (missed if it still rang) so this one can start.
+   */
+  async createPhoneSession(record) {
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await this.request("/api/plugins/scenevoice/phone/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `통화 기록 저장 실패 (${response.status})`);
+      if (data.status !== "exists") return { session: data.session };
+      const open = data.session;
+      if (attempt || this.anchorShown(open)) return { existing: open };
+      await this.request(
+        `/api/plugins/scenevoice/phone/sessions/${encodeURIComponent(open.id)}/status`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: open.chat_id,
+            status: open.status === "ringing" ? "missed" : "ended",
+          }),
+        },
+      );
+    }
+  },
+
   async startOutgoingCall(button) {
     this.unlockAudioForMobile();
     this.callReplyDraft = "";
@@ -497,27 +536,25 @@ export const calls = {
         this.phoneContactKey || identity.characterKey,
       );
       const anchor = this.currentPhoneAnchor();
-      const response = await this.request(
-        "/api/plugins/scenevoice/phone/sessions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: identity.chatId,
-            anchor_message_id: String(anchor.index),
-            ...this.anchorStamp(anchor.index),
-            character_key: contact.key,
-            character_name: contact.name,
-            direction: "outgoing",
-            status: "active",
-            situation: "",
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.detail || `통화 시작 실패 (${response.status})`);
-      this.phoneSession = data.session;
+      const made = await this.createPhoneSession({
+        chat_id: identity.chatId,
+        anchor_message_id: String(anchor.index),
+        ...this.anchorStamp(anchor.index),
+        character_key: contact.key,
+        character_name: contact.name,
+        direction: "outgoing",
+        status: "active",
+        situation: "",
+      });
+      // A call of this chat is still open (after a reload, say): back to it as it was, with no
+      // opening line written into the middle of it. A cut-off answer comes by sending empty.
+      if (made.existing) {
+        this.notify(`${made.existing.character_name || "상대"}와의 통화가 아직 이어지고 있어 그 통화로 돌아갑니다.`, "info");
+        if (made.existing.status === "ringing") await this.restorePhoneSession();
+        else this.phoneSession = made.existing;
+        return;
+      }
+      this.phoneSession = made.session;
       await this.persistPhoneSessionToMessage();
       await this.generateCharacterPhoneTurn({ opening: true, operationToken });
     } catch (error) {
@@ -569,12 +606,16 @@ export const calls = {
     const sessionId = this.phoneSession.id;
     if (input) input.value = "";
     this.callReplyDraft = "";
+    // A 대필 draft sent as written keeps its Korean reading in the call record (never in a prompt).
+    const translation = this.draftTranslationFor?.("call", text) || "";
+    if (translation) this.draftTranslation = null;
     try {
       if (!answerOnly) {
         await this.savePhoneTurn(
           {
             role: "user",
             text,
+            ...(translation ? { translation } : {}),
             tags: [],
             language: this.detectLanguage(
               text,
@@ -1216,7 +1257,11 @@ export const calls = {
    * A sheet over the phone screen for rewriting a spoken line. Resolves with the new text, or
    * null when cancelled. Tags in brackets may stay or be added; they are voiced, not shown.
    */
-  openLineSheet({ title = "대사 고치기", value = "" } = {}) {
+  openLineSheet({
+    title = "대사 고치기",
+    value = "",
+    hint = "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있어요. 저장하면 이전 음성은 지우고 새로 만듭니다.",
+  } = {}) {
     const screen = document.querySelector("#sv-smartphone .sv-phone-screen");
     if (!screen) return Promise.resolve(null);
     screen.querySelector(".sv-ph-sheet")?.remove();
@@ -1228,7 +1273,7 @@ export const calls = {
     sheet.innerHTML = `<form class="sv-ph-sheet-card">
         <strong>${escapeHtml(title)}</strong>
         <textarea rows="5" maxlength="5000" aria-label="${escapeHtml(title)}">${escapeHtml(value)}</textarea>
-        <small>[sighs] 같은 대괄호 태그도 그대로 쓸 수 있어요. 저장하면 이전 음성은 지우고 새로 만듭니다.</small>
+        <small>${escapeHtml(hint)}</small>
         <div class="sv-contact-edit-actions">
           <button type="button" data-sheet-cancel>취소</button>
           <button type="submit" class="sv-contact-save">저장</button>

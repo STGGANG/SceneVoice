@@ -2647,10 +2647,22 @@
   box-shadow: none;
   color: var(--sv-fg);
   cursor: pointer;
+  /* It can be dragged (a press that moves): the page doesn't scroll under that finger. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   transition:
     transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1),
     background 0.18s ease,
-    border-color 0.18s ease;
+    border-color 0.18s ease,
+    left 0.22s cubic-bezier(0.2, 0.8, 0.3, 1),
+    top 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+/* While dragged it follows the pointer exactly; let go, it glides to its side. */
+#sv-phone-launcher.sv-dragging {
+  cursor: grabbing;
+  transition: none;
+  transform: scale(1.06);
 }
 #sv-phone-launcher:hover {
   border-color: var(--sv-brand-line);
@@ -2747,7 +2759,9 @@
   --ph-surface: #1c1c1e;
   --ph-surface2: #2c2c2e;
   --ph-line: rgba(84, 84, 88, 0.55);
-  --ph-glass: rgba(255, 255, 255, 0.14);
+  /* Glass panels are tint only: they sit on a blurred wallpaper or a plain gradient, so a live
+     blur behind them changed little and redrew on every scroll and keystroke. */
+  --ph-glass: rgba(255, 255, 255, 0.18);
   --ph-green: #34c759;
   --ph-red: #ff3b30;
   --ph-blue: #0a84ff;
@@ -2764,7 +2778,6 @@
   line-height: 1.4;
   text-align: left;
   -webkit-font-smoothing: antialiased;
-  filter: drop-shadow(0 28px 50px rgba(0, 0, 0, 0.5));
 }
 #sv-smartphone.hidden {
   display: none;
@@ -2776,9 +2789,12 @@
   padding: 11px;
   border-radius: 58px;
   background: linear-gradient(145deg, #4a4b51 0%, #1b1c20 38%, #2c2d32 100%);
+  /* The phone's shadow is the frame's own (a filter on the whole phone redrew it on every
+     change inside, every keystroke and every tick of the clock). */
   box-shadow:
     inset 0 0 0 1.5px rgba(255, 255, 255, 0.14),
-    inset 0 0 0 4px #0c0c0e;
+    inset 0 0 0 4px #0c0c0e,
+    0 28px 50px rgba(0, 0, 0, 0.5);
   animation: sv-phone-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 @keyframes sv-phone-in {
@@ -2950,16 +2966,12 @@
   color: rgba(255, 255, 255, 0.85);
   font-size: 14px;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 .sv-smartphone-close:hover {
   background: rgba(120, 120, 128, 0.5);
 }
 #sv-smartphone[data-screen="app"] :is(.sv-phone-status, .sv-phone-nav) {
   background: rgba(0, 0, 0, 0.82);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
 }
 #sv-smartphone[data-screen="app"] .sv-phone-nav {
   border-bottom: 0.5px solid var(--ph-line);
@@ -2971,9 +2983,7 @@
 #sv-smartphone[data-screen="call"] .sv-smartphone-home {
   padding: 5px 12px 5px 8px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.32);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.42);
   color: #fff;
 }
 .sv-smartphone-body {
@@ -3032,6 +3042,8 @@
   z-index: -1;
   background: var(--sv-wall) center / cover no-repeat;
   filter: blur(30px) saturate(1.3) brightness(0.58);
+  /* Its own layer: the blur is drawn once, not again on every keystroke or timer tick above it. */
+  will-change: transform;
 }
 /* One cell the size of the circle: a tall picture is cropped to it (an auto-sized row grew to the
    picture's own height, so only its top part showed in the circle). */
@@ -3097,8 +3109,6 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 24px;
   background: var(--ph-glass);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
   color: #fff;
   text-align: left;
   cursor: pointer;
@@ -3150,12 +3160,22 @@
   font-size: 15px;
 }
 .sv-widget-alert {
+  position: relative;
   border-color: rgba(52, 199, 89, 0.6);
+}
+.sv-widget-alert::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.25);
+  opacity: 0;
+  pointer-events: none;
   animation: sv-widget-glow 1.6s ease-in-out infinite;
 }
 @keyframes sv-widget-glow {
   50% {
-    box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.25);
+    opacity: 1;
   }
 }
 /* Dock */
@@ -3167,8 +3187,6 @@
   padding: 14px 10px 12px;
   border-radius: 32px;
   background: var(--ph-glass);
-  -webkit-backdrop-filter: blur(26px);
-  backdrop-filter: blur(26px);
 }
 .sv-smartphone-app-grid > button {
   position: relative;
@@ -3403,8 +3421,6 @@
   margin: 9px 0;
   border-radius: 50%;
   background: var(--ph-glass);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
   font-size: 19px;
   transition: background 0.15s ease;
 }
@@ -3494,9 +3510,9 @@
   width: 100%;
   padding: 14px 16px;
   border-radius: 22px;
+  /* No backdrop blur: the wallpaper behind is blurred already, and re-blurring it under the
+     typing box made every keystroke slow. */
   background: var(--ph-glass);
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
   text-align: left;
 }
 .sv-call-caption small {
@@ -3592,8 +3608,6 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 22px;
   background: var(--ph-glass);
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
 }
 #sv-smartphone .sv-call-compose textarea {
   flex: 1 1 auto;
@@ -4467,9 +4481,7 @@
   gap: 8px;
   margin: 0;
   padding: 8px 12px 30px;
-  background: color-mix(in srgb, var(--ph-bg) 90%, transparent);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  background: color-mix(in srgb, var(--ph-bg) 96%, transparent);
 }
 #sv-smartphone .sv-msg-compose textarea {
   flex: 1 1 auto;
@@ -4609,15 +4621,15 @@
   box-shadow: 0 10px 24px color-mix(in srgb, var(--ph-red) 32%, transparent);
 }
 #sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) {
-  --ph-glass: rgba(255, 255, 255, 0.62);
+  --ph-glass: rgba(255, 255, 255, 0.7);
   --ph-glass-strong: rgba(255, 255, 255, 0.82);
-  filter: drop-shadow(0 24px 44px rgba(60, 50, 70, 0.22));
 }
 :is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-frame {
   background: linear-gradient(145deg, #ffffff 0%, #eef0f4 45%, #f9fafb 100%);
   box-shadow:
     inset 0 0 0 1.5px rgba(0, 0, 0, 0.06),
-    inset 0 0 0 4px #e8eaee;
+    inset 0 0 0 4px #e8eaee,
+    0 24px 44px rgba(60, 50, 70, 0.22);
 }
 :is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-phone-key, .sv-phone-key-power) {
   background: linear-gradient(90deg, #d8dbe1, #f3f4f6);
@@ -5230,8 +5242,6 @@
   color: #fff;
   font-size: 13px;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
 }
 .sv-contact-edit {
   display: flex;
@@ -6147,8 +6157,6 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 18px;
   background: rgba(28, 28, 30, 0.92);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
   color: #f5f5f7;
   font: 500 13px / 1.35 var(--sv-font);
@@ -6414,20 +6422,27 @@ body.sv-hide-line-buttons .sv-inline-actions {
   padding: 2px 11px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.38);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
   color: #fff;
   font-weight: 600;
 }
 #sv-smartphone .sv-call-compose {
-  background: rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.42);
 }
+/* White on the dark box in every theme. WebKit (Safari, and every browser on iPhone) paints form
+   text with -webkit-text-fill-color, so it is set too. */
+#sv-smartphone .sv-call-compose textarea,
 #sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea {
   color: #fff;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  opacity: 1;
 }
 #sv-smartphone .sv-call-compose textarea::placeholder,
 #sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea::placeholder {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.78);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.78);
+  opacity: 1;
 }
 
 /* 읽는 대사 자막: ── the line being read ── in a strip under the top bar (no clicks, no layout). */
@@ -6856,4 +6871,64 @@ body:has(#sv-call-banner) #sv-now-reading {
 #sv-smartphone .sv-overheard-back {
   background: var(--ph-glass);
   box-shadow: none;
+}
+
+/* 대필 in another language: the draft's Korean reading under the input, gone once the draft is
+   changed. Never sent; kept with the message when it goes out as written. */
+#sv-smartphone p.sv-draft-translation {
+  margin: 0 !important;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-fg) 6%, transparent);
+  font-size: 12px;
+  text-align: left;
+}
+#sv-smartphone p.sv-draft-translation[hidden] {
+  display: none;
+}
+/* The input and its two buttons stay on one row; a 대필 translation sits right under the input. */
+.sv-msg-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  column-gap: 8px;
+  row-gap: 6px;
+}
+.sv-msg-compose > textarea {
+  grid-column: 1;
+  grid-row: 1;
+}
+.sv-msg-compose > button {
+  grid-row: 1;
+}
+.sv-msg-compose > .sv-draft-translation {
+  grid-column: 1;
+  grid-row: 2;
+}
+#sv-smartphone .sv-call-screen p.sv-draft-translation {
+  width: 100%;
+  margin-top: 8px !important;
+  background: rgba(0, 0, 0, 0.34);
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 1;
+}
+/* My own text's translation sits under my bubbles, on my side. */
+.sv-msg-mine > .sv-msg-translation {
+  align-self: flex-end;
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-widget-alert::after {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Phones and tablets: the phone fills the screen, and its frame shadow would only cost. */
+@media (max-width: 700px), (pointer: coarse) {
+  #sv-smartphone .sv-phone-frame {
+    box-shadow: none;
+  }
 }

@@ -383,8 +383,11 @@ export const messages = {
     const translation = item.translation
       ? `<div class="sv-msg-translation">${this.translationHtml(item)}</div>`
       : "";
-    const edit =
-      item.role !== "user" && !frozen ? button("sv-msg-edit", "fa-pen", "고치기: 고친 뒤 음성을 새로 만듭니다") : "";
+    const edit = frozen
+      ? ""
+      : item.role === "user"
+        ? button("sv-msg-edit", "fa-pen", "고치기: 보낸 문자를 고칩니다")
+        : button("sv-msg-edit", "fa-pen", "고치기: 고친 뒤 음성을 새로 만듭니다");
     // ‹ 1/2 › goes on its own line under the buttons.
     const meta = `<div class="sv-msg-meta">${play}${reroll}${again}${edit}${remove}</div>${pager}`;
     const lines = String(item.text || "")
@@ -392,7 +395,7 @@ export const messages = {
       .filter((line) => line.trim());
     const bubbles = lines.map((line) => `<p class="sv-msg-bubble">${escapeHtml(line)}</p>`).join("");
     if (item.role === "user")
-      return `<div class="sv-msg-row sv-msg-mine${reading}">${label}${bubbles}${meta}</div>`;
+      return `<div class="sv-msg-row sv-msg-mine${reading}">${label}${bubbles}${translation}${meta}</div>`;
     if ((item.kind || "voice") === "voice")
       return `<div class="sv-msg-row sv-msg-theirs${reading}">${label}
           <div class="sv-msg-bubble sv-msg-voice">
@@ -505,6 +508,7 @@ export const messages = {
           <textarea id="sv-msg-input" rows="1" maxlength="2000" placeholder="보낼 내용 혹은 대필 지시 내용" aria-label="${escapeHtml(contact.name)}에게 보낼 문자"></textarea>
           <button type="button" class="sv-ghostwrite" data-ghostwrite aria-label="대필" title="대필: 내 페르소나로 보낼 문자를 대신 써 줍니다. 입력칸에 ‘늦는다고 사과해 줘’처럼 원하는 내용을 적어 두면 그 뜻대로 자연스럽게 쓰고, 써 둔 초안이면 다듬습니다. 비워 두면 알아서 씁니다." ${this.ghostwriteBusy === key ? "disabled" : ""}><i class="fa-solid ${this.ghostwriteBusy === key ? "fa-spinner fa-spin" : "fa-pen-nib"}" aria-hidden="true"></i></button>
           <button type="submit" aria-label="보내기" title="${thread.at(-1)?.role === "user" ? "보내기 · 비워 두고 누르면 마지막 문자에 대한 답장을 받습니다" : "보내기"}"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+          ${this.draftTranslationHtml?.(key, this.messageDrafts[key]) || ""}
         </form>
       </div>`;
     const input = body.querySelector("#sv-msg-input");
@@ -516,8 +520,10 @@ export const messages = {
     };
     // A redraw keeps the typing place on a desktop; on a phone it would pop the keyboard up.
     if (hadFocus && !this.isMobilePhoneLayout()) input.focus();
+    const draftBox = body.querySelector("[data-draft-translation]");
     input.addEventListener("input", () => {
       this.messageDrafts[key] = input.value;
+      this.syncDraftTranslation?.(draftBox, key, input.value);
       fit();
     });
     if (input.value) requestAnimationFrame(fit);
@@ -529,9 +535,12 @@ export const messages = {
         if (lastMine && !typing) this.run(() => this.generateTextReply(key));
         return;
       }
+      // A 대필 draft sent as written keeps its Korean reading under my text (never in a prompt).
+      const translation = this.draftTranslationFor?.(key, value) || "";
+      if (translation) this.draftTranslation = null;
       this.messageDrafts[key] = "";
       input.value = "";
-      this.run(() => this.sendTextMessage(key, value));
+      this.run(() => this.sendTextMessage(key, value, translation));
     };
     body.querySelector("[data-ghostwrite]").addEventListener("click", () =>
       this.run(async () => {
@@ -780,7 +789,7 @@ export const messages = {
   },
 
   /** The user texts someone; their reply follows after a short pause for more texts. */
-  async sendTextMessage(key, value) {
+  async sendTextMessage(key, value, translation = "") {
     this.unlockAudioForMobile();
     const text = String(value || "").trim().slice(0, 2000);
     if (!text) return;
@@ -801,6 +810,7 @@ export const messages = {
         kind: "text",
         origin: "reply",
         text,
+        ...(translation ? { translation } : {}),
         language: this.scriptLanguage(text) || this.chatLanguage(),
       }),
     });
@@ -1202,14 +1212,22 @@ export const messages = {
 
 
   async editVoiceMessage(item) {
+    const mine = item.role === "user";
     const value = await this.openLineSheet({
-      title: (item.kind || "voice") === "voice" ? "음성 메시지 고치기" : "문자 고치기",
-      value: item.script || item.text,
+      title: mine ? "보낸 문자 고치기" : (item.kind || "voice") === "voice" ? "음성 메시지 고치기" : "문자 고치기",
+      value: mine ? item.text : item.script || item.text,
+      ...(mine
+        ? { hint: "상대가 이미 받은 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰여요." }
+        : {}),
     });
     if (value === null) return;
-    const edit = this.spokenEdit(value);
+    // My own text is plain words ([brackets] and all); a character's line carries its tags.
+    const typed = String(value).trim().slice(0, 2000);
+    const edit = mine
+      ? { text: typed, language: this.scriptLanguage(typed) || item.language || this.chatLanguage() }
+      : this.spokenEdit(value);
     if (!edit.text) throw new Error("메시지를 비울 수는 없습니다.");
-    if (edit.text === item.text && edit.script === (item.script || "")) return;
+    if (edit.text === item.text && (mine || edit.script === (item.script || ""))) return;
     const response = await this.request(
       `/api/plugins/scenevoice/voice-messages/${encodeURIComponent(item.id)}`,
       {

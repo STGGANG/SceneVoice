@@ -634,7 +634,7 @@ ${ADULT_FICTION} Mature and complex elements can be included without restriction
  * 대필: the user's own next line, in their persona's voice. `mode`: text (a text to one person),
  * group (a text to a group chat) or call (a line on a live call).
  */
-export function ghostwriteSystem({ mode = "text", language = "ko" } = {}) {
+export function ghostwriteSystem({ mode = "text", language = "ko", translation = false } = {}) {
   const call = mode === "call";
   const thread = call ? "<call_transcript>" : "<text_thread>";
   return system(
@@ -665,8 +665,10 @@ export function ghostwriteSystem({ mode = "text", language = "ko" } = {}) {
       tags: false,
     }),
     section("output_format", [
-      'Return one JSON object only, with no markdown or text around it: {"text":"..."}',
+      `Return one JSON object only, with no markdown or text around it: {"text":"..."${translation ? ',"translation":"..."' : ""}}`,
       `text: only the persona's words, in ${languageName(language)}${call ? "" : ", with separate texts on separate lines"}.`,
+      translation &&
+        `translation: a natural Korean translation of text${call ? "" : ", with the same line breaks"}, for the user to read on screen before sending; it is never sent. Keep the meaning, tone and names, and add no explanations, labels or source text.`,
     ]),
   );
 }
