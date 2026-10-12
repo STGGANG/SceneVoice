@@ -93,13 +93,12 @@ export const character = {
     return profileContext;
   },
 
-  /** The profile as phone prompts read it: the persona is the user's character there, not the user. */
+  /** For phone prompts the persona is `user_character`, a fictional person, not the user. */
   phoneRoleplayProfile() {
     const { user, ...profile } = this.getRoleplayProfileContext();
     return user ? { ...profile, user_character: user } : profile;
   },
 
-  /** The user's character (the persona) by name, as phone prompts and their data call them. */
   userCharacterName() {
     return String(window.SillyTavern?.getContext?.()?.name1 || "User").slice(0, 160);
   },

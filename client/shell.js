@@ -2,7 +2,7 @@
 // home screen, dragging and fitting to the window.
 import { escapeHtml, clamp, mergeConfig } from "./common.js";
 
-// Where the floating phone button was dragged to, on this device: a side and how far down (0–1).
+// Per device: { side: "left" | "right", top: share of the window height }.
 const LAUNCHER_SPOT_KEY = "scenevoice_launcher_spot";
 const LAUNCHER_MARGIN = 14;
 
@@ -113,18 +113,16 @@ export const shell = {
     this.updatePhoneLauncherVisibility();
   },
 
-  /** The spot the floating button was dragged to on this device, or null for the default one. */
   launcherSpot() {
     let spot = this.launcherSpotHere || null;
     try {
       spot = JSON.parse(localStorage.getItem(LAUNCHER_SPOT_KEY) || "null") || spot;
     } catch {
-      /* Storage blocked (a private window): the spot is kept only while the page is open. */
+      /* storage blocked: kept for this page only */
     }
     return spot && ["left", "right"].includes(spot.side) && Number.isFinite(spot.top) ? spot : null;
   },
 
-  /** Puts the floating button on its side at its height, inside the window (default spot without one). */
   placeLauncher(launcher = document.getElementById("sv-phone-launcher")) {
     if (!launcher) return;
     const spot = this.launcherSpot();
@@ -139,21 +137,17 @@ export const shell = {
     launcher.style.bottom = "auto";
   },
 
-  /** Back to the default spot (설정 → 스마트폰 → 처음 자리로). */
   resetLauncherSpot() {
     this.launcherSpotHere = null;
     try {
       localStorage.removeItem(LAUNCHER_SPOT_KEY);
     } catch {
-      /* nothing kept */
+      /* storage blocked */
     }
     this.placeLauncher();
   },
 
-  /**
-   * The floating button moves with a drag (a press that travels more than a few pixels; a tap
-   * still opens the phone) and settles on the nearer side when let go.
-   */
+  /** A press that moves over 8px drags the button; let go, it settles on the nearer side. */
   enableLauncherDragging(launcher) {
     let press = null;
     launcher.addEventListener("pointerdown", (event) => {
@@ -202,13 +196,12 @@ export const shell = {
       try {
         localStorage.setItem(LAUNCHER_SPOT_KEY, JSON.stringify(spot));
       } catch {
-        /* kept for this page only */
+        /* storage blocked */
       }
       this.placeLauncher(launcher);
     };
     launcher.addEventListener("pointerup", finish);
     launcher.addEventListener("pointercancel", finish);
-    // Turning a phone or resizing the window keeps the button on its side, inside the window.
     window.addEventListener("resize", () => this.placeLauncher(launcher), {
       signal: this.lifetimeController?.signal,
     });
@@ -662,8 +655,7 @@ export const shell = {
             // An app opens on 적용 기억.
             this.phoneShelf = {};
             this.overheardEditor = null;
-            // The dock opens the contact list; a widget or contact row opens that person. A call
-            // still open in this chat (one the phone lost track of) comes back first.
+            // The dock opens the contact list; a widget or contact row opens that person.
             if (app.dataset.phoneApp === "call") {
               this.phoneContactKey = app.dataset.contactKey || "";
               if (!this.phoneSession && !this.phonePendingEvent) {

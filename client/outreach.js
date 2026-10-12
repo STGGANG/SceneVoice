@@ -398,7 +398,6 @@ export const outreach = {
         status: "ringing",
         situation: candidate.reason || "",
       });
-      // The user is on (or being rung by) a call the chat shows: the line is busy.
       if (made.existing) return;
       sessionId = made.session?.id || "";
     } catch (error) {

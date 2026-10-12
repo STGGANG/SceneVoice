@@ -1,5 +1,9 @@
 // Playback: two reusable audio players (see audioPlayer), the call filter and the thought
-// effect, and short message tones.
+// effect, short message tones, and voices joined into files to save.
+import { pcm16, wavFromParts } from "./wav.js";
+
+// A saved file is cut every 30 minutes, so a long conversation stays within a phone's memory.
+const FILE_SECONDS = 1800;
 
 export const playback = {
   shouldApplyCommunicationFilter(kind, record = undefined) {
@@ -24,31 +28,97 @@ export const playback = {
     }
     const context = this.communicationAudioContext;
     const source = this.mediaSource(audio, context);
+    const nodes = this.communicationNodes(context);
+    source.connect(nodes[0]);
+    nodes.at(-1).connect(context.destination);
+    this.currentAudioNodes = [source, ...nodes];
+    return context;
+  },
+
+  communicationNodes(context) {
     const highpass = context.createBiquadFilter();
     const lowpass = context.createBiquadFilter();
-    // The nasal middle a phone line carries.
     const presence = context.createBiquadFilter();
     const compressor = context.createDynamicsCompressor();
     highpass.type = "highpass";
-    highpass.frequency.value = 340;
+    highpass.frequency.value = 300;
     lowpass.type = "lowpass";
-    lowpass.frequency.value = 3300;
+    lowpass.frequency.value = 4500;
     presence.type = "peaking";
-    presence.frequency.value = 1700;
+    presence.frequency.value = 1800;
     presence.Q.value = 0.9;
-    presence.gain.value = 4;
+    presence.gain.value = 3;
     compressor.threshold.value = -20;
     compressor.ratio.value = 3;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.12;
-    source
-      .connect(highpass)
-      .connect(lowpass)
-      .connect(presence)
-      .connect(compressor)
-      .connect(context.destination);
-    this.currentAudioNodes = [source, highpass, lowpass, presence, compressor];
-    return context;
+    highpass.connect(lowpass).connect(presence).connect(compressor);
+    return [highpass, lowpass, presence, compressor];
+  },
+
+  async renderCommunicationFilter(buffer) {
+    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const context = new Offline(1, buffer.length, buffer.sampleRate);
+    const source = context.createBufferSource();
+    const nodes = this.communicationNodes(context);
+    source.buffer = buffer;
+    source.connect(nodes[0]);
+    nodes.at(-1).connect(context.destination);
+    source.start();
+    return context.startRendering();
+  },
+
+  fileStamp(value = Date.now()) {
+    const date = new Date(value);
+    const at = Number.isNaN(date.getTime()) ? new Date() : date;
+    const two = (number) => String(number).padStart(2, "0");
+    return `${at.getFullYear()}${two(at.getMonth() + 1)}${two(at.getDate())}-${two(at.getHours())}${two(at.getMinutes())}`;
+  },
+
+  /** Joins clips into WAV files and saves them. `clips`: [{ url, filter }]; returns the file count. */
+  async downloadJoinedAudio(clips, name, { gap = 0.5, rate = 24000 } = {}) {
+    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const decoder = new Offline(1, 1, rate);
+    const files = [];
+    let parts = [];
+    let length = 0;
+    const close = () => {
+      if (parts.length) files.push(wavFromParts(parts, rate));
+      parts = [];
+      length = 0;
+    };
+    for (const clip of clips) {
+      const response = await fetch(clip.url);
+      if (!response.ok) throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
+      let buffer = await decoder.decodeAudioData(await response.arrayBuffer());
+      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer);
+      const mono = new Float32Array(buffer.length);
+      for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+        const data = buffer.getChannelData(channel);
+        for (let i = 0; i < data.length; i++) mono[i] += data[i] / buffer.numberOfChannels;
+      }
+      if (length && length + mono.length > rate * FILE_SECONDS) close();
+      if (length) {
+        const pause = new Int16Array(Math.round(rate * gap));
+        parts.push(pause);
+        length += pause.length;
+      }
+      parts.push(pcm16(mono));
+      length += mono.length;
+    }
+    close();
+    const safe = String(name).replace(/[\\/:*?"<>|]+/g, "").trim() || "scenevoice";
+    for (const [index, blob] of files.entries()) {
+      if (index) await new Promise((resolve) => setTimeout(resolve, 600));
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = files.length > 1 ? `${safe}-${index + 1}.wav` : `${safe}.wav`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+    }
+    return files.length;
   },
 
   /**

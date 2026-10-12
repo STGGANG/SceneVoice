@@ -2,7 +2,6 @@
 // the first is ready (the next ones are made while one plays).
 import { extractSegments } from "../shared/segments.js";
 import { withoutVoiceTags } from "./common.js";
-import { wavBlob } from "./wav.js";
 
 // Lines made before 음성 준비 starts to play, and again when playing catches up with the making.
 const PREPARE_AHEAD = 3;
@@ -109,35 +108,12 @@ export const messageGeneration = {
     await this.hydrateLines(source ? source.host : container);
     const ready = buttons.filter((line) => line.dataset.status === "ready" && line.dataset.audioUrl);
     if (!ready.length) throw new Error("내려받을 음성이 없습니다. 먼저 ‘음성 준비’로 만들어 주세요.");
-    const rate = 44100;
-    const OfflineContext = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const decoder = new OfflineContext(1, 1, rate);
-    const clips = [];
-    for (const line of ready) {
-      const response = await fetch(line.dataset.audioUrl);
-      if (!response.ok) throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
-      clips.push(await decoder.decodeAudioData(await response.arrayBuffer()));
-    }
-    const gap = Math.round(rate * 0.38);
-    const total = clips.reduce((sum, clip) => sum + clip.length, 0) + gap * (clips.length - 1);
-    const mono = new Float32Array(total);
-    let at = 0;
-    for (const clip of clips) {
-      for (let channel = 0; channel < clip.numberOfChannels; channel++) {
-        const data = clip.getChannelData(channel);
-        for (let i = 0; i < data.length; i++) mono[at + i] += data[i] / clip.numberOfChannels;
-      }
-      at += clip.length + gap;
-    }
     const messageId = container.closest(".mes")?.getAttribute("mesid") || "";
-    const who = String(this.getCurrentCharacterProfile?.().name || "scenevoice").replace(/[\\/:*?"<>|]+/g, "");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(wavBlob(mono, rate));
-    link.download = `${who}-${messageId}.wav`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+    await this.downloadJoinedAudio(
+      ready.map((line) => ({ url: line.dataset.audioUrl })),
+      `${this.getCurrentCharacterProfile?.().name || "scenevoice"}-${messageId}`,
+      { gap: 0.38, rate: 44100 },
+    );
     const missing = buttons.length - ready.length;
     if (missing) this.notify(`아직 만들지 않았거나 건너뛴 대사 ${missing}개는 빠졌습니다.`, "info");
   },

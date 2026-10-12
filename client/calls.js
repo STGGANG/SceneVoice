@@ -21,8 +21,7 @@ import { SPEECH_LANGUAGES } from "../shared/settings.js";
 
 // How long a call of theirs rings before it counts as missed (and they may leave a voicemail).
 const RING_SECONDS = 60;
-// Reply room for a whole overheard call, by 엿듣는 통화 길이 (a line with its tags and
-// translation runs about 150 tokens).
+// About 150 tokens a line with tags and translation.
 const OVERHEARD_REPLY_TOKENS = { short: 1400, normal: 2200, long: 4000 };
 // A goodbye in the last lines of a call (Korean, Japanese, English, Chinese).
 const FAREWELL =
@@ -205,7 +204,7 @@ export const calls = {
       event.preventDefault();
       this.sendPhoneReply();
     });
-    // Grows with its lines up to three; measured again only when the text may have changed height.
+    // Re-measured only when the height may change (measuring every keystroke was slow).
     let lastLength = reply?.value.length || 0;
     const draftBox = body.querySelector("[data-draft-translation]");
     reply?.addEventListener("input", () => {
@@ -479,9 +478,8 @@ export const calls = {
   },
 
   /**
-   * Starts a call record. A call still open in this chat holds the line: one the chat shows now
-   * comes back as `existing`; one left on another swipe or in a part of the chat taken back,
-   * which nobody can see or hang up, is closed first (missed if it still rang) so this one can start.
+   * A call still open holds the line: one the chat shows comes back as `existing`; one nobody
+   * can see (another swipe, a part taken back) is closed first so this one can start.
    */
   async createPhoneSession(record) {
     for (let attempt = 0; ; attempt += 1) {
@@ -546,8 +544,7 @@ export const calls = {
         status: "active",
         situation: "",
       });
-      // A call of this chat is still open (after a reload, say): back to it as it was, with no
-      // opening line written into the middle of it. A cut-off answer comes by sending empty.
+      // No opening line into the middle of a call that is still open.
       if (made.existing) {
         this.notify(`${made.existing.character_name || "상대"}와의 통화가 아직 이어지고 있어 그 통화로 돌아갑니다.`, "info");
         if (made.existing.status === "ringing") await this.restorePhoneSession();
@@ -606,7 +603,6 @@ export const calls = {
     const sessionId = this.phoneSession.id;
     if (input) input.value = "";
     this.callReplyDraft = "";
-    // A 대필 draft sent as written keeps its Korean reading in the call record (never in a prompt).
     const translation = this.draftTranslationFor?.("call", text) || "";
     if (translation) this.draftTranslation = null;
     try {

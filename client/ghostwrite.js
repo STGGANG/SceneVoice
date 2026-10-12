@@ -92,26 +92,22 @@ export const ghostwrite = {
       .filter(Boolean)
       .join(mode === "call" ? " " : "\n");
     if (!text) throw new Error("보조 모델이 대필 내용을 돌려주지 않았습니다.");
-    // A Korean reading of a draft in another language: shown under the input while the draft is
-    // left as written, and kept with the message when it goes out that way (never sent itself).
+    // Shown and kept only while the draft is sent as written; never part of a prompt.
     const korean = translation ? String(parsed?.translation ?? "").trim().slice(0, 4000) : "";
     this.draftTranslation = korean ? { key: mode === "call" ? "call" : key, text, translation: korean } : null;
     return text;
   },
 
-  /** The draft's Korean reading, while `value` is still the draft as written for `key`. */
   draftTranslationFor(key, value) {
     const note = this.draftTranslation;
     return note && note.key === key && String(value || "").trim() === note.text ? note.translation : "";
   },
 
-  /** The box under the input that shows it (hidden while there is nothing to show). */
   draftTranslationHtml(key, value) {
     const translation = this.draftTranslationFor(key, value);
     return `<p class="sv-translation sv-draft-translation" lang="ko" data-draft-translation ${translation ? "" : "hidden"}><i class="fa-solid fa-language" aria-hidden="true"></i><span>${escapeHtml(translation)}</span></p>`;
   },
 
-  /** Keeps the box in step with the input: it goes as soon as the draft is changed. */
   syncDraftTranslation(box, key, value) {
     if (!box) return;
     const translation = this.draftTranslationFor(key, value);

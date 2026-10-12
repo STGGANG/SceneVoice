@@ -22,7 +22,6 @@ const LANGUAGE_CHOICES = [
   ["pt", "포르투갈어"],
   ["ru", "러시아어"],
 ];
-// 엿듣는 통화 길이, as the settings and 통화 엿듣기 list it (lines as asked in overheardCallSystem).
 const OVERHEARD_LENGTH_CHOICES = [
   ["short", "짧게 (4~6줄)"],
   ["normal", "보통 (6~12줄)"],

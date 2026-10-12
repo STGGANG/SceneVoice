@@ -463,6 +463,7 @@ export const messages = {
                 }</small>`
               : ""
           }</span></div>
+          <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화방에서 목소리를 만든 메시지를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
           <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 메시지 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? "fa-stop" : "fa-headphones"}" aria-hidden="true"></i></button>
           ${contact.group ? '<button type="button" class="sv-msg-group-edit" data-group-edit aria-label="단체방 설정" title="방 이름·참여자 바꾸기, 나가기"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>' : ""}
         </header>
@@ -535,7 +536,6 @@ export const messages = {
         if (lastMine && !typing) this.run(() => this.generateTextReply(key));
         return;
       }
-      // A 대필 draft sent as written keeps its Korean reading under my text (never in a prompt).
       const translation = this.draftTranslationFor?.(key, value) || "";
       if (translation) this.draftTranslation = null;
       this.messageDrafts[key] = "";
@@ -580,6 +580,10 @@ export const messages = {
     if (lit && this.currentAudio) this.currentPlayButton = lit;
     body.querySelector("[data-thread-aloud]")?.addEventListener("click", () =>
       this.run(() => this.playThreadAloud(key)),
+    );
+    const save = body.querySelector("[data-thread-download]");
+    save?.addEventListener("click", () =>
+      this.run(() => this.withBusyButton(save, () => this.downloadThreadAudio(key))),
     );
     body.querySelectorAll(".sv-msg-play").forEach((button) =>
       button.addEventListener("click", () => {
@@ -643,6 +647,26 @@ export const messages = {
       onEnded: done(onEnded),
       onStop: done(onStop),
     });
+  },
+
+  /** 내려받기: only messages that already have a voice (making them for a whole room would cost too much). */
+  async downloadThreadAudio(key) {
+    const thread = (await this.loadMessages()).filter((item) => this.messageThreadOf(item) === key);
+    const voiced = thread.filter((item) => item.audio_url);
+    if (!voiced.length)
+      throw new Error("내려받을 음성이 없습니다. 목소리를 만든(들어 본) 메시지만 들어갑니다.");
+    const files = await this.downloadJoinedAudio(
+      voiced.map((item) => ({
+        url: this.apiUrl(item.audio_url),
+        filter: (item.kind || "voice") === "voice" && this.shouldApplyCommunicationFilter("voice_message", item),
+      })),
+      `${this.threadContact(key).name}-문자-${this.fileStamp()}`,
+      { gap: 0.8 },
+    );
+    const notes = [];
+    if (files > 1) notes.push(`길어서 30분씩 ${files}개 파일로 나눴습니다.`);
+    if (thread.length > voiced.length) notes.push(`목소리를 만들지 않은 메시지 ${thread.length - voiced.length}개는 빠졌습니다.`);
+    if (notes.length) this.notify(notes.join(" "), "info");
   },
 
   messagePlayButton(id) {
@@ -1116,10 +1140,7 @@ export const messages = {
     return [...rounds.values()].sort((a, b) => String(a[0].created_at).localeCompare(String(b[0].created_at)));
   },
 
-  /**
-   * The thread as the prompt sees it: who wrote (the user's lines under their character's name),
-   * text or voice, and (with real time on) when.
-   */
+  /** The thread for prompts: my lines under my character's name, never "USER". */
   textThreadData(thread, name, timed = false) {
     const me = this.userCharacterName?.() || "User";
     return thread.map((item) => ({
@@ -1221,7 +1242,7 @@ export const messages = {
         : {}),
     });
     if (value === null) return;
-    // My own text is plain words ([brackets] and all); a character's line carries its tags.
+    // My text keeps [brackets] as words; a character's line reads them as tags.
     const typed = String(value).trim().slice(0, 2000);
     const edit = mine
       ? { text: typed, language: this.scriptLanguage(typed) || item.language || this.chatLanguage() }

@@ -71,7 +71,6 @@ export const PHONE_LAUNCHERS = ["floating", "menu", "both"];
 export const SPEECH_LANGUAGES = ["ko", "ja", "en", "zh", "fr", "es", "de", "it", "pt", "ru"];
 // Smartphone colors: the dark default, or one of the light themes with a white body.
 export const PHONE_THEMES = ["default", "white", "pink", "blue"];
-// 엿듣는 통화 길이: about how many lines the call runs (see overheardCallSystem).
 export const OVERHEARD_LENGTHS = ["short", "normal", "long"];
 export const DEFAULT_SETTINGS = {
   // 씬보이스 사용: off, nothing runs (line buttons, phone, analysis, chat memory); records stay.
@@ -146,7 +145,7 @@ export const DEFAULT_SETTINGS = {
     voicemail: true,
     // 엿듣는 통화: now and then two people phone each other, written out for the user to hear.
     overheard_calls: false,
-    // How long an overheard call runs: short, normal or long (자동·직접 둘 다).
+    // 엿듣는 통화 길이 (lines asked for: see overheardCallSystem).
     overheard_length: "normal",
     theme: "default",
     // 월드인포 참고, per bot card (switched on there): entries the call or text conversation

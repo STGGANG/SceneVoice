@@ -1,20 +1,13 @@
 // 실리태번 연결 프로필: helper-model requests go through the connection profile the user picked.
 import { contentKey } from "../shared/hash.js";
-// Prompts are instruction lines, tagged rule sections and tagged data blocks (see prompts.js),
-// in system and user messages alike. Only these data blocks are shortened: the story and the
-// conversation, past calls, saved states and the like. Everything else stays whole: the
-// instructions and rules, the target lines and speaker list, and the settings the user put in
-// (character profile, world info, performance notes, people's records).
+// Only these data blocks are ever shortened, in any message. Instructions, rules, settings
+// (profile, world info, notes) and the lines to analyze always go whole.
 const TRIMMED_BLOCK =
   /^<(recent_chat|call_transcript|text_thread|previous_calls|recent_calls|state|current_time|call_situation|reason_to_call|reason_to_send|user_draft|current_message)[\s>]/;
 const isRequiredSection = (section) => !TRIMMED_BLOCK.test(section);
 // Conversations lose their oldest messages: the chat so far, a call, a text thread.
 const NEWEST_KEPT = /^<(recent_chat|call_transcript|text_thread)[\s>]/;
-/**
- * Shortens one section, keeping a data block's tags so the block stays well formed. A
- * conversation keeps its newest messages, starting at a whole one; other material keeps its
- * beginning.
- */
+/** Keeps the block's tags; a conversation keeps its newest whole messages, other data its beginning. */
 const truncateSection = (section, allowance) => {
   const closing = section.match(/\n<\/[\w-]+>$/)?.[0] || "";
   if (NEWEST_KEPT.test(section)) {
@@ -40,17 +33,13 @@ const truncateSection = (section, allowance) => {
     closing
   );
 };
-/** Characters that are never shortened: everything but the data blocks that may be. */
 export function requiredPromptSize(messages) {
   return messages
     .flatMap((message) => String(message.content).split("\n\n"))
     .filter(isRequiredSection)
     .reduce((total, section) => total + section.length, 0);
 }
-/**
- * Fits the messages into `budget` characters. Required sections stay whole, and so do small
- * data blocks; the room left is shared evenly by the big ones, whichever message holds them.
- */
+/** Fits the messages into `budget` characters; big data blocks share the room left evenly. */
 export function limitPrompt(messages, budget) {
   const split = messages.map((message) => String(message.content).split("\n\n"));
   const sections = split.flat();
@@ -59,7 +48,6 @@ export function limitPrompt(messages, budget) {
     .reduce((total, section) => total + section.length, 0);
   if (requiredSize > budget)
     throw new Error("지시문·캐릭터 설정·분석할 대사만으로 요청 한도를 넘었습니다.");
-  // Small sections stay whole; the room they leave goes to the big ones, shared evenly.
   const others = sections.filter((section) => !isRequiredSection(section));
   let allowance = Infinity;
   let left = budget - requiredSize;

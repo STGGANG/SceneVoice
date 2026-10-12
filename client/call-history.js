@@ -252,7 +252,7 @@ export const callHistory = {
                     <div><h3>${name}</h3><small>${escapeHtml(this.formatDate(session.started_at))} · ${this.callStatusLabel(session)}${away ? ` · ${escapeHtml(this.awayPointLabel(session))}` : ""}</small></div>
                     ${live ? "" : '<button type="button" class="sv-call-history-delete sv-detail-delete" aria-label="이 통화 기록 삭제" title="이 기록 삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>'}
                 </div>
-                ${live || !turns.length ? "" : `<div class="sv-call-aloud-row">${this.callAloudButton(playing, turns.length)}</div>`}
+                ${live || !turns.length ? "" : `<div class="sv-call-aloud-row"><button type="button" class="sv-call-aloud" data-call-download title="내려받기: 통화 전체를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i><span>내려받기</span></button>${this.callAloudButton(playing, turns.length)}</div>`}
                 <div class="sv-call-transcript sv-history-transcript">
                     ${turns.length ? "" : '<p class="sv-transcript-empty">주고받은 대사가 없습니다.</p>'}
                     ${turns
@@ -283,11 +283,55 @@ export const callHistory = {
     body
       .querySelector("[data-call-aloud]")
       ?.addEventListener("click", () => this.run(() => this.playCallThrough(body, session, away)));
+    const save = body.querySelector("[data-call-download]");
+    save?.addEventListener("click", () =>
+      this.run(() => this.withBusyButton(save, () => this.downloadCall(body, session, away))),
+    );
     body.querySelectorAll(".sv-call-replay").forEach((button) =>
       button.addEventListener("click", () =>
         this.run(() => this.playHistoryTurn(body, session, turns[Number(button.dataset.turn)], button, away)),
       ),
     );
+  },
+
+  /** 내려받기. Lines without a voice are made only if the user agrees (voice credits). */
+  async downloadCall(body, session, away = false) {
+    let current = session;
+    const turns = (session.turns || []).filter((turn) => turn.role !== "user" || this.personaVoiceReady());
+    const missing = turns.filter((turn) => !turn.audio_url).length;
+    const make =
+      missing > 0 &&
+      confirm(`목소리가 아직 없는 대사가 ${missing}개 있어요. 만들어서 함께 넣을까요?\n취소하면 지금 있는 목소리만 내려받아요.`);
+    const clips = [];
+    try {
+      for (const turn of turns) {
+        let url = turn.audio_url ? this.apiUrl(turn.audio_url) : "";
+        let revoke = false;
+        if (!url && make) {
+          const made = await this.makePhoneTurnAudio(current, turn).catch(() => null);
+          if (made?.session) current = made.session;
+          url = made?.audioUrl || "";
+          revoke = Boolean(url);
+        }
+        if (url)
+          clips.push({
+            url,
+            revoke,
+            filter: this.shouldApplyCommunicationFilter("phone", turn),
+          });
+      }
+      if (!clips.length) throw new Error("내려받을 음성이 없습니다.");
+      const who =
+        session.call_direction === "overheard"
+          ? `${session.character_name}-${session.callee_name}`
+          : session.character_name || "통화";
+      await this.downloadJoinedAudio(clips, `${who}-통화-${this.fileStamp(session.started_at)}`);
+    } finally {
+      for (const clip of clips) if (clip.revoke) URL.revokeObjectURL(clip.url);
+    }
+    const left = turns.length - clips.length;
+    if (left) this.notify(`목소리가 없는 대사 ${left}개는 빠졌습니다.`, "info");
+    if (current !== session && body.isConnected) this.renderPhoneHistoryDetail(body, current, away);
   },
 
   /** 전체 듣기 · 이어 듣기 (stopped partway) · 멈추기 (while it plays). */
@@ -349,7 +393,8 @@ export const callHistory = {
         run.ready = true;
         return;
       }
-      view.querySelector(".sv-call-aloud-row").innerHTML = this.callAloudButton(run, turns.length);
+      const aloud = view.querySelector("[data-call-aloud]");
+      if (aloud) aloud.outerHTML = this.callAloudButton(run, turns.length);
       view
         .querySelector("[data-call-aloud]")
         ?.addEventListener("click", () => this.run(() => this.playCallThrough(body, current, away)));
@@ -390,8 +435,7 @@ export const callHistory = {
         await new Promise((resolve) =>
           this.playWithSounds(ready.url, turn.script, null, ready.revoke, {
             mixed: ready.mixed,
-            // The other side comes through the phone; my own voice doesn't.
-            communicationFilter: turn.role !== "user" && this.shouldApplyCommunicationFilter("phone", turn),
+            communicationFilter: this.shouldApplyCommunicationFilter("phone", turn),
             onEnded: resolve,
             onStop: () => {
               run.stopped = true;
@@ -483,8 +527,7 @@ export const callHistory = {
   /** Plays a past call's line, with its sounds; a line without a voice gets one first. */
   async playHistoryTurn(body, session, turn, button, away = false) {
     if (!turn) return;
-    // My own line comes through without the phone's sound.
-    const communicationFilter = turn.role !== "user" && this.shouldApplyCommunicationFilter("phone", turn);
+    const communicationFilter = this.shouldApplyCommunicationFilter("phone", turn);
     if (turn.audio_url) {
       this.playWithSounds(this.apiUrl(turn.audio_url), turn.script, button, false, {
         mixed: Boolean(turn.sounds_mixed),

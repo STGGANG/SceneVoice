@@ -51,7 +51,7 @@ const PANES = [
 
 // The playback filter of calls and voice messages, said the same way in both places.
 const FILTER_HINT =
-  "전화 너머로 듣는 것처럼 음역이 좁고 살짝 먹먹한 소리로 바꿉니다. 재생할 때만 입히고 저장된 음성은 그대로 둡니다.";
+  "전화 너머로 듣는 것처럼 음역을 조금 좁힌 소리로 바꿉니다. 재생할 때만 입히고 저장된 음성은 그대로 둡니다.";
 
 const options = (items, selected) =>
   items
