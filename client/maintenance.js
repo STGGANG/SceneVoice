@@ -3,7 +3,8 @@ import { escapeHtml, mergeConfig } from "./common.js";
 import { DEFAULT_SETTINGS } from "../shared/settings.js";
 import { validAudioName } from "../shared/store.js";
 import { makeZip } from "./zip.js";
-import { infoTip, bindInfoTips } from "./ui.js";
+import { infoTip, bindInfoTips, switchHtml } from "./ui.js";
+import { BACKUP_ITEMS, audioHolders, backupSummary, pickBackup } from "../shared/backup-scope.js";
 
 export const BACKUP_CATALOG = "scenevoice-catalog.json";
 
@@ -70,8 +71,7 @@ export const maintenance = {
       close();
       const tasks = {
         "update-notes": () => this.showUpdateNotes({ force: true }),
-        "backup-zip": () => this.exportZipBackup(),
-        "backup-json": () => this.exportJsonBackup(),
+        backup: () => this.openBackupDialog(),
         "reset-settings": () => this.openResetDialog("settings"),
         "reset-data": () => this.openResetDialog("data"),
         "reset-all": () => this.openResetDialog("all"),
@@ -83,24 +83,90 @@ export const maintenance = {
     });
   },
 
-  async exportJsonBackup() {
-    const data = await this.transport.local.store.exportCatalog();
-    download(
-      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
-      `scenevoice-catalog-${stamp()}.json`,
+  /** 백업 파일 저장: bot cards and kinds to save (all at first), as a zip with voices or JSON. */
+  async openBackupDialog() {
+    const store = this.transport.local.store;
+    const full = await store.exportCatalog();
+    const summary = backupSummary(full.data);
+    const scopes = [...summary.keys()];
+    const items = BACKUP_ITEMS.map(([key]) => key);
+    document.getElementById("sv-backup-dialog")?.remove();
+    const dialog = document.createElement("dialog");
+    dialog.id = "sv-backup-dialog";
+    dialog.className = "sv-dialog";
+    dialog.innerHTML = `<form method="dialog">
+      <header class="sv-dialog-head">
+        <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-file-arrow-down"></i></span>
+        <div><h3>백업 파일 저장</h3><small>저장할 봇카드와 항목을 고르세요.</small></div>
+        ${infoTip("API 키는 들어가지 않습니다. 고른 봇카드의 고른 항목만 저장하고, 복원할 때도 파일에 든 것 중에서 다시 고를 수 있습니다.\n여러 봇카드가 같이 쓰는 인물과 그 기록은 ‘글로벌 인물’에 있습니다.", "백업 설명")}
+      </header>
+      ${this.backupPickHtml({ common: true, scopes, items, summary, settings: full.data.settings })}
+      ${switchHtml({ id: "sv-backup-audio", label: "음성 파일도 함께 저장", hint: " ", checked: true })}
+      <footer class="sv-dialog-actions"><button type="submit" class="sv-btn">취소</button><button type="button" class="sv-btn sv-btn-primary" data-backup-save><i class="fa-solid fa-download" aria-hidden="true"></i><span>내려받기</span></button></footer>
+    </form>`;
+    document.body.append(dialog);
+    bindInfoTips(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    const form = dialog.querySelector("form");
+    const save = dialog.querySelector("[data-backup-save]");
+    const whole = (choice) =>
+      choice.common && scopes.every((scope) => choice.scopes.includes(scope)) && items.every((item) => choice.items.includes(item));
+    const catalogFor = (choice) =>
+      whole(choice)
+        ? full
+        : {
+            ...full,
+            data: pickBackup(full.data, choice),
+            contents: { common: choice.common, scopes: choice.scopes, items: choice.items },
+          };
+    const audio = dialog.querySelector("#sv-backup-audio");
+    this.bindBackupPick(form, (choice, empty) => {
+      save.disabled = empty;
+      const hint = audio.closest("label").querySelector(".sv-hint");
+      if (!audio.checked || empty) {
+        hint.textContent = "끄면 음성 없이 가벼운 JSON 파일로 저장합니다.";
+        return;
+      }
+      const { data } = catalogFor(choice);
+      const names = this.backupAudioNames(data);
+      const bytes = names.reduce((total, name) => total + (data.audioFiles?.[name]?.size || 0), 0);
+      hint.textContent = `음성 파일 ${names.length}개(약 ${Math.ceil(bytes / 1048576)}MB)를 함께 zip으로 저장합니다.`;
+    });
+    save.addEventListener("click", () =>
+      this.run(async () => {
+        const choice = this.backupPickChoice(form);
+        const catalog = catalogFor(choice);
+        // One bot card (or 글로벌 인물) names the file.
+        const one = !whole(choice) && choice.scopes.length === 1 ? this.backupScopeName(choice.scopes[0], full.data.settings) : "";
+        const label = whole(choice) ? "" : (one || "선택").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40);
+        const zip = audio.checked;
+        dialog.close();
+        if (zip) await this.exportZipBackup(catalog, label);
+        else
+          download(
+            new Blob([JSON.stringify(catalog, null, 2)], { type: "application/json" }),
+            `scenevoice-${label || "catalog"}-${stamp()}.json`,
+          );
+      }),
     );
+    dialog.showModal();
   },
 
-  /** Catalog plus every audio file in one zip. API keys are never in the catalog. */
-  async exportZipBackup() {
+  /**
+   * The catalog plus its audio files in one zip; everything (asked first) when no `catalog` is
+   * given. API keys are never in the catalog.
+   */
+  async exportZipBackup(catalog = null, label = "") {
     const store = this.transport.local.store;
-    const catalog = await store.exportCatalog();
+    const asked = !catalog;
+    catalog ||= await store.exportCatalog();
     const names = this.backupAudioNames(catalog.data);
     const size = names.reduce(
       (total, name) => total + (catalog.data.audioFiles?.[name]?.size || 0),
       0,
     );
     if (
+      asked &&
       !confirm(
         `음성 파일 ${names.length}개(약 ${Math.ceil(size / 1048576)}MB)와 목록·설정을 zip으로 내려받습니다. API 키는 들어가지 않습니다. 계속할까요?`,
       )
@@ -119,9 +185,9 @@ export const maintenance = {
       if (bytes) entries.push({ name: `audio/${name}`, bytes });
       else missing++;
     }
-    download(makeZip(entries), `scenevoice-backup-${stamp()}.zip`);
+    download(makeZip(entries), `scenevoice-${label || "backup"}-${stamp()}.zip`);
     this.notify(
-      `전체 백업을 내려받았습니다.${missing ? ` 찾을 수 없는 음성 ${missing}개는 빠졌습니다.` : ""}`,
+      `백업을 내려받았습니다.${missing ? ` 찾을 수 없는 음성 ${missing}개는 빠졌습니다.` : ""}`,
       "success",
     );
   },
@@ -130,12 +196,7 @@ export const maintenance = {
     return [
       ...new Set([
         ...Object.keys(data.audioFiles || {}),
-        ...[
-          ...(data.generations || []),
-          ...(data.favorites || []),
-          ...(data.messages || []),
-          ...(data.sessions || []).flatMap((session) => session.turns || []),
-        ]
+        ...audioHolders(data)
           .map((row) => row.audio_filename)
           .filter(Boolean),
       ]),

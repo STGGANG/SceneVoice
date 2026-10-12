@@ -121,6 +121,7 @@ export const calls = {
                                    <button type="button" data-phone-turn-reroll="${escapeHtml(latestCharacterTurn.id)}" title="음성 재생성: 같은 대사로 목소리만 새로 만듭니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-microphone-lines" aria-hidden="true"></i><span>음성 재생성</span></button>
                                    ${turns.at(-1)?.id === latestCharacterTurn.id ? `<button type="button" data-phone-turn-regen="${escapeHtml(latestCharacterTurn.id)}" title="답변 재생성: 같은 흐름에서 이 대사를 새로 받습니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>답변 재생성</span></button>` : ""}
                                    <button type="button" data-phone-turn-edit="${escapeHtml(latestCharacterTurn.id)}" title="고치기: 대사를 고친 뒤 음성을 새로 만듭니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-pen" aria-hidden="true"></i><span>고치기</span></button>
+                                   ${this.callVersionsHtml(latestCharacterTurn, turns, audioBusy)}
                                </div>`
                           : '<p class="sv-call-waiting">연결되었습니다. 답이 없으면 비워 둔 채 보내기를 누르세요.</p>'
                     }
@@ -169,6 +170,11 @@ export const calls = {
       ?.addEventListener("click", (event) =>
         this.regeneratePhoneTurn(event.currentTarget.dataset.phoneTurnRegen),
       );
+    body.querySelectorAll("[data-call-version]").forEach((button) =>
+      button.addEventListener("click", () =>
+        this.run(() => this.switchPhoneTurnVersion(latestCharacterTurn.id, Number(button.dataset.callVersion))),
+      ),
+    );
     body
       .querySelector("[data-phone-turn-edit]")
       ?.addEventListener("click", (event) =>
@@ -217,6 +223,16 @@ export const calls = {
       reply.style.height = `${Math.min(reply.scrollHeight, 76)}px`;
     });
     this.startPhoneTimer(session);
+  },
+
+  /** ‹ n/m › for the last line when 답변 재생성 has given it more than one answer. */
+  callVersionsHtml(turn, turns, busy) {
+    const count = turn.versions?.length || 0;
+    if (count < 2 || turns.at(-1)?.id !== turn.id) return "";
+    const shown = Number.isInteger(turn.version) ? turn.version : count - 1;
+    const step = (to, icon, label) =>
+      `<button type="button" class="sv-call-version" data-call-version="${to}" aria-label="${label}" ${busy || to < 0 || to >= count ? "disabled" : ""}><i class="fa-solid ${icon}" aria-hidden="true"></i></button>`;
+    return `<div class="sv-msg-versions sv-call-versions" title="다른 답 보기: 지금 보이는 답으로 통화가 이어집니다">${step(shown - 1, "fa-chevron-left", "이전 답")}<small>${shown + 1}/${count}</small>${step(shown + 1, "fa-chevron-right", "다음 답")}</div>`;
   },
 
   async acceptIncomingCall() {
@@ -330,8 +346,9 @@ export const calls = {
       this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService) return;
     const character = this.phoneContact(this.livePersonKey(session.character_key, session.character_name));
+    const me = this.userCharacterName();
     const reason = `${
-      session.status === "rejected" ? "USER declined your call just now" : "USER didn't pick up your call just now"
+      session.status === "rejected" ? `${me} declined the call just now` : `${me} didn't pick up the call just now`
     }. Leave a short voicemail after the beep, as people do: who it is, and why you called${
       session.situation ? ` (${session.situation})` : ""
     }.`;
@@ -635,9 +652,11 @@ export const calls = {
     }
   },
 
+  /** `replaces`: the last line answered again (답변 재생성); its new answer becomes another version. */
   async generateCharacterPhoneTurn({
     opening = false,
     operationToken = this.phoneOperationToken,
+    replaces = "",
   } = {}) {
     const operation = this.captureChat();
     const profileId =
@@ -659,6 +678,7 @@ export const calls = {
     );
     const emotions = Array.from(this.analysisEmotionCandidates()).sort();
     const transcript = (this.phoneSession.turns || [])
+      .filter((turn) => turn.id !== replaces)
       .slice(-30)
       .map((turn) => ({
         role: turn.role,
@@ -745,19 +765,18 @@ export const calls = {
     );
     if (!draft.text)
       throw new Error("보조 모델이 통화 대사를 반환하지 않았습니다.");
-    await this.savePhoneTurn(
-      {
-        role: "character",
-        text: draft.text,
-        script: draft.script,
-        translation: draft.translation,
-        tags: draft.tags,
-        language: draft.language,
-        intensity: draft.intensity,
-        should_end: Boolean(parsed?.should_end),
-      },
-      sessionId,
-    );
+    const line = {
+      role: "character",
+      text: draft.text,
+      script: draft.script,
+      translation: draft.translation,
+      tags: draft.tags,
+      language: draft.language,
+      intensity: draft.intensity,
+      should_end: Boolean(parsed?.should_end),
+    };
+    if (replaces) await this.changePhoneTurn(replaces, "answer", line);
+    else await this.savePhoneTurn(line, sessionId);
     await this.renderSmartphone();
     // Like a real call: the reply is voiced and played as soon as it arrives (setting, on by default).
     const turn = this.phoneSession?.turns?.at(-1);
@@ -1320,23 +1339,13 @@ export const calls = {
     this.phoneBusy = true;
     const operationToken = ++this.phoneOperationToken;
     try {
-      const response = await this.request(
-        `/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turnId)}`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: session.chat_id }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "대사를 다시 받을 수 없습니다.");
-      this.phoneSession = data.session;
+      if (this.currentAudio) this.stopPlayback();
       await this.renderSmartphone();
       await this.generateCharacterPhoneTurn({
-        opening: !this.phoneSession.turns.some((turn) => turn.role !== "user"),
+        opening: !session.turns.some((turn) => turn.role !== "user" && turn.id !== turnId),
         operationToken,
+        replaces: turnId,
       });
-      await this.persistPhoneSessionToMessage();
     } catch (error) {
       if (operation.signal.aborted) return;
       this.notify(error.message || "대사를 다시 받을 수 없습니다.", "error");
@@ -1346,6 +1355,29 @@ export const calls = {
         await this.renderSmartphone();
       }
     }
+  },
+
+  /** The last line's versions: `answer` adds one (body: the line), `version` shows another (body: index). */
+  async changePhoneTurn(turnId, action, body) {
+    const response = await this.request(
+      `/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turnId)}/${action}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: this.phoneSession.chat_id, ...body }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "다른 답으로 바꾸지 못했습니다.");
+    this.phoneSession = data.session;
+    await this.persistPhoneSessionToMessage();
+  },
+
+  async switchPhoneTurnVersion(turnId, index) {
+    if (this.phoneBusy || this.phoneAudioBusyTurnId) return;
+    if (this.currentAudio) this.stopPlayback();
+    await this.changePhoneTurn(turnId, "version", { index });
+    await this.renderSmartphone();
   },
 
   async editPhoneTurn(turnId) {

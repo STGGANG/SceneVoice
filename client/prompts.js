@@ -330,8 +330,20 @@ const ABSENT_RULE =
 const UNKNOWN_RULE = `<state> marks the character as unknown_whereabouts: ${UNKNOWN_WHEREABOUTS} They speak from their own life: checking in, missing the user's character, their own news or plans.`;
 const OWN_VIEW =
   "React from the character's own point of view: they don't have to agree with or praise the user's character, and may disagree or tease when that is like them. Let their personality show through reactions and word choice instead of reciting their profile or repeating one trait.";
-const FOLLOW_USER =
-  "The character may take the lead and bring up things of their own, but when the user is steering toward something they want (a topic, a scene, where the story goes), follow it: don't change the subject or the context abruptly.";
+// How a call or text conversation flows: questions only when wanted, nothing said twice, the
+// user's topic first, the character's own stories when the talk is free.
+const TALK_FLOW = [
+  "Ask a question only when the character genuinely wants to know something; most replies are reactions, opinions, jokes or bits of their own life. Don't interview the user's character.",
+  "Don't say the same thing twice: once something has been asked, checked or teased, move on instead of coming back to it.",
+  "When the user's character brings up a topic or asks for something, stay with it and respond to what they want until it has run its course. Bring up things of the character's own only when that fits naturally, never by pulling the topic away.",
+  "When the talk is light and has no particular topic, the character may bring up their own news, thoughts or stories.",
+];
+const GROUP_TALK_FLOW = [
+  "Ask a question only when a member genuinely wants to know something; most messages are reactions, comments, jokes or bits of their own life. Don't interview the user's character.",
+  "Don't say the same thing twice: once something has been asked, checked or teased, move on instead of coming back to it.",
+  "When the user's character brings up a topic or asks for something, the members stay with it and respond to what they want until it has run its course. They bring up their own things only when that fits naturally, never by pulling the topic away.",
+  "When the talk is light and has no particular topic, members may bring up their own news, thoughts or stories.",
+];
 const NO_INVENTED_PAST =
   "Never invent shared memories, promises or past events with the user's character that aren't in <recent_chat>, <previous_calls> or what has been said so far.";
 // A language set by the user (for everyone or for this person) holds whatever the user writes.
@@ -376,9 +388,8 @@ export function callSystem({
         : "Reply to the latest line of the user's character in <call_transcript>, keeping continuity with the whole call.",
       "The character clearly knows this is a phone call. Write only what they say into the phone: no narration, actions, or lines for anyone else.",
       "Keep the reply brief and natural, like real speech on a call: usually one to three sentences. Don't repeat earlier lines.",
-      "Ask at most one question in a reply, and not in every reply; a reply can be just a reaction, an opinion, a joke or a short story. Don't interview the user's character.",
+      ...TALK_FLOW,
       OWN_VIEW,
-      FOLLOW_USER,
       NO_INVENTED_PAST,
       IN_CHARACTER,
       languageRule(language, fixedLanguage, "Speak"),
@@ -485,9 +496,8 @@ export function textSystem({
         : "Write the text the character sends the user's character now; it must have a believable reason, and <reason_to_send> suggests one.",
       "The character clearly knows they are texting: written messages on a phone, not talking face to face. Write only what they type: no narration, actions, or messages for anyone else.",
       "Text the way this character would: short messages, their own spelling and punctuation habits, emoticons or ㅋㅋ only if that is like them. Put separate texts on separate lines, at most three. Don't repeat earlier messages.",
-      "Ask at most one question, and not in every reply; a reply can be just a reaction or a comment. Don't interview the user's character.",
+      ...TALK_FLOW,
       OWN_VIEW,
-      FOLLOW_USER,
       NO_INVENTED_PAST,
       IN_CHARACTER,
       languageRule(language, fixedLanguage, "Write"),
@@ -570,13 +580,8 @@ export function groupTextSystem({
             "Not everyone answers every time. From each member's personality, their relationship with the user's character and with each other, and the situation, decide who would actually reply now: often one or two, sometimes more. Members may react to each other as well as to the user's character, and someone with nothing to say stays quiet. Usually at least one member answers the user's character.",
           ]),
       "Each member texts in their own way: short messages, their own spelling and punctuation habits, emoticons or ㅋㅋ only if that is like them. Keep members distinct; don't let them sound alike or all agree. A member's separate texts go on separate lines, at most three per message. Don't repeat earlier messages.",
-      withoutUser
-        ? ""
-        : "Ask at most one question in the whole round; a message can be just a reaction or a comment. Don't interview the user's character.",
+      ...(withoutUser ? [] : GROUP_TALK_FLOW),
       "React from each member's own point of view: they don't have to agree with or praise the user's character, and may disagree or tease when that is like them. Let personalities show through reactions and word choice instead of reciting profiles.",
-      withoutUser
-        ? ""
-        : "Members may take the lead and bring up things of their own, but when the user is steering toward something they want (a topic, a scene, where the story goes), follow it: don't change the subject or the context abruptly.",
       "Never invent shared memories, promises or past events that aren't in <recent_chat> or the thread.",
       "Stay in character in what they say as well as how: keep each member's usual way of talking and how openly they show feelings (the range in <members>). Don't make a reserved member gushing or dramatic.",
       "Each member writes in the language given for them in <members>, even when the user's character writes in another language.",

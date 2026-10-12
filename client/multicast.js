@@ -14,6 +14,7 @@ import { wavBlob, blobBase64 } from "./wav.js";
 // A phone line's sound-effect tag, and the tags ahead of its first word.
 const SOUND_TAG = /\[sfx:\s*([^\]]+)\]/gi;
 const leadingTags = (text) => /^(?:\s*\[[^\]]*\])*/.exec(text)[0].length;
+const wait = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
 
 const QUICK_ACTION = "scenevoice-phone";
 // MultiCast's temperaments and the emotional range each stands for (its own table).
@@ -106,6 +107,8 @@ export const multicast = {
    * The sound for a tag ("door slam"): { url, blob, loop } (loop: one of the user's 🔁 sounds
    * that runs quietly under the voice), or null when MultiCast has none. Kept per tag.
    */
+  // A step that never settles (a sound fetched or decoded on a phone) would keep the voice waiting
+  // forever; past this the line plays with its sounds around it instead.
   soundFor(tag) {
     const api = this.multicastApi();
     const key = String(tag || "").trim().toLowerCase();
@@ -115,7 +118,7 @@ export const multicast = {
       this.soundFiles.set(
         key,
         Promise.resolve()
-          .then(() => api.sfxAudio(`[${key}]`))
+          .then(() => Promise.race([api.sfxAudio(`[${key}]`), wait(8000).then(() => null)]))
           .then(async (answer) => {
             // A file, a same-origin URL, or { blob, loop }.
             const given = answer?.blob instanceof Blob ? answer.blob : answer;
@@ -191,7 +194,15 @@ export const multicast = {
     if (!sounds.length || !Offline) return null;
     const rate = 32000;
     const decoder = new Offline(1, 1, rate);
-    const decode = async (blob) => decoder.decodeAudioData(await blob.arrayBuffer());
+    const decode = async (blob) => {
+      const bytes = await blob.arrayBuffer();
+      const decoded = await Promise.race([
+        new Promise((resolve, reject) => decoder.decodeAudioData(bytes, resolve, reject)),
+        wait(8000),
+      ]);
+      if (!decoded) throw new Error("decoding took too long");
+      return decoded;
+    };
     const speech = await decode(voice);
     for (const sound of sounds) sound.buffer = await decode(sound.blob);
     // As MultiCast plays and saves them: a sound in turn waits its place (a short breath around
@@ -248,7 +259,7 @@ export const multicast = {
   async mixedLine(voice, script, generationId) {
     if (!generationId || !/\[sfx:/i.test(script || "") || !this.multicastSounds()) return null;
     try {
-      const mix = await this.mixLineSounds(voice, script);
+      const mix = await Promise.race([this.mixLineSounds(voice, script), wait(20000).then(() => null)]);
       if (!mix) return null;
       const response = await this.request("/api/plugins/scenevoice/audio/mix", {
         method: "POST",
@@ -341,8 +352,8 @@ export const multicast = {
   /**
    * MultiCast's cast as people (MultiCast에서 가져오기, and 자동 연동). A row of a bot card goes
    * under that card (its persona row as the card's persona), a shared row becomes a global person
-   * used everywhere (as in MultiCast), a group chat's row a global person used in that group's
-   * cards. Someone already here by the same name (in that card, or a global person used there)
+   * switched off until turned on in a bot card (이 봇 카드에서 사용), a group chat's row a global
+   * person used in that group's cards. Someone already here by the same name (in that card, or a global person used there)
    * is linked instead of doubled. Linked people follow MultiCast: its name, voice, gender, tags,
    * note and emotional range win where it sets them. A row gone from MultiCast takes the person
    * it made with it; someone registered here first is only unlinked.
@@ -463,7 +474,7 @@ export const multicast = {
       }
       if (row.isUser) entry.persona = true;
       if (fresh && where.card) entry.card = where.card;
-      if (fresh && where.cards) entry.use_cards = where.cards;
+      if (fresh && !where.card) entry.use_cards = where.cards || [];
       // The first row it was linked to stays its id.
       if (!entry.multicast_id) {
         entry.multicast_id = row.id;

@@ -2124,10 +2124,13 @@
   font-size: var(--sv-fs-xs);
 }
 
-/* ----- 14. 대화상자 (대사 편집 · 백업 복원) ----- */
+/* ----- 14. 대화상자 (대사 편집 · 백업 · 초기화) ----- */
 #sv-line-editor.sv-dialog,
+#sv-backup-dialog.sv-dialog,
 #sv-restore-dialog.sv-dialog,
-#sv-update-dialog.sv-dialog {
+#sv-reset-dialog.sv-dialog,
+#sv-update-dialog.sv-dialog,
+#sv-video-dialog.sv-dialog {
   z-index: 2147483620;
   width: min(560px, calc(100vw - 32px));
   max-width: none;
@@ -4865,7 +4868,7 @@
   flex-direction: column;
   gap: 6px;
 }
-.sv-reset-option {
+:is(.sv-reset-option, .sv-pick-option) {
   display: flex;
   align-items: flex-start;
   gap: 11px;
@@ -4874,28 +4877,71 @@
   border-radius: var(--sv-r-control);
   cursor: pointer;
 }
-.sv-reset-option:hover {
+:is(.sv-reset-option, .sv-pick-option):hover {
   background: var(--sv-soft);
 }
-.sv-reset-option:has(input:checked) {
+:is(.sv-reset-option, .sv-pick-option):has(input:checked) {
   border-color: var(--sv-brand-line);
   background: var(--sv-brand-soft);
 }
-.sv-reset-option > input {
+:is(.sv-reset-option, .sv-pick-option) > input {
   margin-top: 2px !important;
 }
-.sv-reset-option span {
+:is(.sv-reset-option, .sv-pick-option) span {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.sv-reset-option strong {
+:is(.sv-reset-option, .sv-pick-option) strong {
   font-size: var(--sv-fs-sm);
   font-weight: 600;
 }
-.sv-reset-option small {
+:is(.sv-reset-option, .sv-pick-option) small {
   color: var(--sv-muted);
   font-size: var(--sv-fs-xs);
+}
+
+/* 백업·복원: bot cards and kinds to choose. */
+.sv-pick {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sv-pick legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--sv-fs-sm);
+  font-weight: 700;
+}
+.sv-pick legend small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 400;
+}
+.sv-pick legend .sv-btn {
+  margin-left: auto;
+}
+.sv-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(340px, 45vh);
+  overflow-y: auto;
+}
+.sv-pick-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (max-width: 480px) {
+  .sv-pick-items {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ----- 20. 봇카드별 화자 ----- */
@@ -6931,14 +6977,43 @@ body:has(#sv-call-banner) #sv-now-reading {
   }
 }
 
+/* A tall window whatever the notes' length: the title and 확인 stay, the notes scroll;
+   the whole screen on phones. */
 #sv-update-dialog.sv-dialog {
-  width: min(460px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
+  height: min(760px, calc(100vh - 32px));
+  height: min(760px, calc(100dvh - 32px));
+  max-height: none;
+  overflow: hidden;
+}
+#sv-update-dialog.sv-dialog > form {
+  height: 100%;
 }
 .sv-update-notes {
   display: grid;
+  align-content: start;
   gap: 4px;
   font-size: var(--sv-fs-sm, 13px);
   line-height: 1.55;
+}
+#sv-update-dialog .sv-update-notes {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 600px) {
+  #sv-update-dialog.sv-dialog {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  #sv-update-dialog.sv-dialog > form {
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
 }
 .sv-update-notes h4 {
   margin: 8px 0 2px;
@@ -6962,4 +7037,82 @@ body:has(#sv-call-banner) #sv-now-reading {
 }
 .sv-update-notes .sv-update-version {
   color: var(--sv-muted);
+}
+
+#sv-video-dialog.sv-dialog {
+  width: min(380px, calc(100vw - 32px));
+}
+.sv-video-preview canvas {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 14px;
+}
+.sv-video-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--sv-soft);
+}
+.sv-video-bar > i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--sv-brand);
+  transition: width 0.3s linear;
+}
+
+#sv-smartphone .sv-call-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px;
+  border-radius: 17px;
+  background: var(--ph-glass);
+  color: #fff;
+}
+#sv-smartphone .sv-call-audio-actions .sv-call-versions button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 11px;
+}
+
+.sv-update-bubble {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+.sv-update-face {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  font-size: 13px;
+}
+.sv-update-bubble p {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--sv-soft);
+  color: var(--sv-fg);
+}
+.sv-update-highlight {
+  padding: 2px 12px 8px;
+  border-radius: 12px;
+  background: var(--sv-brand-soft);
+}
+.sv-update-highlight li {
+  font-weight: 600;
 }

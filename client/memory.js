@@ -29,33 +29,33 @@ export const memory = {
     return cleaned;
   },
 
+  /** The user's character, by name: a bare "USER" reads as the real person, not the persona. */
+  memoryUserName() {
+    return this.userCharacterName?.() || "User";
+  },
+
   formatCallMemoryText(session) {
     if (session?.call_direction === "overheard") return this.formatOverheardMemoryText(session);
-    const initiatedBy =
-      session?.call_direction === "incoming" ? "CHAR" : "USER";
     const outcome = FINAL_CALL_STATUSES.has(session?.status)
       ? session.status
       : "ended";
-    const characterName = this.memoryAttribute(
-      session?.character_name || this.getStateIdentity().characterName,
-    );
-    const fallbackContext =
-      initiatedBy === "CHAR"
-        ? "character_initiated_call"
-        : "user_initiated_call";
-    const contextLine = this.memoryContext(session?.situation, fallbackContext);
+    const name = session?.character_name || this.getStateIdentity().characterName;
+    const me = this.memoryUserName();
+    const [caller, callee] = session?.call_direction === "incoming" ? [name, me] : [me, name];
+    const characterName = this.memoryAttribute(name);
+    const contextLine = this.memoryContext(session?.situation, `${caller} called ${callee}`);
     // With real-time awareness, the call keeps when it happened.
     const time = this.realtimeFor(session?.character_key)
       ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at))}"`
       : "";
     const lines = [
-      `<CALL character="${characterName}" initiated_by="${initiatedBy}" outcome="${outcome}"${time}>`,
+      `<CALL character="${characterName}" initiated_by="${this.memoryAttribute(caller)}" outcome="${outcome}"${time}>`,
       `Context: ${contextLine}`,
     ];
     for (const turn of Array.isArray(session?.turns) ? session.turns : []) {
       const text = String(turn?.text || "").trim();
       if (!text) continue;
-      lines.push(`${turn.role === "user" ? "USER" : turn.voicemail ? "CHAR (voicemail)" : "CHAR"}: ${text}`);
+      lines.push(`${turn.role === "user" ? me : turn.voicemail ? `${name} (voicemail)` : name}: ${text}`);
     }
     lines.push("</CALL>");
     return lines.join("\n");
@@ -69,7 +69,7 @@ export const memory = {
       : "";
     const lines = [
       `<CALL between="${names.join(", ")}" caller="${names[0]}" user_present="false"${time}>`,
-      "(USER was not on this call, didn't hear it and doesn't know it happened.)",
+      `(${this.memoryUserName()} was not on this call, didn't hear it and doesn't know it happened.)`,
       `Context: ${this.memoryContext(session?.situation, "a call between them")}`,
     ];
     for (const turn of Array.isArray(session?.turns) ? session.turns : []) {
@@ -81,9 +81,8 @@ export const memory = {
   },
 
   formatVoiceMessageMemoryText(item) {
-    const characterName = this.memoryAttribute(
-      item?.character_name || this.getStateIdentity().characterName,
-    );
+    const name = item?.character_name || this.getStateIdentity().characterName;
+    const characterName = this.memoryAttribute(name);
     const contextLine = this.memoryContext(
       item?.reason,
       "asynchronous_personal_message",
@@ -92,9 +91,9 @@ export const memory = {
       ? ` time="${this.memoryAttribute(this.realTimeLabel(item?.created_at))}"`
       : "";
     return [
-      `<VOICE_MESSAGE character="${characterName}" sender="CHAR"${time}>`,
+      `<VOICE_MESSAGE character="${characterName}"${time}>`,
       `Context: ${contextLine}`,
-      `CHAR: ${String(item?.text || "").trim()}`,
+      `${name}: ${String(item?.text || "").trim()}`,
       "</VOICE_MESSAGE>",
     ].join("\n");
   },
@@ -167,11 +166,11 @@ export const memory = {
   },
 
   /**
-   * `members` (a group's people) names each sender; a one-to-one thread says CHAR. `alone`: a
-   * group the user isn't in (they never saw it). `left`: the user left the group, and that is
-   * its last line.
+   * `members`: a group's people. `alone`: a group the user isn't in (they never saw it). `left`:
+   * the user left the group, and that is its last line.
    */
   formatTextThreadMemoryText(name, items, members = null, timed = false, { alone = false, left = false } = {}) {
+    const me = this.memoryUserName();
     const lines = items.map((item) => {
       // With real-time awareness each text keeps when it was sent.
       const text = `${timed ? `(${this.realTimeLabel(item.created_at)}) ` : ""}${String(item.text || "")
@@ -179,8 +178,8 @@ export const memory = {
         .map((line) => line.trim())
         .filter(Boolean)
         .join(" / ")}`;
-      if (item.role === "user") return `USER: ${text}`;
-      const who = members ? item.character_name || "?" : "CHAR";
+      if (item.role === "user") return `${me}: ${text}`;
+      const who = members ? item.character_name || "?" : name;
       return (item.kind || "voice") === "voice"
         ? `${who} (voice message): ${text}`
         : `${who}: ${text}`;
@@ -190,9 +189,9 @@ export const memory = {
       : `<TEXT_MESSAGES character="${this.memoryAttribute(name)}">`;
     return [
       open,
-      ...(alone ? ["(USER is not in this group chat and has not seen it.)"] : []),
+      ...(alone ? [`(${me} is not in this group chat and has not seen it.)`] : []),
       ...lines,
-      ...(left ? ["(USER left the group chat.)"] : []),
+      ...(left ? [`(${me} left the group chat.)`] : []),
       "</TEXT_MESSAGES>",
     ].join("\n");
   },

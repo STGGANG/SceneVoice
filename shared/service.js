@@ -57,6 +57,7 @@ const VERSION_FIELDS = [
   "audio_filtered",
   "sounds_mixed",
   "edited_at",
+  "should_end",
 ];
 const MAX_VERSIONS = 10;
 // Set aside for at most 10 minutes: if the page was closed before a new answer came, it shows again.
@@ -180,7 +181,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.0.5",
+          version: "1.1.0",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
@@ -243,7 +244,7 @@ export class SceneService {
     if (path.startsWith("/favorites/") || path.startsWith("/history/")) {
       return {
         json: await this.queue.run(
-          () => this.mediaMutation(method, path),
+          () => this.mediaMutation(method, path, body),
           signal,
         ),
       };
@@ -870,6 +871,43 @@ export class SceneService {
       data.sessions = data.sessions.filter((x) => x.id !== session.id);
       return { status: "success" };
     }
+    // 답변 재생성 on a call: the new answer takes the last line's place and the earlier ones stay
+    // as versions to page through (‹ 1/2 ›); `version` shows another one.
+    const callAnswer = path.match(/^\/phone\/turns\/([^/]+)\/(answer|version)$/);
+    if (callAnswer && method === "PUT") {
+      const session = data.sessions.find((s) => s.turns.some((x) => x.id === callAnswer[1]));
+      if (!session) throw new UserError("기록을 찾을 수 없습니다.", 404);
+      checkChat(session, body);
+      const turn = session.turns.at(-1);
+      if (session.status !== "active" || turn?.id !== callAnswer[1] || turn.role !== "character")
+        throw new UserError("진행 중인 통화의 마지막 대사만 바꿀 수 있습니다.", 409);
+      const list = Array.isArray(turn.versions) && turn.versions.length ? turn.versions : [versionOf(turn)];
+      list[Number.isInteger(turn.version) ? turn.version : list.length - 1] = versionOf(turn);
+      let index = Number(body.index);
+      if (callAnswer[2] === "answer") {
+        const speech = normalizeSpeech(body);
+        if (!speech.text) throw new UserError("대사가 비어 있습니다.");
+        list.push({
+          text: speech.text,
+          script: speech.script,
+          translation: text(body.translation, 5000),
+          tags: speech.tags,
+          emotion: speech.emotion,
+          direction: speech.direction,
+          language: speech.language,
+          intensity: speech.intensity,
+          should_end: Boolean(body.should_end),
+        });
+        while (list.length > MAX_VERSIONS) list.shift();
+        index = list.length - 1;
+      } else if (!Number.isInteger(index) || index < 0 || index >= list.length)
+        throw new UserError("그 답을 찾을 수 없습니다.", 404);
+      for (const field of VERSION_FIELDS) delete turn[field];
+      Object.assign(turn, list[index]);
+      turn.versions = list;
+      turn.version = index;
+      return { status: "success", session: sessionItem(session) };
+    }
     // The last line of an active call is taken back to be written again.
     const removeTurn = path.match(/^\/phone\/turns\/([^/]+)$/);
     if (removeTurn && method === "DELETE") {
@@ -1163,7 +1201,7 @@ export class SceneService {
       ...(await this.stats(files.filter((file) => !remove.has(file.name)))),
     };
   }
-  async mediaMutation(method, path) {
+  async mediaMutation(method, path, body = {}) {
     const id = path.split("/")[2],
       data = await this.store.read();
     if (path.startsWith("/favorites/") && method === "POST") {
@@ -1192,6 +1230,23 @@ export class SceneService {
         db.favorites = db.favorites.filter((x) => x.id !== id);
       });
       return { status: "success" };
+    }
+    // 기록 → 화자 하나의 음성 모두 지우기 (a file another speaker's record still uses stays).
+    if (path === "/history/speaker" && method === "POST") {
+      const key = String(body?.speaker_key || "");
+      if (!key) throw new UserError("지울 화자를 골라 주세요.");
+      const ids = new Set(data.generations.filter((x) => (x.speaker_key || "") === key).map((x) => x.id));
+      const files = new Set(
+        data.generations
+          .filter((x) => ids.has(x.id) && x.audio_filename)
+          .map((x) => x.audio_filename)
+          .filter((name) => !data.generations.some((x) => !ids.has(x.id) && x.audio_filename === name)),
+      );
+      if (files.size) await this.removeFiles(files);
+      await this.store.transaction((db) => {
+        db.generations = db.generations.filter((x) => !ids.has(x.id));
+      });
+      return { status: "success", removed: ids.size };
     }
     if (path.startsWith("/history/") && method === "DELETE") {
       const item = find(data.generations, id);

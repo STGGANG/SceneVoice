@@ -140,8 +140,8 @@ export function cardHoldsPerson(entry = {}, note = "") {
 }
 /**
  * Whether a global person takes part in this bot card: switched on for it, or used in every card
- * (no list, e.g. a shared person brought in from MultiCast). A persona the same way: switched on
- * for a card, it is the voice of my own messages there.
+ * (no list: people kept from before, when a shared MultiCast person came in that way). A persona
+ * the same way: switched on for a card, it is the voice of my own messages there.
  */
 export function globalUsedIn(entry = {}, cardKey = "") {
   return !Array.isArray(entry.use_cards) || entry.use_cards.includes(cardKey);

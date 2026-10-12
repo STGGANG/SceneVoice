@@ -137,16 +137,6 @@ export const shell = {
     launcher.style.bottom = "auto";
   },
 
-  resetLauncherSpot() {
-    this.launcherSpotHere = null;
-    try {
-      localStorage.removeItem(LAUNCHER_SPOT_KEY);
-    } catch {
-      /* storage blocked */
-    }
-    this.placeLauncher();
-  },
-
   /** A press that moves over 8px drags the button; let go, it settles on the nearer side. */
   enableLauncherDragging(launcher) {
     let press = null;

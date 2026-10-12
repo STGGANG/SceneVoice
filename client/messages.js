@@ -800,7 +800,7 @@ export const messages = {
               candidate: {
                 type: "incoming_call",
                 urgency: "high",
-                reason: `They texted USER that they would call right away, and now call. Their text: ${String(text).replace(/\s+/g, " ").slice(0, 300)}`,
+                reason: `They texted ${this.userCharacterName()} that they would call right away, and now call. Their text: ${String(text).replace(/\s+/g, " ").slice(0, 300)}`,
               },
               callerKey: character.key,
               caller: character.name,

@@ -349,10 +349,7 @@ export const panel = {
             </div>
           </div>
         </div>
-        <div class="sv-row">
-          ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
-          ${fieldHtml({ id: "sv-launcher-reset", label: "플로팅 버튼 위치", control: '<button type="button" id="sv-launcher-reset" class="sv-btn sv-btn-sm"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>처음 자리로</span></button>', hint: "버튼을 끌어서 옮길 수 있어요. 기기마다 따로 기억합니다." })}
-        </div>
+        ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
         ${divider}
         <div class="sv-row">
           ${fieldHtml({ id: "sv-phone-profile", label: "연결 프로필", control: profileSelect("sv-phone-profile", config.phone?.connection_profile_id, "보조모델 분석과 같게") })}
@@ -491,9 +488,8 @@ export const panel = {
                         <div class="sv-menu" id="sv-more-menu" role="menu" hidden>
                             <button type="button" role="menuitem" data-sv-action="update-notes"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i><span>업데이트 내역<small>최근에 바뀐 점</small></span></button>
                             <hr>
-                            <button type="button" role="menuitem" data-sv-action="backup-zip"><i class="fa-solid fa-file-zipper" aria-hidden="true"></i><span>전체 백업<small>목록·설정·음성 파일 zip</small></span></button>
-                            <button type="button" role="menuitem" data-sv-action="backup-json"><i class="fa-solid fa-file-code" aria-hidden="true"></i><span>목록·설정만 백업<small>음성 없이 JSON</small></span></button>
-                            <label role="menuitem" class="sv-menu-file" tabindex="0"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><span>백업 파일로 복원<small>zip 또는 JSON</small></span><input type="file" id="sv-import-catalog" accept=".json,.zip,application/json,application/zip"></label>
+                            <button type="button" role="menuitem" data-sv-action="backup"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i><span>백업 파일 저장<small>봇카드·항목을 골라서</small></span></button>
+                            <label role="menuitem" class="sv-menu-file" tabindex="0"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><span>백업 파일 복원<small>zip 또는 JSON</small></span><input type="file" id="sv-import-catalog" accept=".json,.zip,application/json,application/zip"></label>
                             <hr>
                             <button type="button" role="menuitem" data-sv-action="reset-settings"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>설정 초기화…</span></button>
                             <button type="button" role="menuitem" data-sv-action="reset-data"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>데이터 초기화…</span></button>
@@ -794,10 +790,6 @@ export const panel = {
     document
       .getElementById("sv-engine-check")
       ?.addEventListener("click", () => this.checkEngineConnection());
-    document.getElementById("sv-launcher-reset")?.addEventListener("click", () => {
-      this.resetLauncherSpot();
-      this.notify("플로팅 버튼을 처음 자리로 돌렸습니다.", "info");
-    });
     document
       .getElementById("sv-load-voices")
       ?.addEventListener("click", () =>

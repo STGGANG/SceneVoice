@@ -1,27 +1,38 @@
-// 업데이트 안내: shown once per version (until 확인), and again from ⋯ → 업데이트 내역.
+// 업데이트 안내: shown once, and again only when the notes themselves change; ⋯ → 업데이트 내역
+// shows them any time.
 import { escapeHtml } from "./common.js";
 
 const SEEN_KEY = "scenevoice_seen_update";
 
-// Newest first. Short and plain: what a user notices, not how it works.
+// Newest first. Short and plain: what a user notices, not how it works. `bubble`: a line said
+// on top; `highlight`: [title, lines] in a tinted box under it.
 export const UPDATE_NOTES = [
   {
-    version: "1.0.5",
+    version: "1.1.0",
+    bubble: "제작자가 몇가지 업데이트를 깜빡했다네요… 슬쩍 추가했습니다.",
+    highlight: [
+      "기타 안내",
+      ["스마트폰 관련 프롬프트는 보완 및 테스트 중으로, 유의미한 변경이 있으면 추가 안내하겠습니다."],
+    ],
     sections: [
       [
         "새로 생긴 것",
         [
+          "백업을 봇카드·항목별로 골라서 저장하고, 복원할 때도 골라서 불러오기 (⋯ 메뉴)",
           "통화·문자방 음성을 파일 하나로 내려받기 (통화 기록의 ‘내려받기’, 문자방 위 다운로드 버튼)",
+          "통화를 영상으로 내려받기 (통화 기록의 ‘영상’ 버튼)",
           "내가 보낸 문자도 ✏로 고치기",
           "대필이 다른 언어면 한국어 번역을 입력칸 아래에 함께 보여 주기",
-          "폰 플로팅 버튼을 끌어서 옮기기 (설정 → 스마트폰에서 ‘처음 자리로’)",
+          "폰 플로팅 버튼을 끌어서 옮기기",
           "엿듣는 통화 길이 고르기: 짧게 · 보통 · 길게",
+          "통화 답변을 다시 받아도 이전 답은 남기기 (‹ › 로 넘겨 보기)",
+          "기록 탭에서 한 화자의 기록 모두 지우기",
+          "목소리 하나로 통일한 봇카드도 언어·먼저 연락하는 빈도·상태 분석 제외 정하기",
         ],
       ],
       [
         "좋아진 것",
         [
-          "스마트폰 프롬프트 보완",
           "통화 중 입력할 때 렉을 줄이고 폰 전체를 가볍게 (특히 모바일)",
           "수화기 필터를 덜 먹먹하게",
         ],
@@ -30,29 +41,43 @@ export const UPDATE_NOTES = [
         "고친 것",
         [
           "통화를 끊지 않고 나갔다 오면 뜬금없는 답이 붙던 문제",
+          "아이폰에서 대사를 고친 뒤 음성이 로딩만 하고 재생되지 않던 문제",
         ],
       ],
     ],
   },
 ];
 
+/** Changes with the newest notes' wording, not with the version number. */
+export function updateNotesKey() {
+  const text = JSON.stringify(UPDATE_NOTES[0] || "");
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
+  return `${UPDATE_NOTES[0]?.version || ""}-${hash.toString(36)}`;
+}
+
+const listHtml = (lines) => `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
 const notesHtml = (entry) =>
-  entry.sections
-    .map(([title, lines]) => `<h4>${escapeHtml(title)}</h4><ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`)
-    .join("");
+  (entry.bubble
+    ? `<div class="sv-update-bubble"><span class="sv-update-face" aria-hidden="true"><i class="fa-solid fa-microphone-lines"></i></span><p>${escapeHtml(entry.bubble)}</p></div>`
+    : "") +
+  (entry.highlight?.[1]?.length
+    ? `<div class="sv-update-highlight"><h4>${escapeHtml(entry.highlight[0])}</h4>${listHtml(entry.highlight[1])}</div>`
+    : "") +
+  entry.sections.map(([title, lines]) => `<h4>${escapeHtml(title)}</h4>${listHtml(lines)}`).join("");
 
 export const updates = {
   /** `force`: from the ⋯ menu, even when this version was already seen. */
   showUpdateNotes({ force = false } = {}) {
     const [latest, ...older] = UPDATE_NOTES;
     if (!latest || document.getElementById("sv-update-dialog")) return;
-    let seen = "";
+    const key = updateNotesKey();
     try {
-      seen = localStorage.getItem(SEEN_KEY) || "";
+      if (!force && localStorage.getItem(SEEN_KEY) === key) return;
+      localStorage.setItem(SEEN_KEY, key);
     } catch {
-      /* storage blocked: shown each time */
+      /* storage blocked */
     }
-    if (!force && seen === latest.version) return;
     const dialog = document.createElement("dialog");
     dialog.id = "sv-update-dialog";
     dialog.className = "sv-dialog";
@@ -69,15 +94,7 @@ export const updates = {
       <footer class="sv-dialog-actions"><button type="submit" class="sv-btn sv-btn-primary" value="ok">확인</button></footer>
     </form>`;
     document.body.append(dialog);
-    dialog.addEventListener("close", () => {
-      if (dialog.returnValue === "ok")
-        try {
-          localStorage.setItem(SEEN_KEY, latest.version);
-        } catch {
-          /* storage blocked */
-        }
-      dialog.remove();
-    });
+    dialog.addEventListener("close", () => dialog.remove());
     dialog.showModal();
   },
 };

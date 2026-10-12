@@ -252,7 +252,7 @@ export const callHistory = {
                     <div><h3>${name}</h3><small>${escapeHtml(this.formatDate(session.started_at))} · ${this.callStatusLabel(session)}${away ? ` · ${escapeHtml(this.awayPointLabel(session))}` : ""}</small></div>
                     ${live ? "" : '<button type="button" class="sv-call-history-delete sv-detail-delete" aria-label="이 통화 기록 삭제" title="이 기록 삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>'}
                 </div>
-                ${live || !turns.length ? "" : `<div class="sv-call-aloud-row"><button type="button" class="sv-call-aloud" data-call-download title="내려받기: 통화 전체를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i><span>내려받기</span></button>${this.callAloudButton(playing, turns.length)}</div>`}
+                ${live || !turns.length ? "" : `<div class="sv-call-aloud-row">${this.downloadCallVideo && this.canMakeCallVideo() ? '<button type="button" class="sv-call-aloud" data-call-video title="영상으로: 통화 화면과 소리를 영상 파일로 만들어 내려받기 (통화 길이만큼 걸려요)"><i class="fa-solid fa-film" aria-hidden="true"></i><span>영상</span></button>' : ""}<button type="button" class="sv-call-aloud" data-call-download title="내려받기: 통화 전체를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i><span>내려받기</span></button>${this.callAloudButton(playing, turns.length)}</div>`}
                 <div class="sv-call-transcript sv-history-transcript">
                     ${turns.length ? "" : '<p class="sv-transcript-empty">주고받은 대사가 없습니다.</p>'}
                     ${turns
@@ -287,6 +287,10 @@ export const callHistory = {
     save?.addEventListener("click", () =>
       this.run(() => this.withBusyButton(save, () => this.downloadCall(body, session, away))),
     );
+    const film = body.querySelector("[data-call-video]");
+    film?.addEventListener("click", () =>
+      this.run(() => this.withBusyButton(film, () => this.downloadCallVideo(body, session, away))),
+    );
     body.querySelectorAll(".sv-call-replay").forEach((button) =>
       button.addEventListener("click", () =>
         this.run(() => this.playHistoryTurn(body, session, turns[Number(button.dataset.turn)], button, away)),
@@ -294,42 +298,60 @@ export const callHistory = {
     );
   },
 
-  /** 내려받기. Lines without a voice are made only if the user agrees (voice credits). */
-  async downloadCall(body, session, away = false) {
+  /**
+   * A past call's voices in order (mine only with a persona voice). Lines without one are made
+   * only if the user agrees (voice credits), asked apart for the character's and mine;
+   * `onStep(done, total)` follows the work. `captions` (the video): my lines without a voice
+   * still come, as silent clips that only show their words.
+   */
+  async callClips(session, onStep = () => {}, { captions = false } = {}) {
     let current = session;
-    const turns = (session.turns || []).filter((turn) => turn.role !== "user" || this.personaVoiceReady());
-    const missing = turns.filter((turn) => !turn.audio_url).length;
-    const make =
-      missing > 0 &&
-      confirm(`목소리가 아직 없는 대사가 ${missing}개 있어요. 만들어서 함께 넣을까요?\n취소하면 지금 있는 목소리만 내려받아요.`);
+    const voiced = this.personaVoiceReady();
+    const turns = (session.turns || []).filter((turn) => turn.role !== "user" || voiced || (captions && turn.text));
+    const lacking = (mine) => turns.filter((turn) => !turn.audio_url && (turn.role === "user") === mine).length;
+    const theirs = lacking(false);
+    const mine = voiced ? lacking(true) : 0;
+    const makeTheirs =
+      theirs > 0 &&
+      confirm(`캐릭터 대사 ${theirs}개는 아직 목소리가 없어요. 만들어서 함께 넣을까요?\n취소하면 그 대사는 빠져요.`);
+    const makeMine =
+      mine > 0 &&
+      confirm(
+        `내 대사 ${mine}개는 아직 목소리가 없어요. 페르소나 목소리로 만들어서 함께 넣을까요?\n취소하면 ${captions ? "영상에는 글자로만 나와요." : "내 대사는 빠져요."}`,
+      );
     const clips = [];
-    try {
-      for (const turn of turns) {
-        let url = turn.audio_url ? this.apiUrl(turn.audio_url) : "";
-        let revoke = false;
-        if (!url && make) {
-          const made = await this.makePhoneTurnAudio(current, turn).catch(() => null);
-          if (made?.session) current = made.session;
-          url = made?.audioUrl || "";
-          revoke = Boolean(url);
-        }
-        if (url)
-          clips.push({
-            url,
-            revoke,
-            filter: this.shouldApplyCommunicationFilter("phone", turn),
-          });
+    for (const [index, turn] of turns.entries()) {
+      onStep(index, turns.length);
+      let url = turn.audio_url ? this.apiUrl(turn.audio_url) : "";
+      let revoke = false;
+      if (!url && (turn.role === "user" ? makeMine : makeTheirs)) {
+        const made = await this.makePhoneTurnAudio(current, turn).catch(() => null);
+        if (made?.session) current = made.session;
+        url = made?.audioUrl || "";
+        revoke = Boolean(url);
       }
+      if (url) clips.push({ url, revoke, turn, filter: this.shouldApplyCommunicationFilter("phone", turn) });
+      else if (captions && turn.role === "user" && turn.text) clips.push({ silent: true, turn });
+    }
+    return { clips, current, left: turns.length - clips.length };
+  },
+
+  callFileName(session) {
+    const who =
+      session.call_direction === "overheard"
+        ? `${session.character_name}-${session.callee_name}`
+        : session.character_name || "통화";
+    return `${who}-통화-${this.fileStamp(session.started_at)}`;
+  },
+
+  async downloadCall(body, session, away = false) {
+    const { clips, current, left } = await this.callClips(session);
+    try {
       if (!clips.length) throw new Error("내려받을 음성이 없습니다.");
-      const who =
-        session.call_direction === "overheard"
-          ? `${session.character_name}-${session.callee_name}`
-          : session.character_name || "통화";
-      await this.downloadJoinedAudio(clips, `${who}-통화-${this.fileStamp(session.started_at)}`);
+      await this.downloadJoinedAudio(clips, this.callFileName(session));
     } finally {
       for (const clip of clips) if (clip.revoke) URL.revokeObjectURL(clip.url);
     }
-    const left = turns.length - clips.length;
     if (left) this.notify(`목소리가 없는 대사 ${left}개는 빠졌습니다.`, "info");
     if (current !== session && body.isConnected) this.renderPhoneHistoryDetail(body, current, away);
   },

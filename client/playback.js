@@ -107,18 +107,21 @@ export const playback = {
       length += mono.length;
     }
     close();
-    const safe = String(name).replace(/[\\/:*?"<>|]+/g, "").trim() || "scenevoice";
     for (const [index, blob] of files.entries()) {
       if (index) await new Promise((resolve) => setTimeout(resolve, 600));
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = files.length > 1 ? `${safe}-${index + 1}.wav` : `${safe}.wav`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+      this.saveFile(blob, files.length > 1 ? `${name}-${index + 1}.wav` : `${name}.wav`);
     }
     return files.length;
+  },
+
+  saveFile(blob, name) {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = String(name).replace(/[\\/:*?"<>|]+/g, "").trim() || "scenevoice";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
   },
 
   /**
@@ -309,10 +312,11 @@ export const playback = {
       this.notify("오디오를 재생할 수 없습니다.", "error");
       finished();
     };
-    // A phone may leave the context "interrupted" (another app, a tab switch), not just suspended.
+    // A phone may leave the context "interrupted" (another app, a tab switch), not just suspended,
+    // and its resume() may never settle outside a tap: playing is tried after a moment anyway.
     const resume =
       audioContext && audioContext.state !== "running"
-        ? audioContext.resume()
+        ? Promise.race([audioContext.resume(), new Promise((resolve) => setTimeout(resolve, 1500))])
         : Promise.resolve();
     Promise.resolve(resume)
       .then(() => {

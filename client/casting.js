@@ -245,6 +245,10 @@ export const casting = {
       </div>`;
   },
 
+  castNoStateCheck(entry) {
+    return `<label class="sv-check"><input type="checkbox" data-field="no_state" ${entry.no_state ? "checked" : ""}><span>상태 분석에서 제외 (먼저 전화·문자 X)</span>${infoTip("이 인물의 상태를 추적하지 않고, 먼저 전화·문자를 보내지도 않습니다. 내가 거는 건 가능합니다.", "상태 분석 제외 설명")}</label>`;
+  },
+
   castRateField(id, entry) {
     const rate = Number.isFinite(Number(entry.contact_rate)) ? Number(entry.contact_rate) : 50;
     const choices = [
@@ -335,7 +339,7 @@ export const casting = {
         <hr class="sv-divider">
         <div class="sv-member-foot">
           <span class="sv-member-checks">
-            ${entry.persona ? "" : `<label class="sv-check"><input type="checkbox" data-field="no_state" ${entry.no_state ? "checked" : ""}><span>상태 분석에서 제외 (먼저 전화·문자 X)</span>${infoTip("이 인물의 상태를 추적하지 않고, 먼저 전화·문자를 보내지도 않습니다. 내가 거는 건 가능합니다.", "상태 분석 제외 설명")}</label>`}
+            ${entry.persona ? "" : this.castNoStateCheck(entry)}
             <label class="sv-check sv-chat-only"><input type="checkbox" data-field="skip_voice" ${entry.skip_voice ? "checked" : ""}><span>음성 준비·이어 듣기에서 건너뛰기</span>${infoTip("메시지의 ‘음성 준비’와 이어 듣기에서 이 인물의 대사를 빼고 만듭니다. 재생 버튼을 직접 누르면 만들 수 있습니다.", "음성 준비 건너뛰기 설명")}</label>
             <label class="sv-check sv-chat-only"><input type="checkbox" data-field="hide_button" ${entry.hide_button ? "checked" : ""}><span>대사 옆 버튼 숨기기</span>${infoTip("이 인물의 대사 옆 버튼을 숨깁니다. 화자가 정해진 뒤부터 숨겨지고, 음성 준비·이어 듣기에서도 빠집니다.", "대사 옆 버튼 숨기기 설명")}</label>
           </span>
@@ -393,8 +397,10 @@ export const casting = {
     const adopt = `<button type="button" class="sv-btn sv-btn-sm" data-cast-adopt><i class="fa-solid fa-user-plus" aria-hidden="true"></i><span>‘${escapeHtml(name)}’ 인물로 추가</span></button>`;
     // The one voice of a card set to one voice.
     const ownVoice = `${this.castVoiceFields("sv-cast", entry)}
-        <div class="sv-row">${this.castRangeField("sv-cast-range", entry)}</div>
-        ${fieldHtml({ id: "sv-cast-note", label: "말투·연기 메모", tip: "보조모델이 이 화자의 대사를 분석할 때 참고합니다. 소리 내어 읽지 않습니다.", control: `<textarea id="sv-cast-note" data-field="note" rows="3" maxlength="4000" placeholder="이 인물의 말투·억양·감정 표현 습관&#10;예: 감정 표현이 크지 않다. 화가 나도 고함보다 단호하고 침착한 목소리로 말한다.">${escapeHtml(this.noteDraft[ownerKey] || "")}</textarea>` })}`;
+        ${fieldHtml({ id: "sv-cast-note", label: "말투·연기 메모", tip: "보조모델이 이 화자의 대사를 분석할 때 참고합니다. 소리 내어 읽지 않습니다.", control: `<textarea id="sv-cast-note" data-field="note" rows="3" maxlength="4000" placeholder="이 인물의 말투·억양·감정 표현 습관&#10;예: 감정 표현이 크지 않다. 화가 나도 고함보다 단호하고 침착한 목소리로 말한다.">${escapeHtml(this.noteDraft[ownerKey] || "")}</textarea>` })}
+        <div class="sv-row">${this.castRangeField("sv-cast-range", entry)}${this.castLanguageField("sv-cast-language", entry)}</div>
+        <div class="sv-row">${this.castRateField("sv-cast-rate", entry)}</div>
+        <div class="sv-member-checks">${this.castNoStateCheck(entry)}</div>`;
     panel.innerHTML = `
       <div class="sv-cast-card" data-key="${escapeHtml(ownerKey)}">
         <div class="sv-cast-head">
@@ -402,7 +408,7 @@ export const casting = {
           <div class="sv-cast-title"><strong>${escapeHtml(name)}</strong><small>봇카드 공통 설정</small></div>
         </div>
         ${switchHtml({ id: "sv-cast-realtime", label: "실제 시간 인식 (전화·문자)", hint: "켜면 이 봇카드의 인물들이 전화·문자에서 지금 날짜와 시각을 압니다.", tip: "밤늦은 시간, 주말, 메시지 사이에 흐른 시간처럼 실제 시각을 대화에 자연스럽게 반영합니다. 통화·문자 기록에도 시각이 남습니다.", checked: entry.realtime === true, attrs: 'data-field="realtime"' })}
-        ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고 (전화·문자)", hint: "고른 월드인포 항목을 통화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다. 상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 통화·문자에 나올 때만 보냅니다. 이상한 지시가 든 항목은 꺼 두세요. 대필에도 씁니다.", checked: loreOn })}
+        ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고 (전화·문자)", hint: "고른 월드인포 항목을 통화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다. 상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 통화·문자에 나올 때만 보냅니다. 형식이나 문체를 바꾸는 지시가 든 항목은 가급적 꺼 두세요. 대필에도 씁니다.", checked: loreOn })}
         <details class="sv-lore-fold" ${loreOn ? "" : "hidden"}><summary><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>참고할 월드인포 고르기</span><i class="fa-solid fa-chevron-down sv-lore-chevron" aria-hidden="true"></i></summary><div id="sv-lore-picker" class="sv-lore-picker"></div></details>
         ${switchHtml({ id: "sv-cast-single", label: "이 봇카드는 목소리 하나로 통일", hint: "켜면 등장인물을 구분하지 않고 이 봇카드의 모든 대사를 아래 목소리로 읽습니다.", checked: single })}
         ${single ? `<hr class="sv-divider">${ownVoice}` : ""}

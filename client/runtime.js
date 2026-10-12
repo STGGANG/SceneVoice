@@ -373,6 +373,7 @@ export const runtime = {
       "sv-smartphone",
       "sv-overlay",
       "sv-restore-dialog",
+      "sv-backup-dialog",
       "sv-extension-menu-item",
       "sv-phone-menu-item",
       "sv-extension-settings-block",

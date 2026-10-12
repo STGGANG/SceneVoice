@@ -32,6 +32,7 @@ import { voicePicker } from "./voice-picker.js";
 import { multicast } from "./multicast.js";
 import { publicApi } from "./public-api.js";
 import { updates } from "./updates.js";
+import { callVideo } from "./call-video.js";
 
 export const SceneVoice = {
   connectionService: null,
@@ -95,6 +96,7 @@ export const SceneVoice = {
   ...multicast,
   ...publicApi,
   ...updates,
+  ...callVideo,
   ...casting,
   ...shell,
   ...calls,

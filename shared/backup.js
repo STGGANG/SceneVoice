@@ -25,8 +25,12 @@ export function validateBackup(input) {
   const rows = (items) => {
     for (const item of items) {
       if (!object(item) || typeof item.id !== "string") fail();
-      if (item.audio_filename && !validAudioName(item.audio_filename)) fail();
-      delete item.audio_url;
+      if (item.versions !== undefined && !Array.isArray(item.versions)) fail();
+      for (const version of [item, ...(item.versions || [])]) {
+        if (!object(version)) fail();
+        if (version.audio_filename && !validAudioName(version.audio_filename)) fail();
+        delete version.audio_url;
+      }
     }
     return items;
   };

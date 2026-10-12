@@ -1,6 +1,7 @@
 // Storage on 실리태번's own file API: the shared records (split into a few JSON files, each
 // with change detection and one backup) and the audio files.
 import { validateBackup } from "../shared/backup.js";
+import { BACKUP_ITEMS, applyBackup, audioHolders, backupContents, pickBackup, wholeChoice } from "../shared/backup-scope.js";
 import { BrowserStore } from "./browser-store.js";
 import {
   emptyDatabase,
@@ -283,10 +284,15 @@ export class STFileStore {
       (row) => validAudioName(row.name) && !row.name.startsWith("fav_"),
     );
   }
-  async exportCatalog() {
+  /** Everything, or with `choice` ({common, scopes, items}) only those, marked in `contents`. */
+  async exportCatalog(choice = null) {
+    const data = await this.loadShared();
     return {
       format: "scenevoice-catalog-v2",
-      data: await this.loadShared(),
+      data: choice ? pickBackup(data, choice) : data,
+      ...(choice
+        ? { contents: { common: Boolean(choice.common), scopes: [...choice.scopes], items: [...choice.items] } }
+        : {}),
       created_at: new Date().toISOString(),
     };
   }
@@ -296,12 +302,7 @@ export class STFileStore {
     const names = [
       ...new Set([
         ...Object.keys(data.audioFiles),
-        ...[
-          ...data.generations,
-          ...data.favorites,
-          ...data.messages,
-          ...data.sessions.flatMap((s) => s.turns),
-        ]
+        ...audioHolders(data)
           .map((row) => row.audio_filename)
           .filter(Boolean),
       ]),
@@ -323,20 +324,28 @@ export class STFileStore {
       for (const name of batch)
         if (found[this.nativePath(name)] !== true) missing.push(name);
     }
-    return { data, revision: current.revision, missing };
+    return { data, revision: current.revision, missing, contents: backupContents(input, data) };
   }
-  async restoreCatalog(preview, settingsOnly = true) {
+  /**
+   * `choice` ({common, scopes, items}): what to take from the file; a chosen bot card's chosen
+   * kinds are replaced, the rest stay. `true` takes the settings and people only, `false` all.
+   */
+  async restoreCatalog(preview, choice = true) {
     const data = validateBackup({
       format: "scenevoice-catalog-v2",
       data: preview.data,
     });
+    const contents = preview.contents || backupContents(null, data);
+    if (typeof choice === "boolean")
+      choice = { common: true, scopes: contents.scopes, items: choice ? ["people"] : BACKUP_ITEMS.map(([key]) => key) };
+    const allowed = new Set(contents.scopes);
+    choice = {
+      common: Boolean(choice.common && contents.common),
+      scopes: (choice.scopes || []).filter((scope) => allowed.has(scope)),
+      items: (choice.items || []).filter((item) => contents.items.includes(item)),
+    };
     const missing = new Set(preview.missing);
-    for (const row of [
-      ...data.generations,
-      ...data.favorites,
-      ...data.messages,
-      ...data.sessions.flatMap((s) => s.turns),
-    ]) {
+    for (const row of audioHolders(data)) {
       if (missing.has(row.audio_filename)) {
         delete row.audio_filename;
         delete row.generation_id;
@@ -350,12 +359,8 @@ export class STFileStore {
           409,
         );
       const key = current.settings.fish.api_key;
-      if (settingsOnly) current.settings = data.settings;
-      else {
-        // Keep metadata for unreferenced existing files so normal cache cleanup still finds them.
-        data.audioFiles = { ...current.audioFiles, ...data.audioFiles };
-        Object.assign(current, structuredClone(data));
-      }
+      applyBackup(current, data, choice);
+      if (wholeChoice(choice, contents)) Object.assign(current.audioFiles, data.audioFiles);
       current.settings.fish.api_key = key;
       current.settings.elevenlabs.api_key = "";
       return { status: "success", missing: missing.size };

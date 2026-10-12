@@ -131,6 +131,7 @@ export const history = {
         <label class="sv-date-field"><span>종료일</span><input name="to" type="date"></label>
         ${infoTip("전체 생성 기록에서 대사·화자 이름·연기 태그를 찾습니다. 날짜는 UTC 기준이며, 결과는 50개씩 보여 줍니다.", "기록 검색 설명")}
         <span class="sv-spacer"></span>
+        ${filters.speaker_key ? '<button type="button" class="sv-btn sv-btn-ghost-danger" data-history-clear-speaker title="고른 화자의 음성 기록을 검색 조건과 상관없이 모두 지웁니다"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>이 화자 모두 지우기</span></button>' : ""}
         <button type="button" class="sv-btn sv-search-reset" title="검색어·화자·날짜 조건을 비웁니다. 기록은 지우지 않습니다." ${filters.q || filters.speaker_key || filters.mode || filters.from || filters.to ? "" : "disabled"}><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>검색 초기화</span></button>
         <button type="submit" class="sv-btn sv-btn-accent"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>검색</span></button>
       </div>`;
@@ -153,6 +154,10 @@ export const history = {
     });
     form.elements.speaker_key.addEventListener("change", search);
     form.elements.mode.addEventListener("change", search);
+    form.querySelector("[data-history-clear-speaker]")?.addEventListener("click", () => {
+      const speaker = (data.speakers || []).find((x) => x.key === filters.speaker_key);
+      this.run(() => this.deleteSpeakerHistory(filters.speaker_key, speaker?.name || "이 화자"));
+    });
     form.querySelector(".sv-search-reset").onclick = () => {
       this.historyFilters = null;
       this.run(() => this.renderHistory());
@@ -190,6 +195,30 @@ export const history = {
     } catch (error) {
       this.notify(error.message || "기록을 삭제할 수 없습니다.", "error");
     }
+  },
+
+  /** Every voice of one speaker; voices used in calls and texts go too (made again when needed). */
+  async deleteSpeakerHistory(key, name) {
+    if (
+      !key ||
+      !confirm(
+        `‘${name}’의 음성 기록을 모두 지울까요?\n통화·문자에 쓰인 이 화자의 목소리도 함께 지워져요(다시 만들 수 있어요). 보관함에 넣은 음성은 남아요.`,
+      )
+    )
+      return;
+    const response = await this.fetch(this.apiUrl("/api/plugins/scenevoice/history/speaker"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ speaker_key: key }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `삭제 실패 (${response.status})`);
+    this.stopPlayback();
+    this.lineStatePromise = null;
+    this.invalidateGeneratedButtons();
+    this.historyFilters = { ...this.historyFilters, speaker_key: "", offset: 0 };
+    this.notify(`‘${name}’의 음성 ${data.removed}개를 지웠습니다.`, "info");
+    await this.renderHistory();
   },
 
   async addFavorite(historyId) {

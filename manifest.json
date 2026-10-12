@@ -6,7 +6,7 @@
   "js": "index.js",
   "css": "style.css",
   "author": "STGGANG",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Fish Audio·ElevenLabs 대사 연기, 인물별 상태, 스마트폰(전화·문자·단체방)",
   "minimum_client_version": "1.19.0"
 }
