@@ -181,7 +181,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.1.0",
+          version: "1.1.1",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
@@ -579,17 +579,19 @@ export class SceneService {
     }
     // 엿듣는 통화: a call between two people that the user's character isn't on, kept whole (its
     // lines written at once; their voices are made when it is listened to).
+    // A call written whole (엿듣는 통화). With `user_side` the user's character is one of the two:
+    // it is kept as their own call, made or taken, with their lines as theirs.
     if (path === "/phone/overheard" && method === "POST") {
       const who = identity(body);
       const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 30);
       if (!lines.length) throw new UserError("통화 대사가 없습니다.");
+      const mine = ["caller", "callee"].includes(body.user_side);
       const session = {
         ...who,
         id: newId(),
         status: "ended",
-        call_direction: "overheard",
-        callee_key: text(body.callee_key),
-        callee_name: text(body.callee_name, 300),
+        call_direction: mine ? (body.user_side === "caller" ? "outgoing" : "incoming") : "overheard",
+        ...(mine ? {} : { callee_key: text(body.callee_key), callee_name: text(body.callee_name, 300) }),
         situation: text(body.situation, 4000),
         started_at: stamp,
         answered_at: stamp,
@@ -598,13 +600,13 @@ export class SceneService {
       };
       lines.forEach((line, index) => {
         const speech = normalizeSpeech(line);
+        const user = mine && line.role === "user";
         session.turns.push({
           id: newId(),
           session_id: session.id,
           turn_index: index,
-          role: "character",
-          speaker_key: text(line.speaker_key),
-          speaker_name: text(line.speaker_name, 300),
+          role: user ? "user" : "character",
+          ...(user || mine ? {} : { speaker_key: text(line.speaker_key), speaker_name: text(line.speaker_name, 300) }),
           text: speech.text,
           script: speech.script,
           translation: text(line.translation, 5000),
@@ -919,7 +921,8 @@ export class SceneService {
       session.turns.pop();
       return { status: "success", session: sessionItem(session) };
     }
-    // The user rewrites a character's call line or voice message; its old voice no longer fits.
+    // The user rewrites a call line or voice message; its old voice no longer fits. In a call
+    // still going only the other side's lines; in a past one (a call written whole) mine too.
     const rewrite = path.match(/^\/(phone\/turns|voice-messages)\/([^/]+)$/);
     if (rewrite && method === "PUT") {
       const parent =
@@ -928,8 +931,8 @@ export class SceneService {
           : null;
       const item = find(parent?.turns || data.messages, rewrite[2]);
       checkChat(parent || item, body);
-      if (parent && item.role === "user")
-        throw new UserError("상대의 대사만 고칠 수 있습니다.", 409);
+      if (parent && item.role === "user" && ["active", "ringing"].includes(parent.status))
+        throw new UserError("통화 중에는 상대의 대사만 고칠 수 있습니다.", 409);
       const speech = normalizeSpeech({
         text: body.text,
         script: body.script,

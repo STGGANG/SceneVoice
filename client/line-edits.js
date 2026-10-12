@@ -370,7 +370,7 @@ export const lineEdits = {
     const againLabel = dialog.querySelector("#sv-edit-reanalyze span");
     if (unanalysed) {
       againLabel.textContent = "AI 분석";
-      check.textContent = `아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르세요. ${check.textContent}`;
+      check.textContent = "아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르세요.";
     }
     const save = async () => {
       this.assertChat(operation);

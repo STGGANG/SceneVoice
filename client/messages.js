@@ -324,8 +324,9 @@ export const messages = {
             : ""
         }${time}</div>`
       : "";
-    // The same words and icons everywhere: 재생 ▶ · 음성 재생성 🎙 · 답변 재생성 ⟳ · 고치기 ✎ ·
-    // 삭제. The newest message names its main ones; older ones keep icons (names in tooltips).
+    // The same words and icons everywhere: 재생 ▶ (makes the voice first if there is none) ·
+    // 음성 재생성 ↻ · 답변 재생성 ⟳ · 고치기 ✎ · 삭제. The newest message names its main ones; older
+    // ones keep icons (names in tooltips).
     const button = (cls, icon, title, label = "") =>
       `<button type="button" class="${cls}${latest && label ? " sv-labeled" : ""}" data-id="${record}" aria-label="${title}" title="${title}"><i class="fa-solid ${icon}" aria-hidden="true"></i>${latest && label ? `<span>${label}</span>` : ""}</button>`;
     const remove = button("sv-msg-delete", "fa-trash-can", "삭제");
@@ -373,11 +374,11 @@ export const messages = {
     const reroll = frozen
       ? ""
       : item.audio_url
-        ? button("sv-msg-reroll", "fa-microphone-lines", "음성 재생성: 같은 문장으로 목소리만 새로 만듭니다", "음성 재생성")
+        ? button("sv-msg-reroll", "fa-rotate-right", "음성 재생성: 같은 문장으로 목소리만 새로 만듭니다", "음성 재생성")
         : this.voicePending?.has(item.id)
           ? `<button type="button" class="sv-msg-reroll" disabled aria-label="새 음성을 만드는 중" title="새 음성을 만드는 중"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></button>`
           : voice && item.role !== "user"
-            ? button(`sv-msg-play sv-msg-make${playing}`, "fa-microphone-lines", "음성 만들기: 이 음성 메시지의 목소리를 만들어 재생합니다", "음성 만들기")
+            ? button(`sv-msg-play sv-msg-make${playing}`, "fa-play", "재생: 음성을 만든 뒤 재생합니다", "재생")
             : "";
     // Translations always show under their message.
     const translation = item.translation
@@ -715,19 +716,28 @@ export const messages = {
     this.unlockAudioForMobile();
     await this.renderSmartphone();
     const made = [];
+    const settled = new Set();
     const prepare = (index) =>
-      (made[index] ||= batch[index].audio_url
-        ? Promise.resolve({ url: this.apiUrl(batch[index].audio_url), revoke: false })
-        : this.generateVoiceMessageAudio(batch[index], null, false, { play: false })
-            .then((url) => (url ? { url, revoke: true } : null))
-            .catch(() => null));
+      index < batch.length
+        ? (made[index] ||= (
+            batch[index].audio_url
+              ? Promise.resolve({ url: this.apiUrl(batch[index].audio_url), revoke: false })
+              : this.generateVoiceMessageAudio(batch[index], null, false, { play: false })
+                  .then((url) => (url ? { url, revoke: true } : null))
+                  .catch(() => null)
+          ).finally(() => settled.add(index)))
+        : null;
     // Stopped, or the chat changed (the rest belonged to the conversation shown before).
     const over = () => state.stopped || operation.signal.aborted;
     let heard = -1;
     try {
       for (let index = 0; index < batch.length && !over(); index++) {
+        // Two voices first, and two more whenever it catches up with the making, so a slow one
+        // doesn't leave a gap midway.
+        if (index === 0 || !settled.has(index)) await Promise.all([prepare(index), prepare(index + 1)]);
         const ready = await prepare(index);
-        if (index + 1 < batch.length) prepare(index + 1);
+        prepare(index + 1);
+        prepare(index + 2);
         if (over()) {
           if (ready?.revoke) URL.revokeObjectURL(ready.url);
           break;

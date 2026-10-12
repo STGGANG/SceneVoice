@@ -118,7 +118,7 @@ export const calls = {
                           ? `<div class="sv-call-caption"><small>${name}</small><p>${escapeHtml(latestCharacterTurn.text)}</p>${this.translationHtml(latestCharacterTurn)}</div>
                                <div class="sv-call-audio-actions">
                                    <button type="button" data-phone-turn-play="${escapeHtml(latestCharacterTurn.id)}" title="${latestCharacterTurn.audio_url ? "재생" : "재생: 음성을 만든 뒤 재생합니다"}" ${audioBusy ? "disabled" : ""}><i class="fa-solid ${audioBusy ? "fa-spinner fa-spin" : "fa-play"}" aria-hidden="true"></i><span>재생</span></button>
-                                   <button type="button" data-phone-turn-reroll="${escapeHtml(latestCharacterTurn.id)}" title="음성 재생성: 같은 대사로 목소리만 새로 만듭니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-microphone-lines" aria-hidden="true"></i><span>음성 재생성</span></button>
+                                   <button type="button" data-phone-turn-reroll="${escapeHtml(latestCharacterTurn.id)}" title="음성 재생성: 같은 대사로 목소리만 새로 만듭니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>음성 재생성</span></button>
                                    ${turns.at(-1)?.id === latestCharacterTurn.id ? `<button type="button" data-phone-turn-regen="${escapeHtml(latestCharacterTurn.id)}" title="답변 재생성: 같은 흐름에서 이 대사를 새로 받습니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>답변 재생성</span></button>` : ""}
                                    <button type="button" data-phone-turn-edit="${escapeHtml(latestCharacterTurn.id)}" title="고치기: 대사를 고친 뒤 음성을 새로 만듭니다" ${audioBusy ? "disabled" : ""}><i class="fa-solid fa-pen" aria-hidden="true"></i><span>고치기</span></button>
                                    ${this.callVersionsHtml(latestCharacterTurn, turns, audioBusy)}
@@ -1056,10 +1056,10 @@ export const calls = {
    * 엿듣는 통화: writes the whole call between two people in one request and keeps it in 통화
    * 기록, anchored where the chat stands, with its chat memory (the user's character didn't hear
    * it). Their voices are made only when it is listened to there (전체 듣기).
-   */
-  /**
    * `announce: false` when the user asked for it (통화 엿듣기) and it opens at once; `length`
-   * (short, normal, long) overrides the setting for that one call. Returns it.
+   * (short, normal, long) overrides the setting for that one call. One side may be the user's
+   * character (`{me: true}`, from 통화 엿듣기): then it is kept as their own call with that person.
+   * Returns it.
    */
   async writeOverheardCall(
     caller,
@@ -1077,15 +1077,20 @@ export const calls = {
     const profileId =
       this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService) return;
-    const people = [caller, callee].map((person) => this.phoneContact(person.key));
-    const states = await Promise.all(people.map((person) => this.stateForPrompt(person.key)));
-    const languages = people.map((person) => this.conversationLanguage([], "", person.key));
+    const me = { key: "user", name: this.userCharacterName(), me: true };
+    const people = [caller, callee].map((person) => (person.me ? me : this.phoneContact(person.key)));
+    const withUser = people.some((person) => person.me);
+    const other = people.find((person) => !person.me);
+    const states = await Promise.all(people.map((person) => (person.me ? null : this.stateForPrompt(person.key))));
+    // My character talks in the language of the one on the other end.
+    const languages = people.map((person) => this.conversationLanguage([], "", (person.me ? other : person).key));
     const messages = phoneMessages(
       overheardCallSystem({
         emotions: Array.from(this.analysisEmotionCandidates()).sort(),
         translation: languages.some((language) => this.wantsTranslation(language)),
-        soundEffects: people.every((person) => this.phoneSoundEffects(person.key)),
+        soundEffects: people.every((person) => person.me || this.phoneSoundEffects(person.key)),
         length: size,
+        withUser,
       }),
       [
         dataBlock("user_character", this.userCharacterName()),
@@ -1096,6 +1101,7 @@ export const calls = {
             key: person.key,
             name: person.name,
             language: `${languageName(languages[index])} (${languages[index]})`,
+            ...(person.me ? { user_character: true } : {}),
             emotional_range: this.emotionalRange(person.key),
             performance_note: person.note || "",
             ...(states[index]?.unknown
@@ -1107,7 +1113,7 @@ export const calls = {
         ),
         dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
         ...((await this.worldInfoBlocks?.([reason])) || []),
-        ...this.currentTimeBlocks(people.map((person) => person.key)),
+        ...this.currentTimeBlocks(people.filter((person) => !person.me).map((person) => person.key)),
         dataBlock("reason_to_call", reason || "(decide from context)"),
       ],
       overheardCallFinal(people[0].name, people[1].name),
@@ -1128,8 +1134,7 @@ export const calls = {
       .filter(({ speaker, draft }) => speaker && draft.text)
       .slice(0, 30)
       .map(({ speaker, draft }) => ({
-        speaker_key: speaker.key,
-        speaker_name: speaker.name,
+        ...(speaker.me ? { role: "user" } : { speaker_key: speaker.key, speaker_name: speaker.name }),
         text: draft.text,
         script: draft.script,
         translation: draft.translation,
@@ -1146,10 +1151,14 @@ export const calls = {
         chat_id: this.getStateIdentity().chatId,
         anchor_message_id: anchor,
         ...this.anchorStamp(anchor),
-        character_key: people[0].key,
-        character_name: people[0].name,
-        callee_key: people[1].key,
-        callee_name: people[1].name,
+        ...(withUser
+          ? { character_key: other.key, character_name: other.name, user_side: people[0].me ? "caller" : "callee" }
+          : {
+              character_key: people[0].key,
+              character_name: people[0].name,
+              callee_key: people[1].key,
+              callee_name: people[1].name,
+            }),
         situation: reason,
         lines,
       }),

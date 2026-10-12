@@ -3937,9 +3937,51 @@
   font-size: 10px;
   cursor: pointer;
 }
+/* The line sounding now: its button lights and pulses, as a playing message's does. */
 .sv-call-replay.sv-playing {
   background: #fff;
-  color: #000;
+  color: var(--ph-blue);
+  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sv-call-replay.sv-playing {
+    animation: none;
+  }
+}
+/* 음성 재생성 · 고치기 under a past call's line */
+.sv-call-line-tools {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.sv-call-line-tools button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 10px;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.sv-call-line-tools button:disabled {
+  opacity: 0.5;
+}
+.sv-call-line-tools.sv-labeled button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  width: auto;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-size: 11px;
+}
+.sv-call-line-tools.sv-labeled button > i {
+  font-size: 10px;
 }
 .sv-transcript-empty {
   padding: 30px 0;
@@ -4758,6 +4800,9 @@
 :is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay {
   background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
   color: var(--ph-fg);
+}
+:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-character .sv-call-line-tools button {
+  background: color-mix(in srgb, var(--ph-fg) 8%, transparent);
 }
 :is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay.sv-playing {
   background: var(--ph-blue);
@@ -6882,40 +6927,40 @@ body:has(#sv-call-banner) #sv-now-reading {
   width: calc(100% - 32px);
 }
 
-/* 엿듣기: a call between two people on a call screen, both of them at the top. */
-#sv-smartphone .sv-overheard-screen .sv-call-identity .sv-room-avatar {
+/* 전체 듣기 of a past call on a call screen; a call between two people has both at the top. */
+#sv-smartphone .sv-listen-between .sv-call-identity .sv-room-avatar {
   display: flex;
   gap: 18px;
   width: auto;
   height: auto;
 }
-#sv-smartphone .sv-overheard-screen .sv-call-identity .sv-room-avatar .sv-phone-avatar {
+#sv-smartphone .sv-listen-between .sv-call-identity .sv-room-avatar .sv-phone-avatar {
   position: static;
   width: 80px;
   height: 80px;
   font-size: 28px;
   box-shadow: none;
 }
-#sv-smartphone .sv-overheard-screen .sv-call-identity h2 {
+#sv-smartphone .sv-listen-between .sv-call-identity h2 {
   font-size: 22px !important;
   text-align: center;
 }
-#sv-smartphone .sv-overheard-controls {
+#sv-smartphone .sv-listen-controls {
   flex-direction: row;
   justify-content: center;
   gap: 32px;
 }
-#sv-smartphone .sv-overheard-controls > div {
+#sv-smartphone .sv-listen-controls > div {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 7px;
 }
-#sv-smartphone .sv-overheard-again {
+#sv-smartphone .sv-listen-again {
   background: var(--ph-green);
   box-shadow: 0 10px 26px color-mix(in srgb, var(--ph-green) 35%, transparent);
 }
-#sv-smartphone .sv-overheard-back {
+#sv-smartphone .sv-listen-back {
   background: var(--ph-glass);
   box-shadow: none;
 }

@@ -512,8 +512,7 @@ export const dialogue = {
     reroll.className = "sv-reroll-btn";
     reroll.title = "음성 재생성: 같은 분석으로 목소리만 새로 만듭니다";
     reroll.setAttribute("aria-label", `${spokenText} 음성 재생성`);
-    reroll.innerHTML =
-      '<i class="fa-solid fa-microphone-lines" aria-hidden="true"></i>';
+    reroll.innerHTML = '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>';
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "sv-edit-btn";

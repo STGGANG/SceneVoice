@@ -499,12 +499,14 @@ export const groups = {
     // One round shares a mark, so 답변 재생성 can take it back whole (and keep it as a version).
     const round = `round-${Date.now().toString(36)}`;
     let last = null;
+    // The pause before each next message grows with what it says, as if it were being typed.
+    const pause = (reply) => {
+      const length = Array.from(String(reply.parsed?.text ?? "").replace(/\[[^\]]*\]/g, "")).length;
+      const typing = burst ? 800 + Math.min(2000, length * 35) : 1000 + Math.min(2400, length * 45);
+      return Math.round(typing * (0.85 + Math.random() * 0.3));
+    };
     for (const [index, reply] of replies.entries()) {
-      // A short pause between members, as if each were typing.
-      if (index)
-        await wait(
-          burst ? 350 + Math.round(Math.random() * 450) : 700 + Math.round(Math.random() * 700),
-        );
+      if (index) await wait(pause(reply));
       this.assertChat(operation);
       last = await this.saveCharacterMessage({
         character: reply.member,

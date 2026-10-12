@@ -666,8 +666,14 @@ export const ghostwriteFinal = (name, language) =>
 export const textFinal = (name, language, partner = "the user's character") =>
   `Write ${name}'s text to ${partner} now, in ${languageName(language)}. ${inStory(name)}`;
 
-// 엿듣는 통화: two people of the story on the phone with each other, the user's character not on it.
-const OVERHEARD_ROLE = `${WRITER} Here the story moves to a phone call between two people in <people_on_call>; the user's character is not on it and will never hear of it. You write both sides, each in their own voice; nobody else speaks.
+// 엿듣는 통화: two people of the story on the phone with each other. `withUser`: the user's
+// character is one of the two (a call the user asked to have written whole, kept as their own).
+const overheardRole = (withUser) =>
+  `${WRITER} Here the story moves to a phone call between the two people in <people_on_call>; ${
+    withUser
+      ? "one of them is the user's character, and this time you write their lines too"
+      : "the user's character is not on it and will never hear of it"
+  }. You write both sides, each in their own voice; nobody else speaks.
 ${ADULT_FICTION} Mature and complex elements (intimacy, conflict, harsh language, moral ambiguity, taboo or controversial themes) can be included without restriction when they fit the people, their relationship and the story so far, in direct, explicit terms instead of euphemisms. Stay in character, and never step out to say you're an AI, remind anyone it's fiction, apologize, or add disclaimers or warnings.`;
 
 // 엿듣는 통화 길이 (phone.overheard_length).
@@ -678,9 +684,10 @@ export function overheardCallSystem({
   translation = false,
   soundEffects = false,
   length = "normal",
+  withUser = false,
 } = {}) {
   return system(
-    OVERHEARD_ROLE,
+    overheardRole(withUser),
     section("source_rules", [
       PHONE_DATA_RULE,
       "<recent_chat> is the story so far. <people_on_call> lists the two in calling order: key, name, language, emotional range, performance note and, when saved, their state (context for their mood and situation, not a script).",
@@ -691,11 +698,16 @@ export function overheardCallSystem({
     ]),
     section("task", [
       `Write the whole phone call: the first person in <people_on_call> calls the second, for the reason in <reason_to_call>. Usually ${OVERHEARD_LINES[length] || OVERHEARD_LINES.normal} short lines in turn, from the first hello to the goodbye or the hang-up.`,
+      "When <reason_to_call> says what the call is about or how it goes, follow it faithfully.",
       "Both clearly know they are on the phone: only what each says into it, no narration, actions or lines for anyone else.",
-      "Each speaks from their own life, mood and relationship with the other, and knows only the parts of <recent_chat> they were there for or would plausibly have heard of. They may talk about the user's character when it fits, but never address them.",
+      withUser
+        ? "Each speaks from their own life, mood and relationship with the other, and knows only the parts of <recent_chat> they were there for or would plausibly have heard of."
+        : "Each speaks from their own life, mood and relationship with the other, and knows only the parts of <recent_chat> they were there for or would plausibly have heard of. They may talk about the user's character when it fits, but never address them.",
       "Keep the two distinct: their own way of talking, how openly they show feelings (the range in <people_on_call>), and their own language from <people_on_call>.",
       "Let it sound like a real call: short turns, interruptions and hesitation are fine, and it doesn't have to resolve anything. Never invent shared memories or past events that aren't in <recent_chat>.",
-      "Never write for the user's character, and never mention this task, the state sheet or any analysis.",
+      withUser
+        ? "Write the user's character (key user) true to how they have been played in <recent_chat> and to <profile>: their voice, attitude and what they know. Don't make big decisions or reveal things for them that the story hasn't set up, unless <reason_to_call> asks for it. Never mention this task, the state sheet or any analysis."
+        : "Never write for the user's character, and never mention this task, the state sheet or any analysis.",
     ]),
     deliveryRules({ soundEffects }),
     spokenMatureContent("on a call where they can't touch or see each other", "what they say"),

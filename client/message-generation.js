@@ -114,8 +114,6 @@ export const messageGeneration = {
       `${this.getCurrentCharacterProfile?.().name || "scenevoice"}-${messageId}`,
       { gap: 0.38, rate: 44100 },
     );
-    const missing = buttons.length - ready.length;
-    if (missing) this.notify(`아직 만들지 않았거나 건너뛴 대사 ${missing}개는 빠졌습니다.`, "info");
   },
 
   /**
