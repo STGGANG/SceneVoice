@@ -69,6 +69,7 @@ export const maintenance = {
       if (!action) return;
       close();
       const tasks = {
+        "update-notes": () => this.showUpdateNotes({ force: true }),
         "backup-zip": () => this.exportZipBackup(),
         "backup-json": () => this.exportJsonBackup(),
         "reset-settings": () => this.openResetDialog("settings"),

@@ -487,8 +487,10 @@ export const panel = {
                     <div class="sv-title"><strong id="sv-panel-title">씬보이스</strong></div>
                     <span class="sv-save-state" id="sv-save-state" data-state="idle" role="status"><i class="fa-solid fa-check" aria-hidden="true"></i><span></span></span>
                     <div class="sv-more">
-                        <button type="button" id="sv-more" class="sv-icon-btn" aria-label="백업·초기화 메뉴" aria-haspopup="menu" aria-expanded="false"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
+                        <button type="button" id="sv-more" class="sv-icon-btn" aria-label="업데이트 내역·백업·초기화 메뉴" aria-haspopup="menu" aria-expanded="false"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
                         <div class="sv-menu" id="sv-more-menu" role="menu" hidden>
+                            <button type="button" role="menuitem" data-sv-action="update-notes"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i><span>업데이트 내역<small>최근에 바뀐 점</small></span></button>
+                            <hr>
                             <button type="button" role="menuitem" data-sv-action="backup-zip"><i class="fa-solid fa-file-zipper" aria-hidden="true"></i><span>전체 백업<small>목록·설정·음성 파일 zip</small></span></button>
                             <button type="button" role="menuitem" data-sv-action="backup-json"><i class="fa-solid fa-file-code" aria-hidden="true"></i><span>목록·설정만 백업<small>음성 없이 JSON</small></span></button>
                             <label role="menuitem" class="sv-menu-file" tabindex="0"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><span>백업 파일로 복원<small>zip 또는 JSON</small></span><input type="file" id="sv-import-catalog" accept=".json,.zip,application/json,application/zip"></label>
@@ -544,6 +546,7 @@ export const panel = {
     document.getElementById("sv-statusbar")?.addEventListener("click", () => this.run(() => this.refreshEngineCheck()));
     // The engine is checked once a session (no cost: no voice is made).
     if (!this.engineCheck) this.run(() => this.refreshEngineCheck());
+    this.showUpdateNotes?.();
   },
 
   /** 음성 엔진 연결 for the status line: the key (and default voice) checked, nothing made. */

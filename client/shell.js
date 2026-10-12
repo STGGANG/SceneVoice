@@ -705,6 +705,7 @@ export const shell = {
     // The screen chosen above is for this chat.
     this.phoneShownChat = this.currentChatId();
     await this.renderSmartphone();
+    this.showUpdateNotes?.();
   },
 
   /**

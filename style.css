@@ -2126,7 +2126,8 @@
 
 /* ----- 14. 대화상자 (대사 편집 · 백업 복원) ----- */
 #sv-line-editor.sv-dialog,
-#sv-restore-dialog.sv-dialog {
+#sv-restore-dialog.sv-dialog,
+#sv-update-dialog.sv-dialog {
   z-index: 2147483620;
   width: min(560px, calc(100vw - 32px));
   max-width: none;
@@ -2171,7 +2172,9 @@
   min-width: 0;
 }
 .sv-dialog-head h3 {
+  margin: 0 0 2px !important;
   font-size: var(--sv-fs-lg) !important;
+  line-height: 1.3 !important;
 }
 .sv-dialog-head small {
   display: inline-flex;
@@ -6926,4 +6929,37 @@ body:has(#sv-call-banner) #sv-now-reading {
   #sv-smartphone .sv-phone-frame {
     box-shadow: none;
   }
+}
+
+#sv-update-dialog.sv-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+.sv-update-notes {
+  display: grid;
+  gap: 4px;
+  font-size: var(--sv-fs-sm, 13px);
+  line-height: 1.55;
+}
+.sv-update-notes h4 {
+  margin: 8px 0 2px;
+  color: var(--sv-brand-text, var(--sv-fg));
+  font-size: var(--sv-fs-sm, 13px);
+  font-weight: 700;
+}
+.sv-update-notes ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+}
+.sv-update-notes details {
+  margin-top: 10px;
+  color: var(--sv-muted);
+}
+.sv-update-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.sv-update-notes .sv-update-version {
+  color: var(--sv-muted);
 }
