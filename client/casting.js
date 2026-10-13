@@ -108,13 +108,15 @@ export const casting = {
     select.setAttribute("aria-label", "대사 화자 선택");
     const fallback = this.messageSpeaker(button),
       catalog = this.speakerCatalog();
-    if (!catalog.some((item) => item.key === fallback.key))
+    // A bot card with people of its own is not a speaker (unless it reads with one voice).
+    const person = !fallback.key.startsWith("character:") || this.cardIsPerson(fallback.key);
+    if (person && !catalog.some((item) => item.key === fallback.key))
       catalog.unshift(fallback);
     select.append(
       new Option(
         // What the analysis said, when the line was analysed before its menu was made.
         button.dataset.speakerLabel ||
-          `자동 · ${fallback.name}${button.dataset.kind === "thought" ? " · 생각" : ""}`,
+          `자동${person ? ` · ${fallback.name}` : ""}${button.dataset.kind === "thought" ? " · 생각" : ""}`,
         "",
       ),
       ...catalog.map((item) => new Option(item.name, item.key)),
@@ -124,11 +126,6 @@ export const casting = {
       this.cancelLineAudio(button);
       const value = select.value;
       button.dataset.speakerOverride = value;
-      if (value)
-        select
-          .closest(".sv-inline-actions")
-          ?.querySelector(".sv-more-btn")
-          ?.classList.remove("sv-attention");
       this.run(() =>
         this.saveLineEdit(button, value ? { speaker_key: value } : {}),
       );

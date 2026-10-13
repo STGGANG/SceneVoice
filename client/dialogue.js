@@ -592,8 +592,8 @@ export const dialogue = {
       );
   },
 
-  /** Shows or hides a line's extra buttons; `attention` marks a line whose speaker must be chosen. */
-  toggleLineActions(group, open = !group?.classList.contains("sv-open"), attention) {
+  /** Shows or hides a line's extra buttons. */
+  toggleLineActions(group, open = !group?.classList.contains("sv-open")) {
     if (!group) return;
     const play = group.querySelector(".sv-play-btn");
     if (open && play && !group.querySelector(".sv-speaker-select"))
@@ -601,7 +601,6 @@ export const dialogue = {
     group.classList.toggle("sv-open", open);
     const more = group.querySelector(".sv-more-btn");
     more?.setAttribute("aria-expanded", String(open));
-    if (attention !== undefined) more?.classList.toggle("sv-attention", attention);
   },
 
   /** A chat line's voice (a thought with its inner-voice effect). */
@@ -731,8 +730,7 @@ export const dialogue = {
         !button.dataset.speakerOverride &&
         this.config.casting?.uncertain === "default";
       if (analysis.needs_confirmation && !button.dataset.speakerOverride && !asDefault) {
-        // Open the line's buttons so its speaker menu is in view.
-        this.toggleLineActions(button.closest(".sv-inline-actions"), true, true);
+        // Left closed (no line opens by itself); ⋯ shows "화자 확인 필요" in its speaker menu.
         if (skipUncertain) {
           button.dataset.status = "waiting";
           button.classList.remove("sv-loading", "sv-queued");

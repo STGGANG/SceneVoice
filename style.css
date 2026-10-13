@@ -2502,16 +2502,6 @@
   background: color-mix(in srgb, currentColor 14%, transparent);
   color: currentColor;
 }
-.sv-inline-actions > .sv-more-btn.sv-attention::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--sv-warn);
-}
 .sv-inline-actions > select.sv-speaker-select option {
   background: var(--SmartThemeBlurTintColor, #222);
   color: var(--SmartThemeBodyColor, #eee);

@@ -168,11 +168,6 @@ export const analysis = {
         .closest(".sv-inline-actions")
         ?.querySelector(".sv-speaker-select");
       if (select?.options[0]) select.options[0].textContent = item.dataset.speakerLabel;
-      // A line whose speaker is uncertain opens its buttons so the speaker menu is visible.
-      const unsure = Boolean(analysis.needs_confirmation && !item.dataset.speakerOverride);
-      const group = item.closest(".sv-inline-actions");
-      if (unsure) this.toggleLineActions(group, true, true);
-      else group?.querySelector(".sv-more-btn")?.classList.remove("sv-attention");
       item.title = `${speaker.name} · ${analysis.script || tagsText(normalizeTags(analysis))}`;
     });
   },
