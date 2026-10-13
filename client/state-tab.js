@@ -136,7 +136,7 @@ export const stateTab = {
    */
   async saveEditedState(form, person) {
     if (this.stateTrackingBusy)
-      throw new Error("상태를 분석하는 중입니다. 끝난 뒤 다시 저장해 주세요.");
+      throw new Error("상태를 분석하는 중입니다. 끝난 뒤 다시 저장해 주십시오.");
     const data = new FormData(form);
     const field = (name) => String(data.get(name) ?? "").trim();
     const raw = {
@@ -299,11 +299,11 @@ export const stateTab = {
                 : emptyHtml(
                     "heart-pulse",
                     gone.length ? "지금 채팅에 맞는 상태가 없습니다" : "아직 분석한 상태가 없습니다",
-                    "‘지금 분석’을 누르거나, ‘직접 수정’으로 지금 상태를 적어 두거나, 설정 → 캐릭터 상태 추적을 켜 보세요. 분석은 최근 채팅에서 새로 드러난 게 있는 인물만 갱신합니다.",
+                    "‘지금 분석’을 누르거나, ‘직접 수정’으로 지금 상태를 적어 두거나, 설정 → 캐릭터 상태 추적을 켜 보십시오. 분석은 최근 채팅에서 새로 드러난 게 있는 인물만 갱신합니다.",
                   )
             }
             <section class="sv-group sv-state-history">
-                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("상태는 그 상태를 만든 메시지에 연동됩니다. 그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 기록은 자동으로 지우지 않으니 필요하면 직접 지우세요.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
+                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("상태는 그 상태를 만든 메시지에 연동됩니다. 그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 기록은 자동으로 지우지 않으니 필요하면 직접 지우십시오.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
                 ${
                   history.length
                     ? `<ol class="sv-timeline">${history
@@ -346,13 +346,13 @@ export const stateTab = {
         this.run(() =>
           removeHistory(
             gone.map((item) => item.id),
-            `지금 채팅에 없는 메시지에서 나온 ${person.name}의 상태 기록 ${gone.length}개를 지울까요?`,
+            `지금 채팅에 없는 메시지에서 나온 ${person.name}의 상태 기록 ${gone.length}개를 지우시겠습니까?`,
           ),
         ),
       );
     container.querySelectorAll(".sv-state-history-delete").forEach((button) =>
       button.addEventListener("click", () =>
-        this.run(() => removeHistory([button.dataset.id], "이 상태 기록을 지울까요?")),
+        this.run(() => removeHistory([button.dataset.id], "이 상태 기록을 지우시겠습니까?")),
       ),
     );
 
@@ -393,7 +393,7 @@ export const stateTab = {
       .getElementById("sv-state-clear")
       ?.addEventListener("click", () =>
         this.run(async () => {
-          if (!confirm(`${person.name}의 저장된 상태 기록을 모두 지울까요?`)) return;
+          if (!confirm(`${person.name}의 저장된 상태 기록을 모두 지우시겠습니까?`)) return;
           const response = await this.fetch(
             this.apiUrl(
               `/api/plugins/scenevoice/state?state_key=${encodeURIComponent(person.stateKey)}`,

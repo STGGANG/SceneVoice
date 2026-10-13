@@ -217,7 +217,7 @@ export const dialogue = {
           this.run(async () => {
             if (!oldAvatar || !newAvatar || oldAvatar === newAvatar) return;
             const moved = await this.relinkCard(`character:${oldAvatar}`, `character:${newAvatar}`);
-            if (moved) this.notify("봇카드 이름이 바뀌어, 씬보이스 기록을 새 이름으로 옮겼어요.", "success");
+            if (moved) this.notify("봇카드 이름이 바뀌어, 씬보이스 기록을 새 이름으로 옮겼습니다.", "success");
           });
         for (const [eventName, listener] of [
           [events.GENERATION_STARTED, generating],
@@ -739,7 +739,7 @@ export const dialogue = {
           return "skipped";
         }
         throw new Error(
-          "화자를 확실히 구분하지 못했습니다. 대사 옆 ⋯을 눌러 인물을 골라 주세요.",
+          "화자를 확실히 구분하지 못했습니다. 대사 옆 ⋯을 눌러 인물을 골라 주십시오.",
         );
       }
       const speaker = asDefault
@@ -756,15 +756,15 @@ export const dialogue = {
         button.title = this.speakerSkipped(speaker.key)
           ? "메시지 음성 버튼에서 건너뛰도록 설정한 인물입니다. 누르면 만듭니다."
           : this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name)
-            ? `‘${speaker.name}’에게 목소리가 없어 건너뛰었습니다. 캐릭터별 목소리에서 정하거나 ⋯에서 인물을 고르세요.`
+            ? `‘${speaker.name}’에게 목소리가 없어 건너뛰었습니다. 캐릭터별 목소리에서 정하거나 ⋯에서 인물을 고르십시오.`
             : "목소리를 등록하지 않은 인물이라 메시지 음성 버튼에서 건너뛰었습니다. 누르면 기본 목소리로 만듭니다.";
         return "unvoiced";
       }
       if (this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name))
         throw new Error(
           asDefault
-            ? "기본 목소리가 없습니다. 설정 → 음성 엔진에서 남성·여성 기본 목소리를 정해 주세요."
-            : `‘${speaker.name || "이 인물"}’에게 쓸 목소리가 없습니다. 설정 → 캐릭터별 목소리에서 목소리를 정하거나, 대사 옆 ⋯에서 인물을 고르세요.`,
+            ? "기본 목소리가 없습니다. 설정 → 음성 엔진에서 남성·여성 기본 목소리를 정해 주십시오."
+            : `‘${speaker.name || "이 인물"}’에게 쓸 목소리가 없습니다. 설정 → 캐릭터별 목소리에서 목소리를 정하거나, 대사 옆 ⋯에서 인물을 고르십시오.`,
         );
       const payload = {
         text,

@@ -25,7 +25,7 @@ export const ghostwrite = {
     const profileId =
       this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService)
-      throw new Error("대필에 쓸 실리태번 연결 프로필을 먼저 골라 주세요.");
+      throw new Error("대필에 쓸 실리태번 연결 프로필을 먼저 골라 주십시오.");
     const operation = this.captureChat();
     const persona = this.personaProfile();
     let other, conversation, lines, otherKey;

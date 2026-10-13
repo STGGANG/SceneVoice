@@ -11,7 +11,7 @@ export class WorkQueue {
   async run(job, signal) {
     if (this.waiting >= 20)
       throw new UserError(
-        "대기 중인 요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+        "대기 중인 요청이 많습니다. 잠시 후 다시 시도해 주십시오.",
         429,
       );
     this.waiting++;

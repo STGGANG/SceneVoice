@@ -54,7 +54,7 @@ export const memos = {
   async writeVoiceMemo(contact, about = "", sourceMessageId = "", { origin = "asked" } = {}) {
     const operation = this.captureChat();
     const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주세요.");
+    if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주십시오.");
     const person = this.phoneContact(contact.key);
     const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(await this.stateForPrompt(person.key));
     const language = this.conversationLanguage([], "", person.key);
@@ -89,7 +89,7 @@ export const memos = {
     this.assertChat(operation);
     const draft = this.normalizePhoneDraft(await this.requestSpokenReply(profileId, messages, 700));
     this.assertChat(operation);
-    if (!draft.text) throw new Error("보조모델이 메모를 돌려주지 않았습니다. 다시 시도해 주세요.");
+    if (!draft.text) throw new Error("보조모델이 메모를 돌려주지 않았습니다. 다시 시도해 주십시오.");
     const anchor = String(this.phoneAnchorFromSource(sourceMessageId).index);
     const response = await this.request("/api/plugins/scenevoice/phone/memos", {
       method: "POST",
@@ -203,7 +203,7 @@ export const memos = {
   },
 
   async deleteMemo(memo) {
-    if (!confirm(`${memo.character_name || "이 인물"}의 음성 메모를 지울까요?`)) return;
+    if (!confirm(`${memo.character_name || "이 인물"}의 음성 메모를 지우시겠습니까?`)) return;
     const response = await this.request(`/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -229,7 +229,7 @@ export const memos = {
             <button type="button" class="sv-phone-back" data-memo-cancel><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> 음성 메모</button>
             <strong class="sv-room-editor-title">새 메모</strong>
           </header>
-          <p class="sv-room-hint">고른 인물이 지금 혼자 휴대폰에 남기는 음성 메모예요. 내 캐릭터는 몰라요.</p>
+          <p class="sv-room-hint">고른 인물이 지금 혼자 휴대폰에 남기는 음성 메모입니다. 내 캐릭터는 모릅니다.</p>
           <label class="sv-room-name"><span>누가</span><select id="sv-memo-person" ${editor.busy ? "disabled" : ""}>${contacts
             .map((contact) => `<option value="${escapeHtml(contact.key)}" ${contact.key === editor.key ? "selected" : ""}>${escapeHtml(contact.name)}</option>`)
             .join("")}</select></label>

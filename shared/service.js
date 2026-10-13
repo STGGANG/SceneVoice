@@ -223,7 +223,7 @@ export class SceneService {
       const bytes = await this.store.getAudio(name);
       if (!bytes)
         throw new UserError(
-          "음성 파일이 정리되었습니다. 다시 생성해 주세요.",
+          "음성 파일이 정리되었습니다. 다시 생성해 주십시오.",
           404,
         );
       return {
@@ -804,7 +804,7 @@ export class SceneService {
       const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 30);
       const last = Math.max(0, ...session.turns.map((turn) => turn.part || 0));
       if (body.replace) session.turns = session.turns.filter((turn) => (turn.part || 0) !== last);
-      if (session.turns.length + lines.length > 400) throw new UserError("통화가 너무 길어졌습니다. 마무리해 주세요.", 409);
+      if (session.turns.length + lines.length > 400) throw new UserError("통화가 너무 길어졌습니다. 마무리해 주십시오.", 409);
       const mine = session.call_direction !== "overheard";
       writtenLines(session, lines, mine, body.replace ? last : last + 1, stamp);
       if (body.close) delete session.continuing;
@@ -1174,7 +1174,7 @@ export class SceneService {
       const session = find(data.sessions, removeSession[1]);
       checkChat(session, body);
       if (["active", "ringing"].includes(session.status))
-        throw new UserError("진행 중인 통화는 지울 수 없습니다. 먼저 끊어 주세요.", 409);
+        throw new UserError("진행 중인 통화는 지울 수 없습니다. 먼저 끊어 주십시오.", 409);
       data.sessions = data.sessions.filter((x) => x.id !== session.id);
       return { status: "success" };
     }
@@ -1337,7 +1337,7 @@ export class SceneService {
     // contact without a voice of their own is texted only.
     if (raw.own_voice_only && resolved.voice_from === "default")
       throw new UserError(
-        `‘${resolved.speaker_name || "이 인물"}’에게 목소리가 없어 음성을 만들지 않습니다. 설정 → 캐릭터별 목소리에서 정해 주세요.`,
+        `‘${resolved.speaker_name || "이 인물"}’에게 목소리가 없어 음성을 만들지 않습니다. 설정 → 캐릭터별 목소리에서 정해 주십시오.`,
       );
     if (!this.env.engines.includes(settings.engine))
       throw new UserError(
@@ -1521,7 +1521,7 @@ export class SceneService {
       const generation = find(data.generations, id),
         bytes = await this.store.getAudio(generation.audio_filename);
       if (!bytes)
-        throw new UserError("음성 파일이 없습니다. 다시 생성해 주세요.", 404);
+        throw new UserError("음성 파일이 없습니다. 다시 생성해 주십시오.", 404);
       const favorite = {
         ...generation,
         id: newId(),
@@ -1545,7 +1545,7 @@ export class SceneService {
     // 기록 → 화자 하나의 음성 모두 지우기 (a file another speaker's record still uses stays).
     if (path === "/history/speaker" && method === "POST") {
       const key = String(body?.speaker_key || "");
-      if (!key) throw new UserError("지울 화자를 골라 주세요.");
+      if (!key) throw new UserError("지울 화자를 골라 주십시오.");
       const ids = new Set(data.generations.filter((x) => (x.speaker_key || "") === key).map((x) => x.id));
       const files = new Set(
         data.generations

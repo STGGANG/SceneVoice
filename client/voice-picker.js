@@ -85,9 +85,9 @@ export const voicePicker = {
             String(item.meta || "").toLowerCase().includes(needle),
         );
     const note = fish
-      ? "Fish Audio는 목록이 없습니다. Reference ID를 붙여 넣으세요."
+      ? "Fish Audio는 목록이 없습니다. Reference ID를 붙여 넣으십시오."
       : !this.voiceChoices?.length
-        ? "보이스 목록을 아직 불러오지 않았습니다. 설정 → 음성 엔진의 ‘내 보이스 목록 불러오기’를 누르거나 Voice ID를 붙여 넣으세요."
+        ? "보이스 목록을 아직 불러오지 않았습니다. 설정 → 음성 엔진의 ‘내 보이스 목록 불러오기’를 누르거나 Voice ID를 붙여 넣으십시오."
         : !items.length
           ? "맞는 목소리가 없습니다. Voice ID를 붙여 넣어도 됩니다."
           : "";
@@ -164,7 +164,7 @@ export const voicePicker = {
         box.inputMode = "text";
         box.value = "";
         pick.dataset.placeholder ??= box.placeholder;
-        box.placeholder = "Voice ID를 붙여 넣으세요";
+        box.placeholder = "Voice ID를 붙여 넣으십시오";
         // Refocused so the keyboard comes up; the blur in between is not a choice.
         pick.dataset.typing = "true";
         box.blur();

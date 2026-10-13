@@ -130,7 +130,7 @@ export const shell = {
       for (const side of ["left", "top", "right", "bottom"]) launcher.style[side] = "";
       return;
     }
-    const size = launcher.offsetWidth || 50;
+    const size = launcher.offsetWidth || 44;
     launcher.style.top = `${clamp(spot.top * window.innerHeight, 8, Math.max(8, window.innerHeight - size - 8))}px`;
     launcher.style.left = `${spot.side === "left" ? LAUNCHER_MARGIN : Math.max(LAUNCHER_MARGIN, window.innerWidth - size - LAUNCHER_MARGIN)}px`;
     launcher.style.right = "auto";
@@ -350,11 +350,11 @@ export const shell = {
         call
           ? "씬보이스 전화 · 눌러서 받기"
           : voicemail
-            ? "음성 사서함에 메시지를 남겼어요"
+            ? "음성 사서함에 메시지를 남겼습니다"
             : overheard
-              ? "둘이 통화했어요 · 눌러서 엿듣기"
+              ? "둘이 통화했습니다 · 눌러서 엿듣기"
               : memo
-                ? "혼자 음성 메모를 남겼어요 · 눌러서 듣기"
+                ? "혼자 음성 메모를 남겼습니다 · 눌러서 듣기"
                 : escapeHtml(text.kind === "voice" ? "음성 메시지" : text.text || "새 문자")
       }</small></span>
       <span class="sv-call-banner-icon" aria-hidden="true"><i class="fa-solid fa-${call ? "phone" : voicemail ? "voicemail" : overheard ? "ear-listen" : memo ? "wave-square" : text.kind === "voice" ? "microphone" : "comment"}"></i></span>`;
@@ -576,7 +576,7 @@ export const shell = {
   async openSmartphone(tab = null) {
     await this.syncMultiCastCast?.();
     if (!this.phoneOn()) {
-      this.notify("스마트폰이 꺼져 있습니다. 설정 → 스마트폰에서 ‘스마트폰 사용’을 켜 주세요.");
+      this.notify("스마트폰이 꺼져 있습니다. 설정 → 스마트폰에서 ‘스마트폰 사용’을 켜 주십시오.");
       return;
     }
     if (!this.phoneSession && !this.phonePendingEvent)
@@ -734,12 +734,12 @@ export const shell = {
 
   /** 미적용 기억 with nothing in it. */
   phoneShelfEmpty() {
-    return `<div class="sv-phone-list-empty sv-shelf-empty"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><strong>미적용 기억이 없어요</strong><p>채팅을 되돌리거나 다른 스와이프로 넘기면, 그때 주고받은 통화·문자가 여기로 옮겨 와요.</p></div>`;
+    return `<div class="sv-phone-list-empty sv-shelf-empty"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><strong>미적용 기억이 없습니다</strong><p>채팅을 되돌리거나 다른 스와이프로 넘기면, 그때 주고받은 통화·문자가 여기로 옮겨 옵니다.</p></div>`;
   },
 
   /** What 미적용 기억 is, and 모두 지우기 (bound by the app). */
   phoneShelfNote() {
-    return `<div class="sv-shelf-note"><p>지금 채팅에 반영되지 않는 기록이에요. 다른 스와이프의 기록은 그 스와이프로 돌아가면 다시 적용돼요.</p><button type="button" class="sv-shelf-clear" data-shelf-clear><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>모두 지우기</span></button></div>`;
+    return `<div class="sv-shelf-note"><p>지금 채팅에 반영되지 않는 기록입니다. 다른 스와이프의 기록은 그 스와이프로 돌아가면 다시 적용됩니다.</p><button type="button" class="sv-shelf-clear" data-shelf-clear><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>모두 지우기</span></button></div>`;
   },
 
   bindPhoneShelf(body, app) {
@@ -884,7 +884,7 @@ export const shell = {
     const listening = this.callPlayback?.playing && this.callPlayback.session;
     const radio = this.radioPlaying && !this.radioPlaying.ended && !this.radioPlaying.stopped;
     const [target, icon, text] = live
-      ? ["call", "fa-phone", ringing ? "전화가 오고 있어요" : `${this.phoneSession?.character_name || "상대"}와 통화 중`]
+      ? ["call", "fa-phone", ringing ? "전화가 오고 있습니다" : `${this.phoneSession?.character_name || "상대"}와 통화 중`]
       : listening
         ? ["history", "fa-headphones", listening.call_direction === "overheard" ? "통화 엿듣는 중" : "지난 통화 듣는 중"]
         : radio
@@ -908,15 +908,15 @@ export const shell = {
     const now = new Date();
     const status =
       pending === "incoming_call"
-        ? "전화가 걸려 오고 있어요"
+        ? "전화가 걸려 오고 있습니다"
         : pending === "voice_message"
-          ? "새 음성 메시지가 도착했어요"
+          ? "새 음성 메시지가 도착했습니다"
           : pending === "text_message"
-            ? "새 문자가 도착했어요"
+            ? "새 문자가 도착했습니다"
             : pending === "voicemail"
-              ? "음성 사서함에 메시지가 있어요"
+              ? "음성 사서함에 메시지가 있습니다"
               : pending === "overheard"
-                ? "엿들을 수 있는 통화가 있어요"
+                ? "엿들을 수 있는 통화가 있습니다"
                 : this.phoneSession
                   ? "통화 중"
                   : "통화와 메시지";

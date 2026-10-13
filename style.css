@@ -2673,11 +2673,11 @@
   z-index: 2147483500;
   display: grid;
   place-items: center;
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid var(--sv-line-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--sv-surface);
   -webkit-backdrop-filter: blur(var(--sv-blur));
   backdrop-filter: blur(var(--sv-blur));
@@ -2715,7 +2715,7 @@
 #sv-phone-launcher .sv-fab-icon {
   display: grid;
   place-items: center;
-  font-size: 20px;
+  font-size: 18px;
 }
 #sv-phone-launcher .sv-fab-ring {
   position: absolute;
@@ -5169,6 +5169,21 @@
 .sv-member > summary:hover {
   background: var(--sv-soft2);
 }
+.sv-global-member-list > .sv-member > summary {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sv-global-member-list .sv-member-dragging {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 1px;
+}
+.sv-member-sorting,
+.sv-member-sorting > .sv-member > summary {
+  cursor: grabbing;
+}
 .sv-member-avatar {
   display: grid;
   flex: none;
@@ -5264,7 +5279,7 @@
   font-size: var(--sv-fs-xs);
   line-height: 1.4;
 }
-:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"] {
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) .sv-choice input[type="radio"] {
   flex: none;
   width: 20px;
   height: 20px;
@@ -5278,10 +5293,10 @@
     border-color var(--sv-ease),
     border-width var(--sv-ease);
 }
-:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"]:checked {
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) .sv-choice input[type="radio"]:checked {
   border: 6px solid var(--sv-brand);
 }
-:is(#sv-overlay, .sv-dialog) .sv-choice input[type="radio"]:focus-visible {
+:is(#sv-overlay, .sv-dialog, #sv-smartphone) .sv-choice input[type="radio"]:focus-visible {
   outline: 2px solid var(--sv-brand-line);
   outline-offset: 2px;
 }
@@ -7406,6 +7421,25 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 
 /* 통화 엿듣기 · 통화 맡기기, side by side. */
+#sv-smartphone .sv-overheard-modes {
+  --sv-fg: var(--ph-fg);
+  --sv-muted: var(--ph-muted);
+  --sv-line: var(--ph-line);
+  --sv-line-strong: var(--ph-muted);
+  --sv-soft2: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+  --sv-soft3: color-mix(in srgb, var(--ph-fg) 17%, transparent);
+  --sv-brand: var(--ph-blue);
+  --sv-brand-line: color-mix(in srgb, var(--ph-blue) 48%, transparent);
+  margin: 0 16px;
+  color: var(--ph-fg);
+}
+#sv-smartphone .sv-overheard-modes .sv-choices {
+  background: var(--ph-surface);
+}
+#sv-smartphone .sv-overheard-modes .sv-choice:has(input:disabled) {
+  opacity: 0.6;
+  cursor: default;
+}
 #sv-smartphone .sv-call-new-row {
   display: flex;
   gap: 8px;

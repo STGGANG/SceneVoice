@@ -408,7 +408,7 @@ export function validateReadingRules(rules) {
     for (const mark of [open, close])
       if (!mark || mark.length > 12 || /[\r\n<>]/.test(mark))
         throw new UserError(
-          "읽을 구간의 시작·끝 기호는 줄바꿈·꺾쇠를 제외한 1~12자로 입력해 주세요.",
+          "읽을 구간의 시작·끝 기호는 줄바꿈·꺾쇠를 제외한 1~12자로 입력해 주십시오.",
         );
     const pair = `${open}\u0000${close}`;
     if (seen.has(pair)) continue;

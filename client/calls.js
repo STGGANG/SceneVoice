@@ -123,7 +123,7 @@ export const calls = {
                 </div>
                 <div class="sv-call-live-line">${this.callLineHtml(session)}</div>
                 <form class="sv-call-compose">
-                    <textarea id="sv-call-reply" rows="1" maxlength="2000" placeholder="${unanswered ? "비워 두고 보내면 답을 다시 받아요" : "대답 입력 혹은 대필 지시문 입력"}" aria-label="통화로 대답하기" ${this.phoneBusy ? "disabled" : ""}></textarea>
+                    <textarea id="sv-call-reply" rows="1" maxlength="2000" placeholder="${unanswered ? "비워 두고 보내면 답을 다시 받습니다" : "대답 입력 혹은 대필 지시문 입력"}" aria-label="통화로 대답하기" ${this.phoneBusy ? "disabled" : ""}></textarea>
                     <button type="button" class="sv-ghostwrite" data-call-ghostwrite aria-label="대필" title="대필: 내 페르소나가 할 말을 대신 써 줍니다. 입력칸에 ‘늦는다고 사과해 줘’처럼 원하는 내용을 적어 두면 그 뜻대로 자연스럽게 쓰고, 써 둔 초안이면 다듬습니다. 비워 두면 알아서 씁니다." ${this.phoneBusy || this.ghostwriteBusy ? "disabled" : ""}><i class="fa-solid ${this.ghostwriteBusy === "call" ? "fa-spinner fa-spin" : "fa-pen-nib"}" aria-hidden="true"></i></button>
                     <button type="submit" ${this.phoneBusy ? "disabled" : ""} aria-label="통화 답변 보내기" title="${unanswered ? "보내기 · 비워 두고 누르면 상대의 답을 다시 받습니다" : "보내기"}"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
                 </form>
@@ -199,7 +199,7 @@ export const calls = {
     const latest = [...turns].reverse().find((turn) => turn.role === "character") || null;
     if (this.phoneBusy)
       return '<div class="sv-call-thinking"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>상대가 대답하는 중…</span></div>';
-    if (!latest) return '<p class="sv-call-waiting">연결되었습니다. 답이 없으면 비워 둔 채 보내기를 누르세요.</p>';
+    if (!latest) return '<p class="sv-call-waiting">연결되었습니다. 답이 없으면 비워 둔 채 보내기를 누르십시오.</p>';
     const group = this.isGroupCall?.(session);
     const lastMine = turns.findLastIndex((turn) => turn.role === "user");
     // Several lines since mine (a group's round, or a reply with remarks behind it): one at a time.
@@ -567,7 +567,7 @@ export const calls = {
       "";
     if (!profileId || !this.connectionService) {
       this.notify(
-        "전화 대화에 사용할 실리태번 연결 프로필을 설정해 주세요.",
+        "전화 대화에 사용할 실리태번 연결 프로필을 설정해 주십시오.",
         "error",
       );
       return;
@@ -915,7 +915,7 @@ export const calls = {
     this.phoneAudioJob = (this.phoneAudioJob || 0) + 1;
     this.phoneAudioBusyTurnId = "";
     this.run(() => this.renderSmartphone());
-    this.notify("자리를 비운 사이 음성 만들기가 끊겼을 수 있어요. 재생 버튼을 다시 눌러 주세요.");
+    this.notify("자리를 비운 사이 음성 만들기가 끊겼을 수 있습니다. 재생 버튼을 다시 눌러 주십시오.");
   },
 
   async generatePhoneTurnAudio(turn, regenerate = false, job = 0) {
@@ -1223,7 +1223,7 @@ export const calls = {
       transcript: first ? null : before.map((turn) => ({ from: nameOf(turn), text: turn.text })),
       direction,
     });
-    if (!lines) throw new Error("통화에 쓸 연결 프로필을 설정해 주세요.");
+    if (!lines) throw new Error("통화에 쓸 연결 프로필을 설정해 주십시오.");
     this.assertChat(operation);
     const response = await this.request(
       `/api/plugins/scenevoice/phone/overheard/${encodeURIComponent(session.id)}/part`,
@@ -1359,7 +1359,7 @@ export const calls = {
         language: draft.language,
       }));
     if (lines.length < (part === "whole" || part === "first" ? 2 : 1))
-      throw new Error("보조모델이 통화 대사를 돌려주지 않았습니다. 다시 시도해 주세요.");
+      throw new Error("보조모델이 통화 대사를 돌려주지 않았습니다. 다시 시도해 주십시오.");
     return lines;
   },
 
@@ -1474,7 +1474,7 @@ export const calls = {
   openLineSheet({
     title = "대사 고치기",
     value = "",
-    hint = "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있어요. 저장하면 이전 음성은 지우고 새로 만듭니다.",
+    hint = "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있습니다. 저장하면 이전 음성은 지우고 새로 만듭니다.",
   } = {}) {
     const screen = document.querySelector("#sv-smartphone .sv-phone-screen");
     if (!screen) return Promise.resolve(null);

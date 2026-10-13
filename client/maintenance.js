@@ -139,7 +139,7 @@ export const maintenance = {
     const context = window.SillyTavern?.getContext?.() || {};
     const current = context.characters?.[context.characterId];
     if (!current?.avatar || context.groupId)
-      throw new Error("기록을 이어 줄 봇카드의 채팅을 먼저 열어 주세요. (단체 채팅 말고 1:1)");
+      throw new Error("기록을 이어 줄 봇카드의 채팅을 먼저 열어 주십시오. (단체 채팅 말고 1:1)");
     const to = `character:${current.avatar}`;
     const live = new Set((context.characters || []).map((item) => `character:${item.avatar}`));
     const response = await this.request("/api/plugins/scenevoice/cards/keys", { cache: "no-store" });
@@ -152,8 +152,8 @@ export const maintenance = {
     dialog.innerHTML = `<form method="dialog">
       <header class="sv-dialog-head">
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-link"></i></span>
-        <div><h3>봇카드 기록 다시 잇기</h3><small>이름을 바꾼 봇카드의 예전 기록을 지금 카드(${escapeHtml(current.name)})로 옮겨요.</small></div>
-        ${infoTip("실리태번에서 캐릭터 이름을 바꾸면 카드 파일 이름이 바뀌어, 그 전에 쌓인 통화·문자·메모·라디오·상태와 등록한 인물이 이어지지 않아요. 예전 카드를 고르면 그 기록을 지금 카드로 옮깁니다.\n이제는 이름을 바꾸면 자동으로 옮겨지니, 이건 예전에 바꾼 카드에만 쓰면 돼요.", "다시 잇기 설명")}
+        <div><h3>봇카드 기록 다시 잇기</h3><small>이름을 바꾼 봇카드의 예전 기록을 지금 카드(${escapeHtml(current.name)})로 옮깁니다.</small></div>
+        ${infoTip("실리태번에서 캐릭터 이름을 바꾸면 카드 파일 이름이 바뀌어, 그 전에 쌓인 통화·문자·메모·라디오·상태와 등록한 인물이 이어지지 않습니다. 예전 카드를 고르면 그 기록을 지금 카드로 옮깁니다.\n이제는 이름을 바꾸면 자동으로 옮겨지니, 이건 예전에 바꾼 카드에만 쓰면 됩니다.", "다시 잇기 설명")}
       </header>
       <div class="sv-relink-list">${
         left.length
@@ -163,7 +163,7 @@ export const maintenance = {
                   `<label class="sv-check"><input type="radio" name="from" value="${escapeHtml(item.key)}" ${index === 0 ? "checked" : ""}><span>${escapeHtml(item.name || item.key.slice("character:".length))}<small>${escapeHtml(item.key.slice("character:".length))} · 기록 ${item.count}개</small></span></label>`,
               )
               .join("")
-          : '<p class="sv-hint">남아 있는 예전 봇카드를 찾지 못했어요. 아래에 예전 이름을 적어 주세요.</p>'
+          : '<p class="sv-hint">남아 있는 예전 봇카드를 찾지 못했습니다. 아래에 예전 이름을 적어 주십시오.</p>'
       }</div>
       <label class="sv-field"><span class="sv-label-line">또는 예전 이름</span><input type="text" id="sv-relink-name" placeholder="예: 고죠 (예전 카드 파일 이름, .png는 빼고)" autocomplete="off"></label>
       <footer class="sv-dialog-actions"><button type="submit" class="sv-btn">취소</button><button type="button" class="sv-btn sv-btn-primary" data-relink><i class="fa-solid fa-link" aria-hidden="true"></i><span>옮기기</span></button></footer>
@@ -175,12 +175,12 @@ export const maintenance = {
       this.run(async () => {
         const typed = dialog.querySelector("#sv-relink-name").value.trim().replace(/\.png$/i, "");
         const from = typed ? `character:${typed}.png` : dialog.querySelector('input[name="from"]:checked')?.value;
-        if (!from) throw new Error("옮길 예전 봇카드를 고르거나 예전 이름을 적어 주세요.");
-        if (from === to) throw new Error("지금 카드와 같은 이름이에요.");
+        if (!from) throw new Error("옮길 예전 봇카드를 고르거나 예전 이름을 적어 주십시오.");
+        if (from === to) throw new Error("지금 카드와 같은 이름입니다.");
         const moved = await this.relinkCard(from, to, current.name);
         dialog.close();
         this.notify(
-          moved ? `예전 기록을 ‘${current.name}’ 카드로 옮겼어요.` : "옮길 기록을 찾지 못했어요. 예전 이름을 다시 확인해 주세요.",
+          moved ? `예전 기록을 ‘${current.name}’ 카드로 옮겼습니다.` : "옮길 기록을 찾지 못했습니다. 예전 이름을 다시 확인해 주십시오.",
           moved ? "success" : "info",
         );
       }),
@@ -202,7 +202,7 @@ export const maintenance = {
     dialog.innerHTML = `<form method="dialog">
       <header class="sv-dialog-head">
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-file-arrow-down"></i></span>
-        <div><h3>백업 파일 저장</h3><small>저장할 봇카드와 항목을 고르세요.</small></div>
+        <div><h3>백업 파일 저장</h3><small>저장할 봇카드와 항목을 고르십시오.</small></div>
         ${infoTip("API 키는 들어가지 않습니다. 고른 봇카드의 고른 항목만 저장하고, 복원할 때도 파일에 든 것 중에서 다시 고를 수 있습니다.\n여러 봇카드가 같이 쓰는 인물과 그 기록은 ‘글로벌 인물’에 있습니다.", "백업 설명")}
       </header>
       ${this.backupPickHtml({ common: true, scopes, items, summary, settings: full.data.settings })}
@@ -273,7 +273,7 @@ export const maintenance = {
     if (
       asked &&
       !confirm(
-        `음성 파일 ${names.length}개(약 ${Math.ceil(size / 1048576)}MB)와 목록·설정을 zip으로 내려받습니다. API 키는 들어가지 않습니다. 계속할까요?`,
+        `음성 파일 ${names.length}개(약 ${Math.ceil(size / 1048576)}MB)와 목록·설정을 zip으로 내려받습니다. API 키는 들어가지 않습니다. 계속하시겠습니까?`,
       )
     )
       return;
@@ -323,7 +323,7 @@ export const maintenance = {
     };
     const titles = {
       settings: ["sliders", "설정 초기화", "설정을 처음 값으로 되돌립니다. 음성·기록 같은 데이터는 그대로 둡니다."],
-      data: ["broom", "데이터 초기화", "지울 항목을 고르세요. 설정은 그대로 둡니다. 지운 데이터는 되돌릴 수 없습니다."],
+      data: ["broom", "데이터 초기화", "지울 항목을 고르십시오. 설정은 그대로 둡니다. 지운 데이터는 되돌릴 수 없습니다."],
       all: ["triangle-exclamation", "전체 초기화", "설정과 모든 데이터·음성 파일을 지우고 처음 설치한 상태로 되돌립니다. 되돌릴 수 없습니다."],
     };
     const [icon, title, lead] = titles[kind];
@@ -372,7 +372,7 @@ export const maintenance = {
     apply.addEventListener("click", () =>
       this.run(async () => {
         if (this.phoneBusy || this.voiceMessageBusy || this.stateTrackingBusy)
-          throw new Error("진행 중인 통화·분석이 끝난 뒤 초기화해 주세요.");
+          throw new Error("진행 중인 통화·분석이 끝난 뒤 초기화해 주십시오.");
         dialog.querySelectorAll("button").forEach((button) => (button.disabled = true));
         try {
           if (kind === "settings")

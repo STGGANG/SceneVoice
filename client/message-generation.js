@@ -8,11 +8,12 @@ const PREPARE_AHEAD = 3;
 const CATCH_UP_AHEAD = 2;
 
 // The message button's word and its icon: 음성 (nothing made yet), 재생 (made, play from the
-// start or resume), 준비중 (waiting for voices). Pressing an active button stops it.
+// start or resume), 준비중 (waiting for voices), 정지 (playing: a press stops).
 const GENERATE_ICONS = {
   음성: "fa-wave-square",
   재생: "fa-play",
   준비중: "fa-hourglass-half",
+  정지: "fa-stop",
 };
 
 export const messageGeneration = {
@@ -120,7 +121,7 @@ export const messageGeneration = {
     const buttons = source ? source.buttons : [...container.querySelectorAll(".sv-play-btn")];
     await this.hydrateLines(source ? source.host : container);
     const ready = buttons.filter((line) => line.dataset.status === "ready" && line.dataset.audioUrl);
-    if (!ready.length) throw new Error("내려받을 음성이 없습니다. 먼저 메시지의 ‘음성’ 버튼으로 만들어 주세요.");
+    if (!ready.length) throw new Error("내려받을 음성이 없습니다. 먼저 메시지의 ‘음성’ 버튼으로 만들어 주십시오.");
     const messageId = container.closest(".mes")?.getAttribute("mesid") || "";
     await this.downloadJoinedAudio(
       ready.map((line) => ({ url: line.dataset.audioUrl })),
@@ -328,7 +329,7 @@ export const messageGeneration = {
     const total = buttons.length;
     const playing = this.playMessageLines(buttons, playback, made, (index, waiting) => {
       control.classList.toggle("sv-queued", waiting);
-      this.setGenerateLabel(control, waiting ? "준비중" : "재생");
+      this.setGenerateLabel(control, waiting ? "준비중" : "정지");
       control.title = `${waiting ? `${index + 1}/${total} 준비 중` : `${index + 1}/${total} 재생 중`} · 누르면 만들기와 재생을 멈춥니다. 이미 만든 음성은 남습니다.`;
     });
     Promise.all([prepared, playing])

@@ -67,7 +67,7 @@ export class Transport {
       prepareSettings: async (patch) => {
         if (patch.elevenlabs?.api_key || patch.elevenlabs?.clear_api_key)
           throw new UserError(
-            "ElevenLabs 키는 실리태번 기본 TTS 설정에서 관리해 주세요.",
+            "ElevenLabs 키는 실리태번 기본 TTS 설정에서 관리해 주십시오.",
           );
         return patch;
       },
@@ -76,7 +76,7 @@ export class Transport {
         if (request.engine === "fish") {
           if (!settings.fish.api_key)
             throw new UserError(
-              "이 브라우저에서 Fish API 키를 먼저 저장해 주세요.",
+              "이 브라우저에서 Fish API 키를 먼저 저장해 주십시오.",
             );
           response = await this.network(
             "/proxy/https://api.fish.audio/v1/tts",
@@ -94,7 +94,7 @@ export class Transport {
             const message = await response.clone().text();
             if (message.includes("CORS proxy is disabled"))
               throw new UserError(
-                "실리태번 config.yaml의 enableCorsProxy를 true로 설정한 뒤 실리태번을 다시 켜 주세요.",
+                "실리태번 config.yaml의 enableCorsProxy를 true로 설정한 뒤 실리태번을 다시 켜 주십시오.",
               );
           }
         } else
@@ -115,7 +115,7 @@ export class Transport {
             429: "요청 한도",
           };
           throw new UserError(
-            `${request.engine} 생성 실패 (${response.status}). ${hints[response.status] || "연결·설정"}을 확인해 주세요. 자동 재시도하지 않습니다.`,
+            `${request.engine} 생성 실패 (${response.status}). ${hints[response.status] || "연결·설정"}을 확인해 주십시오. 자동 재시도하지 않습니다.`,
             502,
           );
         }
@@ -148,13 +148,13 @@ export class Transport {
               return {
                 ok: false,
                 message:
-                  "실리태번 중계 기능이 꺼져 있습니다. config.yaml의 enableCorsProxy를 true로 바꾸고 실리태번을 다시 켜 주세요.",
+                  "실리태번 중계 기능이 꺼져 있습니다. config.yaml의 enableCorsProxy를 true로 바꾸고 실리태번을 다시 켜 주십시오.",
               };
             return {
               ok: false,
               message: [401, 403].includes(wallet.status)
                 ? "Fish API 키가 올바르지 않습니다."
-                : `Fish 응답 ${wallet.status}. 잠시 뒤 다시 확인해 주세요.`,
+                : `Fish 응답 ${wallet.status}. 잠시 뒤 다시 확인해 주십시오.`,
             };
           }
           const credit = Number((await wallet.json().catch(() => ({}))).credit);
@@ -184,7 +184,7 @@ export class Transport {
         if (!response.ok)
           return {
             ok: false,
-            message: "실리태번 기본 TTS의 ElevenLabs 키를 확인해 주세요.",
+            message: "실리태번 기본 TTS의 ElevenLabs 키를 확인해 주십시오.",
           };
         const voices = (await response.json().catch(() => ({}))).voices || [];
         // The male and female defaults, each checked against the account's voices.
@@ -198,7 +198,7 @@ export class Transport {
           ok: true,
           message: `키 확인됨 · 내 보이스 ${voices.length}개`,
           voice: named.length
-            ? `${named.join(" · ")}${named.some((line) => line.endsWith("없음")) ? " (라이브러리 보이스라면 내 보이스에 추가했는지 확인해 주세요)" : ""}`
+            ? `${named.join(" · ")}${named.some((line) => line.endsWith("없음")) ? " (라이브러리 보이스라면 내 보이스에 추가했는지 확인해 주십시오)" : ""}`
             : "기본 목소리가 비어 있습니다.",
         };
       },
@@ -209,7 +209,7 @@ export class Transport {
           signal,
         });
         if (!response.ok)
-          throw new UserError("실리태번 기본 TTS의 ElevenLabs 키를 확인해 주세요.");
+          throw new UserError("실리태번 기본 TTS의 ElevenLabs 키를 확인해 주십시오.");
         return {
           items: ((await response.json()).voices || []).map((v) => ({
             id: v.voice_id,

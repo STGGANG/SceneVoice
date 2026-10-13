@@ -1,4 +1,5 @@
 import { escapeHtml, OVERHEARD_LENGTH_CHOICES } from "./common.js";
+import { choiceListHtml } from "./ui.js";
 
 // 통화 기록: the phone's list of past calls, one call's transcript, and deleting a call.
 
@@ -186,8 +187,8 @@ export const callHistory = {
         </header>
         <p class="sv-room-hint">${
           mine
-            ? `나(${escapeHtml(this.userCharacterName())})와 상대의 통화를 AI가 내 대사까지 통째로 써 줘요. 내가 한 통화로 남아요.`
-            : "다른 인물들끼리 하는 통화를 AI가 통째로 써서 들려줘요. 내 캐릭터는 이 통화를 몰라요."
+            ? `나(${escapeHtml(this.userCharacterName())})와 상대의 통화를 AI가 내 대사까지 통째로 써 줍니다. 내가 한 통화로 남습니다.`
+            : "다른 인물들끼리 하는 통화를 AI가 통째로 써서 들려줍니다. 내 캐릭터는 이 통화를 모릅니다."
         }</p>
         ${
           mine
@@ -197,13 +198,17 @@ export const callHistory = {
         ${people}
         ${editor.people.length < most ? `<button type="button" class="sv-call-person-add" data-person-add ${off}><i class="fa-solid fa-plus" aria-hidden="true"></i><span>사람 추가</span></button>` : ""}
         <label class="sv-room-name"><span>무슨 통화인지</span><input id="sv-overheard-reason" maxlength="300" placeholder="비워 두면 지금 이야기에 맞게 정합니다" value="${escapeHtml(editor.reason)}" autocomplete="off" ${off}></label>
-        <label class="sv-room-name"><span>${editor.open ? "한 번에 쓸 길이" : "통화 길이"}</span><select id="sv-overheard-length" ${off}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-        <label class="sv-room-check"><input type="checkbox" id="sv-overheard-open" ${editor.open ? "checked" : ""} ${off}><span>이어 가며 듣기</span></label>
-        <p class="sv-room-hint">${
-          editor.open
-            ? "끊지 않고 중간에서 멈춰요. 다음 내용을 지시하며 이어 가고, 원할 때 마무리해요."
-            : "한 번에 처음부터 통화가 끝날 때까지 써요."
-        } 목소리는 들을 때 만듭니다.</p>
+        ${choiceListHtml({
+          name: "sv-overheard-mode",
+          label: "통화 방식",
+          value: editor.open ? "open" : "complete",
+          cls: "sv-overheard-modes",
+          choices: [
+            ["complete", "phone", "시작부터 끝까지", "한 번에 처음부터 통화가 끝날 때까지 씁니다."],
+            ["open", "arrows-rotate", "길게 이어가기", "끊지 않고 중간에서 멈춥니다. 다음 내용을 지시하며 이어 가고, 원할 때 마무리합니다."],
+          ],
+        })}
+        <label class="sv-room-name"><span data-overheard-length-label>${editor.open ? "한 번에 쓸 길이" : "통화 길이"}</span><select id="sv-overheard-length" ${off}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${label}</option>`).join("")}</select></label>
         <div class="sv-room-actions">
           <button type="button" class="sv-room-save" data-overheard-make ${off}>${editor.busy ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 통화 받아 오는 중…' : "통화 만들기"}</button>
         </div>
@@ -231,9 +236,13 @@ export const callHistory = {
     body.querySelector("#sv-overheard-length").addEventListener("change", (event) => {
       editor.length = event.target.value;
     });
-    body.querySelector("#sv-overheard-open").addEventListener("change", (event) => {
-      editor.open = event.target.checked;
-      this.renderOverheardEditor(body);
+    body.querySelectorAll('input[name="sv-overheard-mode"]').forEach((input) => {
+      input.disabled = Boolean(editor.busy);
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        editor.open = input.value === "open";
+        body.querySelector("[data-overheard-length-label]").textContent = editor.open ? "한 번에 쓸 길이" : "통화 길이";
+      });
     });
     body.querySelector("#sv-overheard-reason").addEventListener("input", (event) => {
       editor.reason = event.target.value;
@@ -280,7 +289,7 @@ export const callHistory = {
 
   /** Removes one call from the history, and the chat memory it left. */
   async deletePhoneSession(body, session) {
-    if (!confirm(`${session.character_name || "캐릭터"}와의 통화 기록을 지울까요?`)) return;
+    if (!confirm(`${session.character_name || "캐릭터"}와의 통화 기록을 지우시겠습니까?`)) return;
     const response = await this.request(
       `/api/plugins/scenevoice/phone/sessions/${encodeURIComponent(session.id)}`,
       {
@@ -306,7 +315,7 @@ export const callHistory = {
     if (!away.length) return;
     if (
       !confirm(
-        `미적용 기억의 통화 ${away.length}개를 모두 지울까요?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
+        `미적용 기억의 통화 ${away.length}개를 모두 지우시겠습니까?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
       )
     )
       return;
@@ -440,7 +449,7 @@ export const callHistory = {
       title: turn.role === "user" ? "내 대사 고치기" : "대사 고치기",
       value: turn.script || turn.text,
       ...(turn.translation
-        ? { hint: "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있어요. 말을 바꾸면 한국어 번역은 지워지고, 음성은 새로 만듭니다." }
+        ? { hint: "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있습니다. 말을 바꾸면 한국어 번역은 지워지고, 음성은 새로 만듭니다." }
         : {}),
     });
     if (value === null) return;
@@ -482,11 +491,11 @@ export const callHistory = {
     const mine = voiced ? lacking(true) : 0;
     const makeTheirs =
       theirs > 0 &&
-      confirm(`캐릭터 대사 ${theirs}개는 아직 목소리가 없어요. 만들어서 함께 넣을까요?\n취소하면 그 대사는 빠져요.`);
+      confirm(`캐릭터 대사 ${theirs}개는 아직 목소리가 없습니다. 만들어서 함께 넣으시겠습니까?\n취소하면 그 대사는 빠집니다.`);
     const makeMine =
       mine > 0 &&
       confirm(
-        `내 대사 ${mine}개는 아직 목소리가 없어요. 페르소나 목소리로 만들어서 함께 넣을까요?\n취소하면 ${captions ? "영상에는 글자로만 나와요." : "내 대사는 빠져요."}`,
+        `내 대사 ${mine}개는 아직 목소리가 없습니다. 페르소나 목소리로 만들어서 함께 넣으시겠습니까?\n취소하면 ${captions ? "영상에는 글자로만 나옵니다." : "내 대사는 빠집니다."}`,
       );
     const clips = [];
     for (const [index, turn] of turns.entries()) {
@@ -847,7 +856,7 @@ export const callHistory = {
           ${many ? `<div class="sv-room-avatar" aria-hidden="true">${members.slice(0, 4).map((member) => this.contactAvatarMarkup(member)).join("")}</div>` : this.contactAvatarMarkup(members[0])}
           <h2>${names}</h2>
           <span class="sv-call-state">${ended && !open ? "" : '<i class="sv-live-dot" aria-hidden="true"></i>'}<span>${
-            open ? "통화 중 · 멈춤" : ended ? "통화가 끝났어요" : between ? "엿듣는 중" : "지난 통화 듣는 중"
+            open ? "통화 중 · 멈춤" : ended ? "통화가 끝났습니다" : between ? "엿듣는 중" : "지난 통화 듣는 중"
           }</span>${ended ? "" : ' · <time class="sv-call-duration">00:00</time>'}</span>
         </div>
         <div class="sv-call-live-line">${

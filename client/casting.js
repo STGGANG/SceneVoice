@@ -4,6 +4,7 @@ import { escapeHtml, contentKey, LANGUAGE_CHOICES } from "./common.js";
 import { fieldHtml, switchHtml, infoTip } from "./ui.js";
 import { cardHoldsPerson, cardStandIn } from "../shared/casting.js";
 import { voicePickHtml } from "./voice-picker.js";
+import { bindCastOrder } from "./cast-order.js";
 export const casting = {
   /** Who may speak a line here: the chat's cards that are people, their people, and global people. */
   speakerCatalog() {
@@ -185,7 +186,7 @@ export const casting = {
               id: "sv-multicast-sync",
               label: "MultiCast 확장 출연진 자동 연동",
               hint: "MultiCast 확장의 인물을 가져오고, MultiCast 확장에서 고치거나 지우면 따라갑니다.",
-              tip: "채팅·스마트폰·설정을 열 때 맞춥니다. 바로 맞추려면 ‘재연동’을 누르세요.",
+              tip: "채팅·스마트폰·설정을 열 때 맞춥니다. 바로 맞추려면 ‘재연동’을 누르십시오.",
               extra: '<button type="button" class="sv-mini-btn" data-cast-multicast title="지금 MultiCast 확장과 다시 맞춥니다" aria-label="재연동"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>재연동</span></button>',
               checked: this.config.casting?.multicast_sync !== false,
             })}</div>`
@@ -226,6 +227,22 @@ export const casting = {
     if (key === "user")
       return window.SillyTavern?.getContext?.()?.name1 || "사용자";
     return this.castCards?.get(key) || this.cardInfo(key).name;
+  },
+
+  /** Keep card-owned entries in their slots while saving the global rows' displayed order. */
+  reorderGlobalCast(keys) {
+    const globals = this.castMembers("__shared__");
+    const allowed = new Set(globals);
+    if (keys.length !== globals.length || new Set(keys).size !== keys.length || keys.some((key) => !allowed.has(key))) return;
+    if (keys.every((key, index) => key === globals[index])) return;
+    let index = 0;
+    this.voiceDraft = Object.fromEntries(Object.entries(this.voiceDraft).map(([key, value]) => {
+      if (!allowed.has(key)) return [key, value];
+      const next = keys[index++];
+      return [next, this.voiceDraft[next]];
+    }));
+    this.settingsDirty = true;
+    this.scheduleSettingsSave(250);
   },
 
   castVoiceFields(prefix, entry, { member = false } = {}) {
@@ -318,7 +335,7 @@ export const casting = {
         <i class="fa-solid fa-chevron-down sv-member-chevron" aria-hidden="true"></i>
       </summary>
       <div class="sv-member-body">
-        ${synced ? '<div class="sv-notice"><i class="fa-solid fa-link" aria-hidden="true"></i><span>MultiCast 확장과 연동된 인물입니다. 목소리·성별·항상 붙일 태그·연기 메모·감정 표현은 MultiCast에서 정하고, 지우려면 MultiCast에서 지우세요. 여기서는 아래 항목만 추가 지정 가능합니다.</span></div>' : ""}
+        ${synced ? '<div class="sv-notice"><i class="fa-solid fa-link" aria-hidden="true"></i><span>MultiCast 확장과 연동된 인물입니다. 목소리·성별·항상 붙일 태그·연기 메모·감정 표현은 MultiCast에서 정하고, 지우려면 MultiCast에서 지우십시오. 여기서는 아래 항목만 추가 지정 가능합니다.</span></div>' : ""}
         <div class="sv-row sv-row-3">
           ${fieldHtml({ id: `${prefix}-name`, label: "이름", control: `<input id="${prefix}-name" data-field="name" maxlength="120" value="${escapeHtml(entry.name || "")}" autocomplete="off">` })}
           ${fieldHtml({ id: `${prefix}-aliases`, label: "별명·다른 표기", control: `<input id="${prefix}-aliases" data-field="aliases" maxlength="600" value="${escapeHtml(entry.aliases || "")}" placeholder="쉼표로 구분: 사토루, Gojo, 선생님" autocomplete="off">` })}
@@ -374,6 +391,7 @@ export const casting = {
   },
 
   renderCastPanel(openKey = "") {
+    this.castOrderCleanup?.();
     const panel = document.getElementById("sv-cast-panel");
     if (!panel) return;
     const cardKey = this.editingCard;
@@ -405,7 +423,7 @@ export const casting = {
           <div class="sv-cast-title"><strong>${escapeHtml(name)}</strong><small>봇카드 공통 설정</small></div>
         </div>
         ${switchHtml({ id: "sv-cast-realtime", label: "실제 시간 인식 (전화·문자)", hint: "켜면 이 봇카드의 인물들이 전화·문자에서 지금 날짜와 시각을 압니다.", tip: "밤늦은 시간, 주말, 메시지 사이에 흐른 시간처럼 실제 시각을 대화에 자연스럽게 반영합니다. 통화·문자 기록에도 시각이 남습니다.", checked: entry.realtime === true, attrs: 'data-field="realtime"' })}
-        ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고 (전화·문자)", hint: "고른 월드인포 항목을 통화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다. 상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 통화·문자에 나올 때만 보냅니다. 형식이나 문체를 바꾸는 지시가 든 항목은 가급적 꺼 두세요. 대필에도 씁니다.", checked: loreOn })}
+        ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고 (전화·문자)", hint: "고른 월드인포 항목을 통화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다. 상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 통화·문자에 나올 때만 보냅니다. 형식이나 문체를 바꾸는 지시가 든 항목은 가급적 꺼 두십시오. 대필에도 씁니다.", checked: loreOn })}
         <details class="sv-lore-fold" ${loreOn ? "" : "hidden"}><summary><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>참고할 월드인포 고르기</span><i class="fa-solid fa-chevron-down sv-lore-chevron" aria-hidden="true"></i></summary><div id="sv-lore-picker" class="sv-lore-picker"></div></details>
         ${switchHtml({ id: "sv-cast-single", label: "이 봇카드는 목소리 하나로 통일", hint: "켜면 등장인물을 구분하지 않고 이 봇카드의 모든 대사를 아래 목소리로 읽습니다.", checked: single })}
         ${single ? `<hr class="sv-divider">${ownVoice}` : ""}
@@ -418,7 +436,8 @@ export const casting = {
       </section>
       <section class="sv-members">
         <h4 class="sv-members-title"><span>글로벌 등장인물</span><span class="sv-badge">${globals.length}</span>${infoTip("여러 봇카드에 나오는 인물을 한 번만 등록합니다. 줄 오른쪽의 ‘이 봇카드에서 사용’을 켠 봇카드에서만 화자 후보·연락처·상태 추적에 들어갑니다.\n페르소나도 켠 봇카드에서만 내 목소리로 씁니다. 여럿을 켜 두면 지금 페르소나와 이름이 같은 쪽을 씁니다.", "글로벌 등장인물 설명")}</h4>
-        <div class="sv-member-list">${list(globals, "등록한 글로벌 인물이 없습니다.")}</div>
+        ${globals.length > 1 ? '<p class="sv-hint">인물 이름을 길게 누른 뒤 위아래로 끌어 순서를 바꿉니다. 변경한 순서는 자동으로 저장합니다.</p>' : ""}
+        <div class="sv-member-list sv-global-member-list">${list(globals, "등록한 글로벌 인물이 없습니다.")}</div>
       </section>
       <div class="sv-combo sv-member-add">
         <input id="sv-cast-new" maxlength="120" placeholder="인물 이름" autocomplete="off" aria-label="새 인물 이름">
@@ -426,6 +445,12 @@ export const casting = {
         <button type="button" id="sv-cast-add" class="sv-btn" title="인물 추가"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>추가</span></button>
       </div>`;
     // The world info list is read when its fold is first opened.
+    const globalList = panel.querySelector(".sv-global-member-list");
+    for (const summary of globalList.querySelectorAll(":scope > .sv-member > summary")) {
+      summary.title = "길게 눌러 순서를 바꿉니다. 키보드에서는 Alt + 위·아래 방향키를 사용합니다.";
+      summary.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    }
+    this.castOrderCleanup = bindCastOrder(globalList, (keys) => this.reorderGlobalCast(keys));
     this.bindLorePicker();
     panel.querySelector(".sv-lore-fold")?.addEventListener("toggle", (event) => {
       if (event.currentTarget.open && !event.currentTarget.dataset.loaded) {

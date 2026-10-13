@@ -891,7 +891,7 @@ export const character = {
         if (batch.length && !this.stateOutputNoticeShown) {
           this.stateOutputNoticeShown = true;
           this.notify(
-            `상태 분석 응답이 잘리거나 형식이 깨져 ${batch[0].name}의 상태를 갱신하지 못했습니다. 설정 → 보조모델 분석 → 최대 출력 토큰을 늘려 보세요.`,
+            `상태 분석 응답이 잘리거나 형식이 깨져 ${batch[0].name}의 상태를 갱신하지 못했습니다. 설정 → 보조모델 분석 → 최대 출력 토큰을 늘려 보십시오.`,
             "warning",
           );
         }
@@ -956,7 +956,7 @@ export const character = {
     if (!profileId || !this.connectionService) {
       if (force)
         this.notify(
-          "상태 분석에 사용할 실리태번 연결 프로필을 먼저 선택해 주세요.",
+          "상태 분석에 사용할 실리태번 연결 프로필을 먼저 선택해 주십시오.",
           "error",
         );
       return null;

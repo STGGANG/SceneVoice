@@ -83,8 +83,8 @@ export const forward = {
         <label class="sv-room-name"><span>누구에게</span><select name="key">${people
           .map((person) => `<option value="${escapeHtml(person.key)}" ${person.key === first.key ? "selected" : ""}>${escapeHtml(person.name)}</option>`)
           .join("")}</select></label>
-        <textarea name="note" rows="2" maxlength="1000" placeholder="같이 보낼 말 (비워도 돼요)" aria-label="같이 보낼 말"></textarea>
-        <small>그 사람 문자방으로 보내고, 들은 뒤 답장이 와요.</small>
+        <textarea name="note" rows="2" maxlength="1000" placeholder="같이 보낼 말 (비워도 됩니다)" aria-label="같이 보낼 말"></textarea>
+        <small>그 사람 문자방으로 보내고, 들은 뒤 답장이 옵니다.</small>
         <div class="sv-contact-edit-actions"><button type="button" data-share-cancel>취소</button><button type="submit" class="sv-contact-save">보내기</button></div>
       </form>`;
     screen.append(sheet);

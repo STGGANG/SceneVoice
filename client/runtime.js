@@ -354,6 +354,8 @@ export const runtime = {
     }
   },
   dispose() {
+    this.castOrderCleanup?.();
+    this.castOrderCleanup = null;
     clearInterval(this.syncTimer);
     clearInterval(this.phoneClockTimer);
     this.resetChat();

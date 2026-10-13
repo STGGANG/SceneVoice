@@ -148,7 +148,7 @@ export const groups = {
           <label class="sv-room-num"><span>하루 최대</span><input type="number" id="sv-room-daily" min="0" max="100" value="${editor.auto_daily_max}"><span>번 (0 = 제한 없음)</span></label>
           <label class="sv-room-num"><span>‘대화 이어 보기’ 한 번에</span><input type="number" id="sv-room-min" min="1" max="30" value="${editor.burst_min}"><span>~</span><input type="number" id="sv-room-max" min="1" max="30" value="${editor.burst_max}"><span>개</span></label>
         </div>
-        <p class="sv-room-hint">${editor.without_user ? "자기들끼리 대화할 사람을" : "함께 대화할 사람을"} 두 명 이상 고르세요.</p>
+        <p class="sv-room-hint">${editor.without_user ? "자기들끼리 대화할 사람을" : "함께 대화할 사람을"} 두 명 이상 고르십시오.</p>
         <div class="sv-room-people">
           ${people
             .map(
@@ -175,8 +175,8 @@ export const groups = {
       editor.without_user = event.target.checked;
       body.querySelector(".sv-room-alone-options").hidden = !editor.without_user;
       body.querySelector(".sv-room-hint").textContent = editor.without_user
-        ? "자기들끼리 대화할 사람을 두 명 이상 고르세요."
-        : "함께 대화할 사람을 두 명 이상 고르세요.";
+        ? "자기들끼리 대화할 사람을 두 명 이상 고르십시오."
+        : "함께 대화할 사람을 두 명 이상 고르십시오.";
     });
     for (const [id, field] of [
       ["#sv-room-auto", "auto_chat"],
@@ -216,7 +216,7 @@ export const groups = {
       );
       return { key, name: this.memberContact({ key, name: saved?.name || "" }).name };
     });
-    if (members.length < 2) throw new Error("두 명 이상 골라 주세요.");
+    if (members.length < 2) throw new Error("두 명 이상 골라 주십시오.");
     const response = await this.request(
       `/api/plugins/scenevoice/message-groups${editor.id ? `/${encodeURIComponent(editor.id)}` : ""}`,
       {
@@ -248,7 +248,7 @@ export const groups = {
    */
   async leaveGroup() {
     const key = `${GROUP}${this.groupEditor.id}`;
-    if (!confirm("단체방에서 나갈까요? 방과 메시지는 휴대폰에서 사라지고, 채팅 기억에는 나눈 대화와 내가 나간 일이 남습니다."))
+    if (!confirm("단체방에서 나가시겠습니까? 방과 메시지는 휴대폰에서 사라지고, 채팅 기억에는 나눈 대화와 내가 나간 일이 남습니다."))
       return;
     const items = (await this.loadMessages()).filter((item) => this.messageThreadOf(item) === key);
     if (items.length) await this.persistTextThreadMemory(key, items.at(-1).anchor_message_id, { left: true });
@@ -258,7 +258,7 @@ export const groups = {
   /** Deletes a group: it, its messages and their chat memories all go. */
   async deleteGroup() {
     const key = `${GROUP}${this.groupEditor.id}`;
-    if (!confirm("단체방을 삭제할까요? 메시지와 채팅 기억까지 모두 지워집니다.")) return;
+    if (!confirm("단체방을 삭제하시겠습니까? 메시지와 채팅 기억까지 모두 지워집니다.")) return;
     const anchors = new Set(
       (await this.loadMessages({ all: true }))
         .filter((item) => this.messageThreadOf(item) === key)
@@ -297,7 +297,7 @@ export const groups = {
     const profileId =
       this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService) {
-      if (!optional) throw new Error("대화를 만들 실리태번 연결 프로필을 먼저 골라 주세요.");
+      if (!optional) throw new Error("대화를 만들 실리태번 연결 프로필을 먼저 골라 주십시오.");
       return;
     }
     const operation = this.captureChat();
@@ -396,7 +396,7 @@ export const groups = {
       }
       if (!list.length) list = null;
     }
-    if (!list) throw new Error("보조 모델의 단체방 답장을 읽지 못했습니다. 다시 시도해 주세요.");
+    if (!list) throw new Error("보조 모델의 단체방 답장을 읽지 못했습니다. 다시 시도해 주십시오.");
     return list
       .map((entry) => ({ member: memberOf(entry?.from ?? entry?.name ?? entry?.speaker), entry }))
       .filter(({ member, entry }) => member && String(entry?.text ?? "").trim())

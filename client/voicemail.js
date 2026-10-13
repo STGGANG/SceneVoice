@@ -153,7 +153,7 @@ export const voicemail = {
     const state = {
       connecting: "연결하는 중…",
       greeting: "음성사서함",
-      record: "삐— 메시지를 남겨 주세요",
+      record: "삐— 메시지를 남겨 주십시오",
     }[stage];
     body.innerHTML = `
       <div class="sv-call-screen sv-voicemail-box" data-phone-wallpaper>
@@ -164,13 +164,13 @@ export const voicemail = {
         </div>
         <div class="sv-call-live-line">${
           stage === "connecting"
-            ? '<div class="sv-call-thinking"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>전화를 받지 않아요</span></div>'
+            ? '<div class="sv-call-thinking"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>전화를 받지 않습니다</span></div>'
             : `<div class="sv-call-caption"><small>${escapeHtml(contact.name)} · 음성사서함</small><p>${escapeHtml(greeting?.text || "지금은 전화를 받을 수 없습니다.")}</p>${greeting ? this.translationHtml(greeting) : ""}</div>`
         }</div>
         ${
           stage === "record"
             ? `<form class="sv-call-compose sv-voicemail-compose">
-                 <textarea id="sv-voicemail-text" rows="1" maxlength="2000" placeholder="남길 말 (안 남기고 끊어도 돼요)" aria-label="음성사서함에 남길 말" ${box.saving ? "disabled" : ""}>${escapeHtml(box.text)}</textarea>
+                 <textarea id="sv-voicemail-text" rows="1" maxlength="2000" placeholder="남길 말 (안 남기고 끊어도 됩니다)" aria-label="음성사서함에 남길 말" ${box.saving ? "disabled" : ""}>${escapeHtml(box.text)}</textarea>
                  <button type="submit" aria-label="남기기" title="남기기" ${box.saving ? "disabled" : ""}><i class="fa-solid ${box.saving ? "fa-spinner fa-spin" : "fa-arrow-up"}" aria-hidden="true"></i></button>
                </form>`
             : ""

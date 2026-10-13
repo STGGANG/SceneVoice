@@ -96,7 +96,7 @@ export const backup = {
         if (name.startsWith("audio/")) audio.set(name.slice(6), bytes);
     } else {
       if (file.size > 25 * 1024 * 1024)
-        throw new Error("목록 백업은 25MB 이하 파일을 선택해 주세요.");
+        throw new Error("목록 백업은 25MB 이하 파일을 선택해 주십시오.");
       input = JSON.parse(await file.text());
     }
     const preview = await this.transport.local.store.previewRestore(input);
@@ -136,7 +136,7 @@ export const backup = {
           this.voiceMessageBusy ||
           this.stateTrackingBusy
         )
-          throw new Error("진행 중인 작업이 끝난 뒤 복원해 주세요.");
+          throw new Error("진행 중인 작업이 끝난 뒤 복원해 주십시오.");
         dialog.querySelectorAll("button").forEach((x) => {
           x.disabled = true;
         });

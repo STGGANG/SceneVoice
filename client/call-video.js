@@ -281,7 +281,7 @@ export const callVideo = {
    * `gather` gave as `current` (a call with the voices made meanwhile).
    */
   async makeRecordingVideo({ heading, scene, gather, name, trackOptions = null }) {
-    if (!this.canMakeCallVideo()) throw new Error("이 브라우저에서는 영상을 만들 수 없어요.");
+    if (!this.canMakeCallVideo()) throw new Error("이 브라우저에서는 영상을 만들 수 없습니다.");
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     // Made and resumed within the click, or phones keep it silent.
     const audio = new AudioContextClass();
@@ -317,7 +317,7 @@ export const callVideo = {
       </header>
       <div class="sv-video-preview" data-video-preview></div>
       <div class="sv-video-bar" aria-hidden="true"><i data-video-bar></i></div>
-      <p class="sv-hint" data-video-hint>다 될 때까지 이 화면을 띄워 두세요. 다른 탭으로 가거나 화면을 끄면 잠시 멈췄다가, 돌아오면 이어서 만들어요.</p>
+      <p class="sv-hint" data-video-hint>다 될 때까지 이 화면을 띄워 두십시오. 다른 탭으로 가거나 화면을 끄면 잠시 멈췄다가, 돌아오면 이어서 만듭니다.</p>
       <footer class="sv-dialog-actions"><button type="button" class="sv-btn" data-video-cancel>멈추기</button></footer>
     </form>`;
     document.body.append(dialog);
@@ -404,7 +404,7 @@ export const callVideo = {
     view.show(canvas);
     if (await encodesHere(track.sampleRate)) {
       view.status("영상 만드는 중…");
-      view.hint("보통 금방 끝나요. 다 될 때까지 이 화면을 띄워 두세요.");
+      view.hint("보통 금방 끝납니다. 다 될 때까지 이 화면을 띄워 두십시오.");
       try {
         return await encodeVideo(canvas, draw, track, duration, view);
       } catch (error) {
@@ -412,7 +412,7 @@ export const callVideo = {
         console.warn("[SceneVoice] call video encoding failed", error);
       }
     }
-    view.hint("통화 길이만큼 걸려요. 다 될 때까지 이 화면을 띄워 두세요. 다른 탭으로 가거나 화면을 끄면 잠시 멈췄다가, 돌아오면 이어서 만들어요.");
+    view.hint("통화 길이만큼 걸립니다. 다 될 때까지 이 화면을 띄워 두십시오. 다른 탭으로 가거나 화면을 끄면 잠시 멈췄다가, 돌아오면 이어서 만듭니다.");
     return this.recordCallVideoLive(canvas, draw, track, duration, audio, view);
   },
 
@@ -647,7 +647,7 @@ export const callVideo = {
       if (document.hidden) {
         if (recorder.state === "recording") recorder.pause();
         audio.suspend?.();
-        view.status("화면을 벗어나서 잠시 멈췄어요");
+        view.status("화면을 벗어나서 잠시 멈췄습니다");
       } else {
         audio.resume?.();
         if (recorder.state === "paused") recorder.resume();

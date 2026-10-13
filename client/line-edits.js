@@ -233,19 +233,19 @@ export const lineEdits = {
             "맨 앞 태그는 대사 전체의 감정·말투, 중간 태그는 그 자리의 소리([sighs], [chuckles])나 말투 변화([whispers])입니다.",
             "ElevenLabs는 태그를 그 자리에서 연기합니다. Fish는 맨 앞 태그들을 [frustrated, emphatic]처럼 하나로 묶고, 중간 태그는 그대로 보냅니다.",
             "태그 효과는 목소리·모델마다 다릅니다. 태그를 모두 지우면 원문만 읽습니다.",
-            "AI 분석 다시는 직접 고친 내용을 지우고 이 대사만 보조모델로 다시 분석해 칸을 채웁니다(요청 1번). 결과는 바로 쓰이고, 더 고치려면 고친 뒤 저장하세요.",
+            "AI 분석 다시는 직접 고친 내용을 지우고 이 대사만 보조모델로 다시 분석해 칸을 채웁니다(요청 1번). 결과는 바로 쓰이고, 더 고치려면 고친 뒤 저장하십시오.",
             "메시지를 고치거나 다른 스와이프로 바꾸면 그 버전의 지정만 적용합니다.",
           ].join("\n"),
           "대사 편집 설명",
         )}
       </header>
       <blockquote class="sv-line-text">${escapeHtml(button.dataset.text)}</blockquote>
-      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 메시지의 ‘음성’ 버튼으로 생성하세요.</span></p>
+      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 메시지의 ‘음성’ 버튼으로 생성하십시오.</span></p>
       <div class="sv-row">
         ${fieldHtml({ id: "sv-edit-speaker", label: "화자", control: '<select id="sv-edit-speaker"></select>' })}
         ${fieldHtml({ id: "sv-edit-language", label: "언어", control: `<select id="sv-edit-language">${LANGUAGE_CHOICES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select>` })}
       </div>
-      ${fieldHtml({ id: "sv-edit-script", label: "태그 넣은 대사", control: '<textarea id="sv-edit-script" rows="3" maxlength="12000" autocomplete="off" spellcheck="false"></textarea>', hint: "대사 글자는 그대로 두고 [대괄호] 태그만 넣거나 빼세요. 감정·말투는 맨 앞에, 소리는 커서 자리에 들어갑니다." })}
+      ${fieldHtml({ id: "sv-edit-script", label: "태그 넣은 대사", control: '<textarea id="sv-edit-script" rows="3" maxlength="12000" autocomplete="off" spellcheck="false"></textarea>', hint: "대사 글자는 그대로 두고 [대괄호] 태그만 넣거나 빼십시오. 감정·말투는 맨 앞에, 소리는 커서 자리에 들어갑니다." })}
       <p class="sv-script-check" id="sv-edit-script-check" role="status"></p>
       <div class="sv-tag-group"><span>감정·말투</span><div class="sv-tag-picks" data-place="lead" role="group" aria-label="감정·말투 태그를 맨 앞에 넣기">${chips(tagSuggestions(this.availableEmotions))}</div></div>
       <div class="sv-tag-group"><span>소리</span><div class="sv-tag-picks" data-place="cursor" role="group" aria-label="소리 태그를 커서 자리에 넣기">${chips(SOUND_TAGS)}</div></div>
@@ -326,7 +326,7 @@ export const lineEdits = {
       check.dataset.state = same ? "ok" : "error";
       check.textContent = same
         ? "원래 대사와 글자가 같습니다."
-        : "대사 글자가 바뀌었습니다. 태그만 넣고 빼 주세요.";
+        : "대사 글자가 바뀌었습니다. 태그만 넣고 빼 주십시오.";
       saveButton.disabled = !same;
       return same;
     };
@@ -370,14 +370,14 @@ export const lineEdits = {
     const againLabel = dialog.querySelector("#sv-edit-reanalyze span");
     if (unanalysed) {
       againLabel.textContent = "AI 분석";
-      check.textContent = "아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르세요.";
+      check.textContent = "아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르십시오.";
     }
     const save = async () => {
       this.assertChat(operation);
       if (!validate())
-        throw new Error("대사 글자가 바뀌어 저장할 수 없습니다. 태그만 넣고 빼 주세요.");
+        throw new Error("대사 글자가 바뀌어 저장할 수 없습니다. 태그만 넣고 빼 주십시오.");
       if (!button.isConnected || key !== this.lineIdentity(button))
-        throw new Error("메시지가 변경되었습니다. 다시 열어 주세요.");
+        throw new Error("메시지가 변경되었습니다. 다시 열어 주십시오.");
       this.cancelLineAudio(button);
       const value = {
         speaker_key: dialog.querySelector("#sv-edit-speaker").value,
@@ -413,7 +413,7 @@ export const lineEdits = {
       this.run(async () => {
         this.assertChat(operation);
         if (!button.isConnected || key !== this.lineIdentity(button))
-          throw new Error("메시지가 변경되었습니다. 다시 열어 주세요.");
+          throw new Error("메시지가 변경되었습니다. 다시 열어 주십시오.");
         controls.forEach((control) => {
           control.disabled = true;
         });

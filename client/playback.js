@@ -370,7 +370,7 @@ export const playback = {
         if (!live() || error.name === "AbortError") return;
         this.notify(
           error.name === "NotAllowedError"
-            ? "음성이 준비되었습니다. 브라우저에서 자동 재생을 막았으니 재생 버튼을 한 번 더 눌러 주세요."
+            ? "음성이 준비되었습니다. 브라우저에서 자동 재생을 막았으니 재생 버튼을 한 번 더 눌러 주십시오."
             : `재생 실패: ${error.message}`,
           error.name === "NotAllowedError" ? "info" : "error",
         );
@@ -698,7 +698,7 @@ export const playback = {
   /** QR에 추가: a "SceneVoice" quick reply set with the ⏸ button, shown on the QR bar. */
   async addPauseQuickReply() {
     const api = globalThis.quickReplyApi;
-    if (!api?.createQuickReply) throw new Error("실리태번의 빠른 답장(Quick Reply) 확장을 찾을 수 없어요.");
+    if (!api?.createQuickReply) throw new Error("실리태번의 빠른 답장(Quick Reply) 확장을 찾을 수 없습니다.");
     const set = "SceneVoice";
     const label = "씬보이스 멈춤·이어 듣기";
     if (!api.getSetByName(set)) await api.createSet(set);
@@ -712,8 +712,8 @@ export const playback = {
     api.addGlobalSet(set, true);
     this.notify(
       api.settings?.isEnabled === false
-        ? "QR 세트 ‘SceneVoice’에 ⏸ 버튼을 넣었어요. 빠른 답장 확장이 꺼져 있어서, 켜야 버튼이 보여요."
-        : "QR 바에 ⏸ 버튼을 넣었어요(세트 ‘SceneVoice’). 빼려면 빠른 답장 설정에서 세트를 지우면 돼요.",
+        ? "QR 세트 ‘SceneVoice’에 ⏸ 버튼을 넣었습니다. 빠른 답장 확장이 꺼져 있어서, 켜야 버튼이 보입니다."
+        : "QR 바에 ⏸ 버튼을 넣었습니다(세트 ‘SceneVoice’). 빼려면 빠른 답장 설정에서 세트를 지우면 됩니다.",
       "success",
     );
   },

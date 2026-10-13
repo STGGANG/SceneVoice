@@ -53,7 +53,7 @@ export const lifecycle = {
     });
     if (!response.ok)
       throw new Error(
-        "설정을 읽을 수 없습니다. 서버 연결과 저장 공간을 확인해 주세요.",
+        "설정을 읽을 수 없습니다. 서버 연결과 저장 공간을 확인해 주십시오.",
       );
     const data = await response.json();
     this.config = mergeConfig(data.settings || {});

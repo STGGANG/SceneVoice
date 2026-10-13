@@ -501,7 +501,7 @@ export const memory = {
       return;
     }
     if (action === "delete") {
-      if (!confirm("이 통화·음성 채팅 기억을 삭제할까요?")) return;
+      if (!confirm("이 통화·음성 채팅 기억을 삭제하시겠습니까?")) return;
       const index = events.findIndex((item) => item?.id === event.id);
       if (index >= 0) events.splice(index, 1);
       if (!events.length)
@@ -510,7 +510,7 @@ export const memory = {
       const value = editor.value.trim();
       if (!value) {
         this.notify(
-          "기억 내용을 비울 수 없습니다. 완전히 지우려면 삭제를 누르세요.",
+          "기억 내용을 비울 수 없습니다. 완전히 지우려면 삭제를 누르십시오.",
           "error",
         );
         return;

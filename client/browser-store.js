@@ -19,7 +19,7 @@ export class BrowserStore {
       request.onerror = () =>
         reject(
           new Error(
-            "이 브라우저의 저장소를 사용할 수 없습니다. 비공개 모드 또는 저장 공간을 확인해 주세요.",
+            "이 브라우저의 저장소를 사용할 수 없습니다. 비공개 모드 또는 저장 공간을 확인해 주십시오.",
           ),
         );
     });

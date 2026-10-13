@@ -254,7 +254,7 @@ export const contacts = {
    * JPEG where WebP can't be written), then stored. Returns its URL.
    */
   async uploadAvatar(file) {
-    if (!/^image\//.test(file?.type || "")) throw new Error("사진 파일을 골라 주세요.");
+    if (!/^image\//.test(file?.type || "")) throw new Error("사진 파일을 골라 주십시오.");
     const url = URL.createObjectURL(file);
     try {
       const image = await new Promise((resolve, reject) => {

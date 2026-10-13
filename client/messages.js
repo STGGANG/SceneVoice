@@ -58,7 +58,7 @@ export const messages = {
   },
 
   messagePreview(item) {
-    if (!item) return "대화를 시작해 보세요";
+    if (!item) return "대화를 시작해 보십시오";
     const first = String(item.text || "").split("\n")[0];
     if (item.role === "user") return `나: ${first}`;
     const preview = (item.kind || "voice") === "voice" ? `음성 메시지 · ${first}` : first;
@@ -243,7 +243,7 @@ export const messages = {
             })
             .join("")}
         </div>
-        <p class="sv-msg-frozen"><i class="fa-solid fa-lock" aria-hidden="true"></i>보기만 할 수 있는 대화예요</p>
+        <p class="sv-msg-frozen"><i class="fa-solid fa-lock" aria-hidden="true"></i>보기만 할 수 있는 대화입니다</p>
       </div>`;
     body.querySelector("[data-thread-back]").addEventListener("click", () => {
       this.messageThreadKey = "";
@@ -273,7 +273,7 @@ export const messages = {
     if (!away.length) return;
     if (
       !confirm(
-        `미적용 기억의 메시지 ${away.length}개를 모두 지울까요?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
+        `미적용 기억의 메시지 ${away.length}개를 모두 지우시겠습니까?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
       )
     )
       return;
@@ -501,14 +501,14 @@ export const messages = {
                     });
                   })
                   .join("")
-              : `<p class="sv-msg-empty">${contact.group ? "단체방에 첫 문자를 보내 보세요." : `${escapeHtml(contact.name)}에게 먼저 문자를 보내 보세요.`}</p>`
+              : `<p class="sv-msg-empty">${contact.group ? "단체방에 첫 문자를 보내 보십시오." : `${escapeHtml(contact.name)}에게 먼저 문자를 보내 보십시오.`}</p>`
           }
           ${typing ? '<div class="sv-msg-row sv-msg-theirs"><div class="sv-msg-bubble sv-msg-typing" aria-label="입력 중"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span></div></div>' : ""}
         </div>
         ${
           this.messageGroup(key)?.without_user
             ? `<div class="sv-msg-observer">
-          <small><i class="fa-solid fa-eye" aria-hidden="true"></i>나는 이 방에 없어요 · 한 번에 ${this.messageGroup(key).burst_min}~${this.messageGroup(key).burst_max}개</small>
+          <small><i class="fa-solid fa-eye" aria-hidden="true"></i>나는 이 방에 없습니다 · 한 번에 ${this.messageGroup(key).burst_min}~${this.messageGroup(key).burst_max}개</small>
           <button type="button" data-group-burst ${typing ? "disabled" : ""}><i class="fa-solid ${typing ? "fa-spinner fa-spin" : "fa-forward"}" aria-hidden="true"></i><span>대화 이어 보기</span></button>
         </div>`
             : ""
@@ -909,7 +909,7 @@ export const messages = {
       this.config.connection_profile_id ||
       "";
     if (!profileId || !this.connectionService)
-      throw new Error("답장에 쓸 실리태번 연결 프로필을 먼저 골라 주세요.");
+      throw new Error("답장에 쓸 실리태번 연결 프로필을 먼저 골라 주십시오.");
     // That conversation is open (the list doesn't count: an answer there stays unread).
     const viewing = () =>
       !document.getElementById("sv-smartphone")?.classList.contains("hidden") &&
@@ -997,7 +997,7 @@ export const messages = {
   },
 
   async deleteMessage(item) {
-    if (!confirm(item.role === "user" ? "보낸 문자를 지울까요?" : "이 메시지를 지울까요?")) return;
+    if (!confirm(item.role === "user" ? "보낸 문자를 지우시겠습니까?" : "이 메시지를 지우시겠습니까?")) return;
     const response = await this.request(
       `/api/plugins/scenevoice/voice-messages/${encodeURIComponent(item.id)}`,
       {
@@ -1292,7 +1292,7 @@ export const messages = {
       title: mine ? "보낸 문자 고치기" : (item.kind || "voice") === "voice" ? "음성 메시지 고치기" : "문자 고치기",
       value: mine ? item.text : item.script || item.text,
       ...(mine
-        ? { hint: "상대가 이미 받은 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰여요." }
+        ? { hint: "상대가 이미 받은 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰입니다." }
         : {}),
     });
     if (value === null) return;
@@ -1596,7 +1596,7 @@ export const messages = {
       }
       if (!attached.ok)
         throw new Error(
-          "음성은 생성되었지만 메시지에 연결하지 못했습니다. 기록 탭에서 확인해 주세요.",
+          "음성은 생성되었지만 메시지에 연결하지 못했습니다. 기록 탭에서 확인해 주십시오.",
         );
       // Played next as it is: its sounds are in the file.
       item.sounds_mixed = Boolean(mixed);

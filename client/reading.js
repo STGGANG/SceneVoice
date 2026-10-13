@@ -85,7 +85,7 @@ export const reading = {
         return;
       }
       if (event.target.closest("#sv-reading-reset")) {
-        if (!confirm("읽을 구간을 기본값(큰따옴표·곧은 따옴표·별표 켜짐, 나머지 꺼짐)으로 되돌릴까요?"))
+        if (!confirm("읽을 구간을 기본값(큰따옴표·곧은 따옴표·별표 켜짐, 나머지 꺼짐)으로 되돌리시겠습니까?"))
           return;
         list.innerHTML = DEFAULT_READING_RULES.map(ruleRow).join("");
         changed();

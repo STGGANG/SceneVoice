@@ -65,7 +65,7 @@ export const radio = {
   async writeRadioShow({ mode = "talk", hosts, length = "normal", phone = false, story = "" }) {
     const operation = this.captureChat();
     const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주세요.");
+    if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주십시오.");
     const people = hosts.map((host) => (host.key === "user" ? { key: "user", name: this.userCharacterName(), me: true, note: "" } : this.phoneContact(host.key)));
     // My character speaks in the language of the first other host.
     const other = people.find((person) => !person.me) || people[0];
@@ -126,7 +126,7 @@ export const radio = {
         intensity: draft.intensity,
         language: draft.language,
       }));
-    if (lines.length < 2) throw new Error("보조모델이 방송 대사를 돌려주지 않았습니다. 다시 시도해 주세요.");
+    if (lines.length < 2) throw new Error("보조모델이 방송 대사를 돌려주지 않았습니다. 다시 시도해 주십시오.");
     const anchor = String(this.currentPhoneAnchor().index);
     const response = await this.request("/api/plugins/scenevoice/phone/radio", {
       method: "POST",
@@ -295,7 +295,7 @@ export const radio = {
     );
     body.querySelector("[data-radio-delete]").addEventListener("click", () =>
       this.run(async () => {
-        if (!confirm(`‘${this.radioTitle(show)}’ 방송을 지울까요?`)) return;
+        if (!confirm(`‘${this.radioTitle(show)}’ 방송을 지우시겠습니까?`)) return;
         const response = await this.request(`/api/plugins/scenevoice/phone/radio/${encodeURIComponent(show.id)}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
@@ -328,8 +328,8 @@ export const radio = {
         <label class="sv-room-name"><span>무슨 방송</span><select id="sv-radio-mode" ${off}><option value="talk" ${story ? "" : "selected"}>토크 · 지금까지 이야기로 수다 (제4의 벽)</option><option value="story" ${story ? "selected" : ""}>사연 · 내 사연을 읽어 주는 방송</option></select></label>
         <p class="sv-room-hint">${
           story
-            ? "첫 번째 사람이 이야기 속 세계의 DJ가 되어 내 사연을 읽고 답해 줘요."
-            : "인물들이 이야기 밖으로 잠깐 나와, 지금까지 일을 두고 떠들어요. 채팅 기억에는 들어가지 않아요."
+            ? "첫 번째 사람이 이야기 속 세계의 DJ가 되어 내 사연을 읽고 답해 줍니다."
+            : "인물들이 이야기 밖으로 잠깐 나와, 지금까지 일을 두고 떠듭니다. 채팅 기억에는 들어가지 않습니다."
         }</p>
         ${editor.hosts
           .map(
@@ -340,7 +340,7 @@ export const radio = {
           )
           .join("")}
         ${editor.hosts.length < 3 ? `<button type="button" class="sv-call-person-add" data-radio-host-add ${off}><i class="fa-solid fa-plus" aria-hidden="true"></i><span>진행자 추가</span></button>` : ""}
-        ${story ? `<label class="sv-room-name"><span>사연</span><textarea id="sv-radio-story" rows="4" maxlength="2000" placeholder="비워 두면 이야기에 어울리는 사연을 지어내요" ${off}>${escapeHtml(editor.story)}</textarea></label><p class="sv-room-hint">익명으로 전달돼요. 내용에 따라 페르소나라는 걸 눈치챌 수도, 다른 사람으로 여길 수도 있어요.</p>` : ""}
+        ${story ? `<label class="sv-room-name"><span>사연</span><textarea id="sv-radio-story" rows="4" maxlength="2000" placeholder="비워 두면 이야기에 어울리는 사연을 지어냅니다" ${off}>${escapeHtml(editor.story)}</textarea></label><p class="sv-room-hint">익명으로 전달됩니다. 내용에 따라 페르소나라는 걸 눈치챌 수도, 다른 사람으로 여길 수도 있습니다.</p>` : ""}
         <label class="sv-room-name"><span>분량</span><select id="sv-radio-length" ${off}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${escapeHtml(label.split(" (")[0])}</option>`).join("")}</select></label>
         <label class="sv-room-check"><input type="checkbox" id="sv-radio-phone" ${editor.phone ? "checked" : ""} ${off}><span>전화·문자 내용도 참고</span></label>
         <div class="sv-room-actions">
@@ -426,7 +426,7 @@ export const radio = {
         <div class="sv-call-identity">
           ${hosts.length > 1 ? `<div class="sv-room-avatar" aria-hidden="true">${hosts.map((host) => this.contactAvatarMarkup(host)).join("")}</div>` : this.contactAvatarMarkup(hosts[0])}
           <h2>${escapeHtml(this.radioTitle(show))}</h2>
-          <span class="sv-call-state"><span>${ended ? "방송이 끝났어요" : escapeHtml(hosts.map((host) => host.name).join(", "))}</span></span>
+          <span class="sv-call-state"><span>${ended ? "방송이 끝났습니다" : escapeHtml(hosts.map((host) => host.name).join(", "))}</span></span>
         </div>
         <div class="sv-radio-meter" aria-hidden="true">${"<i></i>".repeat(9)}</div>
         <div class="sv-call-live-line">
@@ -737,7 +737,7 @@ export const radio = {
   async radioClips(show, onStep = () => {}, { captions = false } = {}) {
     const lacking = show.lines.filter((line) => !line.audio_url && this.radioLineVoiced(line)).length;
     const make =
-      lacking > 0 && confirm(`대사 ${lacking}개는 아직 목소리가 없어요. 만들어서 함께 넣을까요?\n취소하면 그 대사는 빠져요.`);
+      lacking > 0 && confirm(`대사 ${lacking}개는 아직 목소리가 없습니다. 만들어서 함께 넣으시겠습니까?\n취소하면 그 대사는 빠집니다.`);
     const filter = this.shouldApplyCommunicationFilter("radio");
     const clips = [];
     for (const [index, line] of show.lines.entries()) {

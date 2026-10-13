@@ -258,7 +258,7 @@ export function buildSpeechRequest(settings, raw) {
     throw new UserError("지원하지 않는 음성 모델입니다.");
   const voice = engine === "fish" ? config.reference_id : config.voice_id;
   if (!voice || !/^[a-zA-Z0-9_-]{1,200}$/.test(voice))
-    throw new UserError("음성의 Voice / Reference ID를 설정해 주세요.");
+    throw new UserError("음성의 Voice / Reference ID를 설정해 주십시오.");
   // ElevenLabs models before v3 would read a bracketed tag aloud: they get the plain line.
   const traits = engine === "elevenlabs" ? elevenModelTraits(config.model) : null;
   const useTags = engine !== "elevenlabs" || (traits.tags && config.use_audio_tags !== false);
@@ -268,7 +268,7 @@ export function buildSpeechRequest(settings, raw) {
     : deliveryCue(input.tags, engine) || "기본 연기";
   if (traits && spoken.length > traits.maxChars)
     throw new UserError(
-      `${config.model}는 연기 지시 포함 ${traits.maxChars.toLocaleString("ko-KR")}자까지 지원합니다. 대사를 나눠 주세요.`,
+      `${config.model}는 연기 지시 포함 ${traits.maxChars.toLocaleString("ko-KR")}자까지 지원합니다. 대사를 나눠 주십시오.`,
     );
   if (spoken.length > 10000 && !traits)
     throw new UserError("연기 지시를 포함한 대사가 10,000자를 초과했습니다.");

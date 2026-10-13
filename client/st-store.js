@@ -54,7 +54,7 @@ export class STFileStore {
     });
     if (!response.ok)
       throw new UserError(
-        `실리태번 파일 저장 실패 (${response.status}). 서버 저장 공간과 연결을 확인해 주세요.`,
+        `실리태번 파일 저장 실패 (${response.status}). 서버 저장 공간과 연결을 확인해 주십시오.`,
         502,
       );
     const result = await response.json();
@@ -195,7 +195,7 @@ export class STFileStore {
         // The other device's version is what the next read must see.
         this.snapshot = null;
         throw new UserError(
-          "다른 기기에서도 목록을 변경했습니다. 새로 불러온 뒤 다시 시도해 주세요. 직전 목록은 실리태번에 백업되어 있습니다.",
+          "다른 기기에서도 목록을 변경했습니다. 새로 불러온 뒤 다시 시도해 주십시오. 직전 목록은 실리태번에 백업되어 있습니다.",
           409,
         );
       }
@@ -207,7 +207,7 @@ export class STFileStore {
       return result;
     }
     throw new UserError(
-      "다른 기기에서 목록을 변경 중입니다. 잠시 후 다시 시도해 주세요.",
+      "다른 기기에서 목록을 변경 중입니다. 잠시 후 다시 시도해 주십시오.",
       409,
     );
   }
@@ -355,7 +355,7 @@ export class STFileStore {
     return this.transaction((current) => {
       if (current.revision !== preview.revision)
         throw new UserError(
-          "미리보기를 연 뒤 목록이 바뀌었습니다. 백업 파일을 다시 선택해 주세요.",
+          "미리보기를 연 뒤 목록이 바뀌었습니다. 백업 파일을 다시 선택해 주십시오.",
           409,
         );
       const key = current.settings.fish.api_key;

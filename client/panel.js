@@ -96,10 +96,10 @@ export const panel = {
       body: `${switchHtml({ id: "sv-active", label: "씬보이스 사용", tip: "끄면 모든 기능이 멈춥니다. 저장된 기록과 설정은 그대로입니다.", checked: config.active !== false })}
       <div class="sv-basic-on">
         <hr class="sv-divider">
-        ${switchHtml({ id: "sv-enabled", label: "채팅 대사 읽기", hint: "채팅 메시지의 대사·생각을 음성으로 만듭니다. 끄면 스마트폰 기능만 씁니다.", tip: multicast ? "채팅 대사를 MultiCast 확장으로 들을 때는 끄세요. 씬보이스 설정은 MultiCast 확장과 따로입니다. 함께 쓰는 것은 ElevenLabs API 키(실리태번 기본 TTS 칸)와, 자동 연동한 인물의 목소리·연기 설정뿐입니다." : "", checked: config.enabled !== false })}
+        ${switchHtml({ id: "sv-enabled", label: "채팅 대사 읽기", hint: "채팅 메시지의 대사·생각을 음성으로 만듭니다. 끄면 스마트폰 기능만 씁니다.", tip: multicast ? "채팅 대사를 MultiCast 확장으로 들을 때는 끄십시오. 씬보이스 설정은 MultiCast 확장과 따로입니다. 함께 쓰는 것은 ElevenLabs API 키(실리태번 기본 TTS 칸)와, 자동 연동한 인물의 목소리·연기 설정뿐입니다." : "", checked: config.enabled !== false })}
         <div class="sv-notice sv-chat-off-only"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>채팅 대사 읽기를 끄면 스마트폰에 쓰이는 설정만 보입니다.</span></div>
         <div class="sv-basic-chat">
-          ${multicastReads ? '<div class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>MultiCast 확장도 채팅 대사를 읽고 있습니다. 한 확장만 읽게 하세요. 이쪽 ‘채팅 대사 읽기’를 끄면 씬보이스는 스마트폰만 씁니다.</span></div>' : ""}
+          ${multicastReads ? '<div class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>MultiCast 확장도 채팅 대사를 읽고 있습니다. 한 확장만 읽게 하십시오. 이쪽 ‘채팅 대사 읽기’를 끄면 씬보이스는 스마트폰만 씁니다.</span></div>' : ""}
           <div class="sv-row">
             ${switchHtml({ id: "sv-line-buttons", label: "대사 옆 재생 버튼", hint: "끄면 대사 옆 버튼을 숨기고 메시지의 ‘음성’ 버튼으로만 듣습니다.", checked: config.playback?.line_buttons !== false })}
             ${switchHtml({ id: "sv-prepare", label: "메시지 음성 버튼", hint: "메시지 버튼 줄의 ‘음성’으로 대사를 차례로 만들며 이어서 들려줍니다.", checked: config.playback?.prepare !== false })}
@@ -157,7 +157,7 @@ export const panel = {
           attrs: 'data-engine="elevenlabs"',
           tip: [
             "태그([sighs] 등)는 v3·v4 계열만 연기합니다. 그 밖의 모델에는 태그를 빼고 보냅니다.",
-            "새 모델은 ‘직접 입력…’에 모델 ID(예: eleven_v5)를 넣으세요.",
+            "새 모델은 ‘직접 입력…’에 모델 ID(예: eleven_v5)를 넣으십시오.",
           ].join("\n"),
           control: `<select id="sv-eleven-model">${options(ELEVEN_MODELS, ELEVEN_MODELS.some(([value]) => value === config.elevenlabs?.model) ? config.elevenlabs.model : "__custom__")}</select><input type="text" id="sv-eleven-model-custom" class="${ELEVEN_MODELS.some(([value]) => value === config.elevenlabs?.model) ? "hidden" : ""}" value="${escapeHtml(ELEVEN_MODELS.some(([value]) => value === config.elevenlabs?.model) ? "" : config.elevenlabs?.model || "")}" placeholder="모델 ID (예: eleven_v5)" autocomplete="off" spellcheck="false" aria-label="ElevenLabs 모델 ID 직접 입력">`,
         })}
@@ -237,7 +237,7 @@ export const panel = {
       </div>
       <div class="sv-row">
         ${fieldHtml({ id: "sv-max-input", label: "최대 입력 토큰", tip: "보낼 자료가 이 크기를 넘을 때만 참고 자료를 줄입니다.\n지시문, 캐릭터 설정(프로필·월드 인포·연기 메모), 분석할 대사와 화자 목록은 줄이지 않습니다.\n채팅과 통화·문자 내용은 남은 자리를 나눠 쓰고, 오래된 것부터 잘립니다.", control: number("sv-max-input", Number(config.llm?.max_input_tokens ?? 0), 'min="0" max="2000000" step="1000"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
-        ${fieldHtml({ id: "sv-max-output", label: "최대 출력 토큰", tip: "보조모델 답의 최대 길이입니다. 0이면 프리셋 값을 쓰되 작업에 모자라면 필요한 만큼 늘립니다. 추론(생각하는) 모델은 넉넉하게 두세요.", control: number("sv-max-output", Number(config.llm?.max_output_tokens ?? 0), 'min="0" max="200000" step="100"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
+        ${fieldHtml({ id: "sv-max-output", label: "최대 출력 토큰", tip: "보조모델 답의 최대 길이입니다. 0이면 프리셋 값을 쓰되 작업에 모자라면 필요한 만큼 늘립니다. 추론(생각하는) 모델은 넉넉하게 두십시오.", control: number("sv-max-output", Number(config.llm?.max_output_tokens ?? 0), 'min="0" max="200000" step="100"'), hint: "0 = 연결 프로필 프리셋 따라감" })}
       </div>
       ${divider}
       <div class="sv-row sv-chat-only">
@@ -369,12 +369,12 @@ export const panel = {
         </div>
         <div class="sv-row">
           ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
-          ${switchHtml({ id: "sv-phone-filter", label: "폰 음질 효과", hint: "통화·음성 메시지·음성 메모는 폰 너머 소리처럼, 라디오는 라디오 소리처럼 들려요. 켜면 모두, 끄면 모두.", tip: "재생할 때만 입히고 저장된 음성은 그대로 둡니다. 영상·내려받기의 통화 소리에도 같은 효과가 들어갑니다.", checked: config.phone?.audio_filter !== false })}
+          ${switchHtml({ id: "sv-phone-filter", label: "폰 음질 효과", hint: "통화·음성 메시지·음성 메모는 폰 너머 소리처럼, 라디오는 라디오 소리처럼 들립니다. 켜면 모두, 끄면 모두.", tip: "재생할 때만 입히고 저장된 음성은 그대로 둡니다. 영상·내려받기의 통화 소리에도 같은 효과가 들어갑니다.", checked: config.phone?.audio_filter !== false })}
         </div>
         ${divider}
         <div class="sv-row">
-          ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿들어요. 홈 화면의 ‘음성 메모’에서 직접 만들거나, ‘상태 추적’ 기능을 켜 두면 인물이 가끔 알아서도 남겨요.", tip: "알아서 남기는 건 상태를 갱신할 때 ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
-          ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 들어요.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app !== false })}
+          ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿듣습니다. 홈 화면의 ‘음성 메모’에서 직접 만들거나, ‘상태 추적’ 기능을 켜 두면 인물이 가끔 알아서도 남깁니다.", tip: "알아서 남기는 건 상태를 갱신할 때 ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
+          ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 듣습니다.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app !== false })}
         </div>`,
     });
 
@@ -470,7 +470,7 @@ export const panel = {
       title: "저장 공간",
       tip: [
         "음성과 목록·설정은 실리태번 사용자 폴더의 files에 scenevoice_로 시작하는 파일로 저장합니다.",
-        "여러 기기에서 동시에 설정을 바꾸거나 음성을 만들지 마세요(한 번에 한 기기).",
+        "여러 기기에서 동시에 설정을 바꾸거나 음성을 만들지 마십시오(한 번에 한 기기).",
         "백업·복원과 초기화는 창 오른쪽 위 ⋯ 메뉴에 있습니다.",
       ].join("\n"),
       body: `<div class="sv-storage-meter" id="sv-storage-meter" role="status">
@@ -689,7 +689,7 @@ export const panel = {
       if (!clear) return;
       const engine = clear.dataset.svClearKey;
       const label = engine === "fish" ? "이 브라우저에 저장된 Fish" : "저장된 ElevenLabs";
-      if (!confirm(`${label} API 키를 삭제할까요?`)) return;
+      if (!confirm(`${label} API 키를 삭제하시겠습니까?`)) return;
       this.pendingKeyClear = { ...this.pendingKeyClear, [engine]: true };
       this.settingsDirty = true;
       this.run(() => this.saveSettingsNow());
@@ -698,6 +698,8 @@ export const panel = {
 
   /** Panel close: start saving whatever is still waiting, then remove the panel. */
   closeOverlay() {
+    this.castOrderCleanup?.();
+    this.castOrderCleanup = null;
     if (this.settingsSaveTimer || this.settingsDirty) this.saveSettingsNow();
     document.getElementById("sv-overlay")?.remove();
   },
@@ -847,7 +849,7 @@ export const panel = {
     document
       .getElementById("sv-chat-memory-clear")
       ?.addEventListener("click", () => {
-        if (!confirm("현재 채팅에 붙은 통화·메시지 채팅 기억을 모두 삭제할까요?\n캐릭터가 지난 통화·문자를 기억하지 못하게 되고, 다시 켜도 돌아오지 않습니다. 스마트폰의 통화 기록·문자는 그대로 남습니다.\n(기억에 넣지 않게만 하려면 스위치를 끄면 됩니다.)")) return;
+        if (!confirm("현재 채팅에 붙은 통화·메시지 채팅 기억을 모두 삭제하시겠습니까?\n캐릭터가 지난 통화·문자를 기억하지 못하게 되고, 다시 켜도 돌아오지 않습니다. 스마트폰의 통화 기록·문자는 그대로 남습니다.\n(기억에 넣지 않게만 하려면 스위치를 끄면 됩니다.)")) return;
         this.run(() => this.clearCurrentChatMemory());
       });
     document.querySelectorAll(".sv-tab").forEach((tab) => {
@@ -1225,7 +1227,7 @@ export const panel = {
     if (!container) return;
     const pending = this.phoneAlert();
     const notice = this.phoneSession
-      ? '<p class="sv-notice sv-notice-ok"><i class="fa-solid fa-phone-volume" aria-hidden="true"></i><span>통화 중입니다. 스마트폰을 열어 이어서 대화하세요.</span></p>'
+      ? '<p class="sv-notice sv-notice-ok"><i class="fa-solid fa-phone-volume" aria-hidden="true"></i><span>통화 중입니다. 스마트폰을 열어 이어서 대화하십시오.</span></p>'
       : pending === "incoming_call"
         ? '<p class="sv-notice sv-notice-ok"><i class="fa-solid fa-phone-volume" aria-hidden="true"></i><span>전화가 걸려 오고 있습니다.</span></p>'
         : pending === "voice_message"

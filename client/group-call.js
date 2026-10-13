@@ -24,7 +24,7 @@ export const groupCall = {
           <button type="button" class="sv-phone-back" data-group-call-cancel><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> 연락처</button>
           <strong class="sv-room-editor-title">단체 통화</strong>
         </header>
-        <p class="sv-room-hint">여러 명에게 한꺼번에 걸어요. 내가 말하면 대답할 만한 사람이 대답해요.</p>
+        <p class="sv-room-hint">여러 명에게 한꺼번에 겁니다. 내가 말하면 대답할 만한 사람이 대답합니다.</p>
         ${picker.people
           .map(
             (key, index) =>
@@ -62,7 +62,7 @@ export const groupCall = {
       this.run(async () => {
         if (picker.busy) return;
         const keys = [...new Set(picker.people)];
-        if (keys.length < 2) throw new Error("서로 다른 두 사람 이상을 골라 주세요.");
+        if (keys.length < 2) throw new Error("서로 다른 두 사람 이상을 골라 주십시오.");
         picker.busy = true;
         this.renderGroupCallPicker(body);
         try {
@@ -82,7 +82,7 @@ export const groupCall = {
     const operation = this.captureChat();
     if (this.phoneBusy) return;
     const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService) throw new Error("전화 대화에 사용할 실리태번 연결 프로필을 설정해 주세요.");
+    if (!profileId || !this.connectionService) throw new Error("전화 대화에 사용할 실리태번 연결 프로필을 설정해 주십시오.");
     const people = keys.map((key) => this.phoneContact(key));
     this.phoneBusy = true;
     const operationToken = ++this.phoneOperationToken;

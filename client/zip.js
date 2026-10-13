@@ -96,7 +96,7 @@ export function readZip(buffer) {
     );
     if (method !== 0)
       throw new Error(
-        "다시 압축된 zip은 읽을 수 없습니다. 씬보이스에서 받은 백업 파일을 그대로 선택해 주세요.",
+        "다시 압축된 zip은 읽을 수 없습니다. 씬보이스에서 받은 백업 파일을 그대로 선택해 주십시오.",
       );
     const start =
       offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true);

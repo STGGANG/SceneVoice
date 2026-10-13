@@ -98,7 +98,7 @@ export const history = {
         container.innerHTML = emptyHtml(
           "magnifying-glass",
           "조건에 맞는 음성 기록이 없습니다",
-          "검색어나 기간을 바꾸거나 초기화해 보세요.",
+          "검색어나 기간을 바꾸거나 초기화해 보십시오.",
         );
       this.renderHistoryFilters(container, data);
     } catch (error) {
@@ -202,7 +202,7 @@ export const history = {
     if (
       !key ||
       !confirm(
-        `‘${name}’의 음성 기록을 모두 지울까요?\n통화·문자에 쓰인 이 화자의 목소리도 함께 지워져요(다시 만들 수 있어요). 보관함에 넣은 음성은 남아요.`,
+        `‘${name}’의 음성 기록을 모두 지우시겠습니까?\n통화·문자에 쓰인 이 화자의 목소리도 함께 지워집니다(다시 만들 수 있습니다). 보관함에 넣은 음성은 남습니다.`,
       )
     )
       return;
@@ -257,7 +257,7 @@ export const history = {
           ${infoTip("보관함 음성은 별도 사본으로 저장되어, 오래된 음성을 자동으로 지울 때도 남습니다. 전체 기록에서 ‘영구 보관’을 눌러 추가합니다. 저장 위치는 설정 → 저장 공간에 있습니다.", "보관함 설명")}
         </div>`;
       if (!data.items?.length) {
-        container.innerHTML = `${toolbar}${emptyHtml("star", "아직 영구 보관한 음성이 없습니다", "기록 탭에서 마음에 드는 음성의 ‘영구 보관’을 눌러 보세요.")}`;
+        container.innerHTML = `${toolbar}${emptyHtml("star", "아직 영구 보관한 음성이 없습니다", "기록 탭에서 마음에 드는 음성의 ‘영구 보관’을 눌러 보십시오.")}`;
         return;
       }
       container.innerHTML = `${toolbar}<div class="sv-history-list">${data.items
@@ -274,7 +274,7 @@ export const history = {
   },
 
   async deleteFavorite(favoriteId) {
-    if (!favoriteId || !confirm("영구 보관한 음성과 메타데이터를 삭제할까요?"))
+    if (!favoriteId || !confirm("영구 보관한 음성과 메타데이터를 삭제하시겠습니까?"))
       return;
     try {
       const response = await this.fetch(
@@ -305,7 +305,7 @@ export const history = {
   async cleanupCache(clearAll) {
     if (
       clearAll &&
-      !confirm("즐겨찾기를 제외한 생성 기록과 캐시 오디오를 모두 삭제할까요?")
+      !confirm("즐겨찾기를 제외한 생성 기록과 캐시 오디오를 모두 삭제하시겠습니까?")
     )
       return;
     try {
