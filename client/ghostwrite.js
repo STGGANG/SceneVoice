@@ -39,7 +39,7 @@ export const ghostwrite = {
       conversation = dataBlock(
         "call_transcript",
         turns.map((turn) => ({
-          speaker: turn.role === "user" ? persona.name : other.name,
+          speaker: turn.role === "user" ? persona.name : `${turn.speaker_name || other.name}${turn.aside ? " (in the background)" : ""}`,
           text: turn.text,
         })),
       );

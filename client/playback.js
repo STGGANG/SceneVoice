@@ -7,17 +7,16 @@ const FILE_SECONDS = 1800;
 
 export const playback = {
   shouldApplyCommunicationFilter(kind, record = undefined) {
-    const enabled =
-      kind === "phone"
-        ? this.config.phone?.audio_filter !== false
-        : this.config.voice_message?.audio_filter !== false;
+    // One switch for every phone sound (폰 음질 효과); `kind` is kept for the callers' sake.
+    const enabled = this.config.phone?.audio_filter !== false;
     if (!enabled) return false;
     // A clip saved with the filter already in it isn't filtered twice.
     if (record === undefined) return true;
     return record?.audio_filtered !== true && record?.audio_filtered !== 1;
   },
 
-  connectCommunicationAudioFilter(audio) {
+  /** `aside`: a remark in the background on a call (someone near the phone): fainter, duller. */
+  connectCommunicationAudioFilter(audio, { aside = false, filter = true, radio = false } = {}) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
     if (
@@ -28,11 +27,50 @@ export const playback = {
     }
     const context = this.communicationAudioContext;
     const source = this.mediaSource(audio, context);
-    const nodes = this.communicationNodes(context);
+    const nodes = [
+      ...(filter ? (radio ? this.radioNodes(context) : this.communicationNodes(context)) : []),
+      ...(aside ? this.asideNodes(context) : []),
+    ];
     source.connect(nodes[0]);
     nodes.at(-1).connect(context.destination);
     this.currentAudioNodes = [source, ...nodes];
     return context;
+  },
+
+  /** 라디오: a clean broadcast voice (fuller than the phone, warm low end, gently compressed). */
+  radioNodes(context) {
+    const highpass = context.createBiquadFilter();
+    const lowpass = context.createBiquadFilter();
+    const warmth = context.createBiquadFilter();
+    const presence = context.createBiquadFilter();
+    const compressor = context.createDynamicsCompressor();
+    highpass.type = "highpass";
+    highpass.frequency.value = 160;
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = 6000;
+    warmth.type = "lowshelf";
+    warmth.frequency.value = 220;
+    warmth.gain.value = 2;
+    presence.type = "peaking";
+    presence.frequency.value = 2500;
+    presence.Q.value = 0.8;
+    presence.gain.value = 2.5;
+    compressor.threshold.value = -18;
+    compressor.ratio.value = 3;
+    compressor.attack.value = 0.01;
+    compressor.release.value = 0.2;
+    highpass.connect(lowpass).connect(warmth).connect(presence).connect(compressor);
+    return [highpass, lowpass, warmth, presence, compressor];
+  },
+
+  asideNodes(context) {
+    const lowpass = context.createBiquadFilter();
+    const gain = context.createGain();
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = 1700;
+    gain.gain.value = 0.45;
+    lowpass.connect(gain);
+    return [lowpass, gain];
   },
 
   communicationNodes(context) {
@@ -56,11 +94,11 @@ export const playback = {
     return [highpass, lowpass, presence, compressor];
   },
 
-  async renderCommunicationFilter(buffer) {
+  async renderCommunicationFilter(buffer, { radio = false } = {}) {
     const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const context = new Offline(1, buffer.length, buffer.sampleRate);
     const source = context.createBufferSource();
-    const nodes = this.communicationNodes(context);
+    const nodes = radio ? this.radioNodes(context) : this.communicationNodes(context);
     source.buffer = buffer;
     source.connect(nodes[0]);
     nodes.at(-1).connect(context.destination);
@@ -75,7 +113,7 @@ export const playback = {
     return `${at.getFullYear()}${two(at.getMonth() + 1)}${two(at.getDate())}-${two(at.getHours())}${two(at.getMinutes())}`;
   },
 
-  /** Joins clips into WAV files and saves them. `clips`: [{ url, filter }]; returns the file count. */
+  /** Joins clips into WAV files and saves them. `clips`: [{ url, filter, radio }]; returns the file count. */
   async downloadJoinedAudio(clips, name, { gap = 0.5, rate = 24000 } = {}) {
     const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const decoder = new Offline(1, 1, rate);
@@ -91,7 +129,7 @@ export const playback = {
       const response = await fetch(clip.url);
       if (!response.ok) throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
       let buffer = await decoder.decodeAudioData(await response.arrayBuffer());
-      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer);
+      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer, { radio: clip.radio });
       const mono = new Float32Array(buffer.length);
       for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
         const data = buffer.getChannelData(channel);
@@ -200,7 +238,7 @@ export const playback = {
     url,
     button = null,
     revokeObjectUrl = false,
-    { communicationFilter = false, thoughtEffect = false, onEnded = null, onStop = null } = {},
+    { communicationFilter = false, thoughtEffect = false, aside = false, radio = false, onEnded = null, onStop = null } = {},
   ) {
     if (!url) return;
     // Another TTS extension playing now stops first.
@@ -234,7 +272,7 @@ export const playback = {
         return;
       }
     }
-    const effect = communicationFilter || thoughtEffect;
+    const effect = communicationFilter || thoughtEffect || aside;
     if (effect) this.ensureAudioContext();
     const audio = this.audioPlayer(effect);
     const token = (this.playToken = (this.playToken || 0) + 1);
@@ -251,9 +289,9 @@ export const playback = {
     else this.hideNowReading(true);
     this.syncPublicState?.({ playing: true, kind: chatLine ? "chat" : "phone" });
     let audioContext = null;
-    if (communicationFilter) {
+    if (communicationFilter || aside) {
       try {
-        audioContext = this.connectCommunicationAudioFilter(audio);
+        audioContext = this.connectCommunicationAudioFilter(audio, { aside, filter: communicationFilter, radio });
       } catch (error) {
         console.warn(
           "[SceneVoice] playback-only communication filter unavailable; using clean audio",

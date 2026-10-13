@@ -99,6 +99,17 @@ export function validateVoices(value) {
       }
       // On the phone's home screen; unset means only the first contact is.
       if (typeof profile.quick_call === "boolean") result.quick_call = profile.quick_call;
+      // Their voicemail greeting (written once by the helper model, then kept): its words, the
+      // tagged line for the voice, its language and a Korean translation.
+      const greeting = profile.voicemail_greeting;
+      if (greeting && typeof greeting === "object" && text(greeting.text, 600)) {
+        result.voicemail_greeting = {
+          text: text(greeting.text, 600),
+          script: text(greeting.script, 800),
+          language: SPEECH_LANGUAGES.includes(greeting.language) ? greeting.language : "",
+          translation: text(greeting.translation, 800),
+        };
+      }
       // How readily this person reaches out first, in percent (50 when unset).
       const rate = Number(profile.contact_rate);
       if (Number.isFinite(rate) && rate !== 50)

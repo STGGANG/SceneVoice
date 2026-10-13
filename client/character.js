@@ -551,6 +551,7 @@ export const character = {
       "action_candidate",
       "action_candidates",
       "side_call",
+      "voice_memo",
       "lines",
       "people",
     ]);
@@ -762,6 +763,7 @@ export const character = {
           contactTypes: round.contactTypes,
           language: round.language,
           sideCalls: round.sideCalls,
+          voiceMemos: round.voiceMemos,
         }),
       },
       {
@@ -821,6 +823,7 @@ export const character = {
       results,
       action_candidates: this.normalizeActionCandidates(parsed),
       side_call: this.normalizeSideCall(parsed),
+      voice_memo: this.normalizeVoiceMemo?.(parsed) || null,
       failed: [],
     };
   },
@@ -896,6 +899,7 @@ export const character = {
           results: new Map(),
           action_candidates: [],
           side_call: null,
+          voice_memo: null,
           failed: batch.map((person) => person.key),
         };
       }
@@ -906,6 +910,7 @@ export const character = {
         results: new Map([...first.results, ...second.results]),
         action_candidates: [...first.action_candidates, ...second.action_candidates],
         side_call: first.side_call || second.side_call,
+        voice_memo: first.voice_memo || second.voice_memo,
         failed: [...first.failed, ...second.failed],
       };
     }
@@ -1015,6 +1020,8 @@ export const character = {
         ],
         // 엿듣는 통화: two people phoning each other, judged in the same request.
         sideCalls: this.overheardCallsOn() && people.filter((person) => !person.hidden).length > 1,
+        // 음성 메모: someone recording one for themselves, judged in the same request too.
+        voiceMemos: Boolean(this.autoMemosOn?.()),
       };
       const outcome = { updated: [], unchanged: [], failed: [] };
       const present = [];
@@ -1026,6 +1033,7 @@ export const character = {
       );
       let candidates = [];
       let sideCall = null;
+      let voiceMemo = null;
       if (people.length) {
         const reply = await this.requestStateBatch(
           people,
@@ -1057,6 +1065,7 @@ export const character = {
         }
         candidates = reply.action_candidates;
         sideCall = reply.side_call;
+        voiceMemo = reply.voice_memo;
       }
       const asked = people.map((person) => person.key);
       const summary = { asked, present, unknown: [...unknown], ...outcome };
@@ -1076,6 +1085,7 @@ export const character = {
       else {
         await this.handleActionCandidates(candidates, sourceMessageId, round.contactContext, unknownNow, sheets);
         if (sideCall) await this.handleSideCall(sideCall, sourceMessageId, sheets);
+        if (voiceMemo) await this.handleVoiceMemo(voiceMemo, sourceMessageId, sheets);
       }
       if (force) {
         const names = (keys) =>

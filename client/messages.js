@@ -371,7 +371,8 @@ export const messages = {
     // While a new voice is being made (after an edit), its place stays, turning. A voice
     // message without its voice yet offers to make it right away.
     // A message in 미적용 기억 keeps its voice as it is (the bubble's own ▶ makes one).
-    const reroll = frozen
+    // A forwarded recording plays from its card; its voice isn't mine to make again.
+    const reroll = frozen || item.forward
       ? ""
       : item.audio_url
         ? button("sv-msg-reroll", "fa-rotate-right", "음성 재생성: 같은 문장으로 목소리만 새로 만듭니다", "음성 재생성")
@@ -384,19 +385,24 @@ export const messages = {
     const translation = item.translation
       ? `<div class="sv-msg-translation">${this.translationHtml(item)}</div>`
       : "";
-    const edit = frozen
+    const edit = frozen || item.forward
       ? ""
       : item.role === "user"
         ? button("sv-msg-edit", "fa-pen", "고치기: 보낸 문자를 고칩니다")
         : button("sv-msg-edit", "fa-pen", "고치기: 고친 뒤 음성을 새로 만듭니다");
+    // 음성 전달: a voice message of theirs can be passed on to someone else.
+    const share =
+      item.role !== "user" && voice && item.audio_url && !frozen
+        ? button("sv-msg-share", "fa-share", "공유: 이 음성 메시지를 다른 인물에게 들려줍니다")
+        : "";
     // ‹ 1/2 › goes on its own line under the buttons.
-    const meta = `<div class="sv-msg-meta">${play}${reroll}${again}${edit}${remove}</div>${pager}`;
-    const lines = String(item.text || "")
+    const meta = `<div class="sv-msg-meta">${item.forward ? "" : play}${reroll}${again}${edit}${share}${remove}</div>${pager}`;
+    const lines = String(item.forward && !item.forward.note ? "" : item.text || "")
       .split("\n")
       .filter((line) => line.trim());
     const bubbles = lines.map((line) => `<p class="sv-msg-bubble">${escapeHtml(line)}</p>`).join("");
     if (item.role === "user")
-      return `<div class="sv-msg-row sv-msg-mine${reading}">${label}${bubbles}${translation}${meta}</div>`;
+      return `<div class="sv-msg-row sv-msg-mine${reading}">${label}${this.forwardCardHtml?.(item, playing) || ""}${bubbles}${translation}${meta}</div>`;
     if ((item.kind || "voice") === "voice")
       return `<div class="sv-msg-row sv-msg-theirs${reading}">${label}
           <div class="sv-msg-bubble sv-msg-voice">
@@ -466,6 +472,7 @@ export const messages = {
           }</span></div>
           <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화방에서 목소리를 만든 메시지를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
           <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 메시지 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? "fa-stop" : "fa-headphones"}" aria-hidden="true"></i></button>
+          ${contact.group && !this.messageGroup(key)?.without_user && contact.members.length > 1 ? '<button type="button" class="sv-msg-aloud" data-group-call-room aria-label="단체 통화" title="단체 통화: 이 방 사람들에게 한꺼번에 전화합니다"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
           ${contact.group ? '<button type="button" class="sv-msg-group-edit" data-group-edit aria-label="단체방 설정" title="방 이름·참여자 바꾸기, 나가기"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>' : ""}
         </header>
         <div class="sv-msg-list" role="log" aria-live="polite">
@@ -569,6 +576,11 @@ export const messages = {
       .querySelector("[data-group-edit]")
       ?.addEventListener("click", () => this.openGroupEditor(key));
     body
+      .querySelector("[data-group-call-room]")
+      ?.addEventListener("click", () =>
+        this.run(() => this.startGroupCall(contact.members.slice(0, 4).map((member) => member.key))),
+      );
+    body
       .querySelector("[data-group-burst]")
       ?.addEventListener("click", () => this.run(() => this.continueGroupBurst(key)));
     body.querySelector("[data-thread-back]").addEventListener("click", () => {
@@ -618,6 +630,19 @@ export const messages = {
     );
     body.querySelectorAll(".sv-msg-edit").forEach((button) =>
       button.addEventListener("click", () => this.run(() => this.editVoiceMessage(record(button)))),
+    );
+    body.querySelectorAll(".sv-msg-share").forEach((button) =>
+      button.addEventListener("click", () => this.run(() => this.shareVoiceMessage(record(button)))),
+    );
+    body.querySelectorAll(".sv-msg-forward-play").forEach((button) =>
+      button.addEventListener("click", () => {
+        const item = record(button);
+        if (this.playingMessageId === item.id && this.currentAudio) {
+          this.stopPlayback();
+          return;
+        }
+        this.playMessageAudio({ ...item, kind: "voice" }, this.apiUrl(item.audio_url), button);
+      }),
     );
     body.scrollTop = keepScroll ?? body.scrollHeight;
   },
@@ -823,10 +848,13 @@ export const messages = {
   },
 
   /** The user texts someone; their reply follows after a short pause for more texts. */
-  async sendTextMessage(key, value, translation = "") {
+  /** `extra`: more fields for the saved text (음성 전달: what is forwarded with it). */
+  async sendTextMessage(key, value, translation = "", extra = {}) {
     this.unlockAudioForMobile();
     const text = String(value || "").trim().slice(0, 2000);
     if (!text) return;
+    // I texted them first: no getting back to my voicemail on top of their reply.
+    this.cancelVoicemailAnswer?.(key);
     const contact = this.threadContact(key);
     const identity = this.getStateIdentity();
     const anchor = this.currentPhoneAnchor();
@@ -846,6 +874,7 @@ export const messages = {
         text,
         ...(translation ? { translation } : {}),
         language: this.scriptLanguage(text) || this.chatLanguage(),
+        ...extra,
       }),
     });
     const data = await response.json();
@@ -1156,9 +1185,24 @@ export const messages = {
     return thread.map((item) => ({
       from: item.role === "user" ? me : item.thread_key ? item.character_name : name,
       kind: item.kind || "voice",
-      text: item.text,
+      text: this.messageWords(item),
       ...(timed ? { sent_at: this.realTimeLabel(item.created_at) } : {}),
     }));
+  },
+
+  /**
+   * A message as prompts and the chat memory read it: a forwarded recording (음성 전달) brings
+   * what was said in it, and my note when there is one.
+   */
+  messageWords(item) {
+    const forward = item?.forward;
+    if (!forward) return item?.text || "";
+    const kind = { call: "a recording of a phone call", memo: "a voice memo recording", voice: "a voice message" }[forward.type] || "a recording";
+    return [
+      ...(forward.note ? [item.text] : []),
+      `[Forwarded ${kind}: ${forward.title}]`,
+      ...forward.lines.map((line) => `${line.from}: ${line.text}`),
+    ].join("\n");
   },
 
   /** Saves the character's text or voice message from a model reply; returns the saved record. */

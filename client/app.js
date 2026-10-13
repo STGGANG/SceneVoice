@@ -33,6 +33,11 @@ import { multicast } from "./multicast.js";
 import { publicApi } from "./public-api.js";
 import { updates } from "./updates.js";
 import { callVideo } from "./call-video.js";
+import { voicemail } from "./voicemail.js";
+import { memos } from "./memos.js";
+import { forward } from "./forward.js";
+import { groupCall } from "./group-call.js";
+import { radio } from "./radio.js";
 
 export const SceneVoice = {
   connectionService: null,
@@ -97,6 +102,11 @@ export const SceneVoice = {
   ...publicApi,
   ...updates,
   ...callVideo,
+  ...voicemail,
+  ...memos,
+  ...forward,
+  ...groupCall,
+  ...radio,
   ...casting,
   ...shell,
   ...calls,

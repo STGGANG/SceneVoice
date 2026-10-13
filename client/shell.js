@@ -211,7 +211,9 @@ export const shell = {
         ? "voicemail"
         : this.unheardCalls?.size
           ? "overheard"
-          : "")
+          : this.unheardMemos?.size
+            ? "memo"
+            : "")
     );
   },
 
@@ -222,7 +224,7 @@ export const shell = {
   phoneAlertCount() {
     if (this.phonePendingEvent) return 1;
     return (
-      this.unreadThreads.size + (this.unheardCalls?.size || 0) ||
+      this.unreadThreads.size + (this.unheardCalls?.size || 0) + (this.unheardMemos?.size || 0) ||
       (this.incomingText && !this.incomingText.again ? 1 : 0)
     );
   },
@@ -237,7 +239,7 @@ export const shell = {
       key: session.character_key,
       name:
         kind === "overheard"
-          ? `${session.character_name || ""} ↔ ${session.callee_name || ""}`
+          ? `${session.character_name || ""}, ${session.callee_name || ""}`
           : String(session.character_name || ""),
       text: String(session.turns?.[0]?.text || "").split("\n")[0].slice(0, 70),
       kind,
@@ -309,6 +311,10 @@ export const shell = {
           if (["voicemail", "overheard"].includes(banner.dataset.kind)) {
             this.textAlert = null;
             await this.openSmartphone("history");
+          } else if (banner.dataset.kind === "memo") {
+            this.textAlert = null;
+            this.memoEditor = null;
+            await this.openSmartphone("memo");
           } else if (banner.dataset.kind === "text" && this.textAlert) {
             this.messageThreadKey = this.textAlert.key;
             this.textAlert = null;
@@ -320,8 +326,9 @@ export const shell = {
     }
     const voicemail = !call && text.kind === "voicemail";
     const overheard = !call && text.kind === "overheard";
+    const memo = !call && text.kind === "memo";
     banner.dataset.caller = key;
-    banner.dataset.kind = call ? "call" : voicemail ? "voicemail" : overheard ? "overheard" : "text";
+    banner.dataset.kind = call ? "call" : voicemail ? "voicemail" : overheard ? "overheard" : memo ? "memo" : "text";
     banner.setAttribute(
       "aria-label",
       call
@@ -330,7 +337,9 @@ export const shell = {
           ? `${contact.name}의 음성 사서함 · 눌러서 열기`
           : overheard
             ? `${contact.name} 통화 엿듣기 · 눌러서 열기`
-            : `${contact.name}의 새 메시지 · 눌러서 열기`,
+            : memo
+              ? `${contact.name}의 음성 메모 · 눌러서 열기`
+              : `${contact.name}의 새 메시지 · 눌러서 열기`,
     );
     const initial = Array.from(String(contact.name || "?").trim())[0] || "?";
     banner.innerHTML = `
@@ -344,9 +353,11 @@ export const shell = {
             ? "음성 사서함에 메시지를 남겼어요"
             : overheard
               ? "둘이 통화했어요 · 눌러서 엿듣기"
-              : escapeHtml(text.kind === "voice" ? "음성 메시지" : text.text || "새 문자")
+              : memo
+                ? "혼자 음성 메모를 남겼어요 · 눌러서 듣기"
+                : escapeHtml(text.kind === "voice" ? "음성 메시지" : text.text || "새 문자")
       }</small></span>
-      <span class="sv-call-banner-icon" aria-hidden="true"><i class="fa-solid fa-${call ? "phone" : voicemail ? "voicemail" : overheard ? "ear-listen" : text.kind === "voice" ? "microphone" : "comment"}"></i></span>`;
+      <span class="sv-call-banner-icon" aria-hidden="true"><i class="fa-solid fa-${call ? "phone" : voicemail ? "voicemail" : overheard ? "ear-listen" : memo ? "wave-square" : text.kind === "voice" ? "microphone" : "comment"}"></i></span>`;
   },
 
   updatePhoneLauncherVisibility() {
@@ -609,7 +620,7 @@ export const shell = {
                         <nav class="sv-phone-nav">
                             <button type="button" class="sv-smartphone-home sv-home-invisible" aria-label="스마트폰 홈으로 돌아가기"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span>홈</span></button>
                             <strong class="sv-smartphone-title">SceneVoice</strong>
-                            <button type="button" class="sv-call-return" hidden aria-label="통화로 돌아가기" title="통화로 돌아가기"><i class="fa-solid fa-phone" aria-hidden="true"></i><span></span></button>
+                            <button type="button" class="sv-call-return" hidden><i class="fa-solid fa-phone" aria-hidden="true"></i><span></span></button>
                             <button type="button" class="sv-smartphone-close" aria-label="스마트폰 닫기"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                         </nav>
                         <main class="sv-smartphone-body"></main>
@@ -618,16 +629,18 @@ export const shell = {
                 </div>`;
       document.body.appendChild(shell);
       const goHome = () => {
+        // A handed-over call left mid-way waits in the call history (이어 가기), not on screen.
+        if (this.callListenOpen && this.callListenOpen.session.call_direction !== "overheard") this.callListenOpen = null;
         this.phoneActiveTab = "home";
         this.renderSmartphone();
       };
       shell
         .querySelector(".sv-smartphone-close")
         ?.addEventListener("click", () => this.closeSmartphone());
-      shell.querySelector(".sv-call-return")?.addEventListener("click", () => {
+      shell.querySelector(".sv-call-return")?.addEventListener("click", (event) => {
         const before = this.phoneActiveTab;
-        this.phoneActiveTab = "call";
-        this.noteRingReturn(before);
+        this.phoneActiveTab = event.currentTarget.dataset.target || "call";
+        if (this.phoneActiveTab === "call") this.noteRingReturn(before);
         this.renderSmartphone();
       });
       shell
@@ -645,6 +658,8 @@ export const shell = {
             // An app opens on 적용 기억.
             this.phoneShelf = {};
             this.overheardEditor = null;
+            if (this.radioPlaying?.ended) this.radioPlaying = null;
+            this.radioShowOpen = null;
             // The dock opens the contact list; a widget or contact row opens that person.
             if (app.dataset.phoneApp === "call") {
               this.phoneContactKey = app.dataset.contactKey || "";
@@ -659,6 +674,12 @@ export const shell = {
             // The dock opens the conversation list; an alert or a contact opens that conversation.
             if (app.dataset.phoneApp === "message")
               this.messageThreadKey = app.dataset.threadKey || "";
+            this.renderSmartphone();
+            return;
+          }
+          if (event.target.closest("[data-group-call]")) {
+            const [first, second] = this.phoneContacts();
+            this.groupCallPicker = { people: [first.key, second.key], busy: false };
             this.renderSmartphone();
             return;
           }
@@ -795,6 +816,10 @@ export const shell = {
       this.messageThreadKey = "";
       this.phoneShelf = {};
       this.overheardEditor = null;
+      this.radioEditor = null;
+      this.radioPlaying = null;
+      this.radioShowOpen = null;
+      this.radioStopAt = null;
     }
     this.phoneShownChat = chat;
     const labels = {
@@ -802,6 +827,8 @@ export const shell = {
       call: this.phoneSession || this.phoneContactKey ? "전화" : "연락처",
       message: "메시지",
       history: "통화 기록",
+      memo: "음성 메모",
+      radio: "라디오",
     };
     const homeButton = shell.querySelector(".sv-smartphone-home");
     homeButton?.classList.toggle(
@@ -810,20 +837,7 @@ export const shell = {
     );
     const title = shell.querySelector(".sv-smartphone-title");
     if (title) title.textContent = labels[this.phoneActiveTab] || "SceneVoice";
-    // On a call (or one ringing) elsewhere on the phone: a green pill in the title's place
-    // says so and brings the call back.
-    const back = shell.querySelector(".sv-call-return");
-    if (back) {
-      const ringing = this.phonePendingEvent?.type === "incoming_call" && !this.phoneSession;
-      const live = ["active", "ringing"].includes(this.phoneSession?.status) || ringing;
-      const away = live && this.phoneActiveTab !== "call";
-      back.hidden = !away;
-      if (title) title.hidden = away;
-      if (away)
-        back.querySelector("span").textContent = ringing
-          ? "전화가 오고 있어요"
-          : `${this.phoneSession?.character_name || "상대"}와 통화 중`;
-    }
+    this.updatePhoneReturn();
     body.dataset.phoneView = this.phoneActiveTab;
     shell.dataset.view = this.phoneActiveTab;
     this.applyPhoneTheme();
@@ -832,6 +846,8 @@ export const shell = {
       await this.renderSmartphoneCall(body);
     else if (this.phoneActiveTab === "message")
       await this.renderSmartphoneMessages(body);
+    else if (this.phoneActiveTab === "memo") await this.renderSmartphoneMemos(body);
+    else if (this.phoneActiveTab === "radio") await this.renderSmartphoneRadio(body);
     else await this.renderSmartphoneHistory(body);
     // The notice inside the phone follows the screen (gone on the call it announces).
     this.updatePhoneLauncherVisibility();
@@ -844,6 +860,44 @@ export const shell = {
         ? "home"
         : "app";
     this.applyPhoneWallpaper(body);
+  },
+
+  /** Where in the chat a record was made (a memo, a radio show), for its card: "채팅 #N 무렵". */
+  chatSpotLabel(record) {
+    const index = String(record?.anchor_message_id ?? "");
+    return /^\d+$/.test(index) ? `채팅 #${index} 무렵` : "";
+  },
+
+  /**
+   * Elsewhere on the phone while a call is on (or ringing), or while a past call or the radio
+   * plays: a pill in the title's place says so and goes back to it.
+   */
+  updatePhoneReturn() {
+    const shell = document.getElementById("sv-smartphone");
+    const back = shell?.querySelector(".sv-call-return");
+    if (!back) return;
+    const title = shell.querySelector(".sv-smartphone-title");
+    const ringing = this.phonePendingEvent?.type === "incoming_call" && !this.phoneSession;
+    const live = ["active", "ringing"].includes(this.phoneSession?.status) || ringing;
+    const listening = this.callPlayback?.playing && this.callPlayback.session;
+    const radio = this.radioPlaying && !this.radioPlaying.ended && !this.radioPlaying.stopped;
+    const [target, icon, text] = live
+      ? ["call", "fa-phone", ringing ? "전화가 오고 있어요" : `${this.phoneSession?.character_name || "상대"}와 통화 중`]
+      : listening
+        ? ["history", "fa-headphones", listening.call_direction === "overheard" ? "통화 엿듣는 중" : "지난 통화 듣는 중"]
+        : radio
+          ? ["radio", "fa-radio", "라디오 듣는 중"]
+          : [];
+    const away = Boolean(target) && this.phoneActiveTab !== target;
+    back.hidden = !away;
+    if (title) title.hidden = away;
+    if (!away) return;
+    back.dataset.target = target;
+    back.classList.toggle("sv-return-listen", target !== "call");
+    back.querySelector("i").className = `fa-solid ${icon}`;
+    back.querySelector("span").textContent = text;
+    back.setAttribute("aria-label", `${text}: 돌아가기`);
+    back.title = "돌아가기";
   },
 
   renderSmartphoneHome(body) {
@@ -900,6 +954,8 @@ export const shell = {
         ["voice_message", "text_message"].includes(pending),
       ],
       ["history", "통화 기록", "clock-rotate-left", "sv-app-history", ["voicemail", "overheard"].includes(pending)],
+      ...(this.memoAppOn?.() ? [["memo", "음성 메모", "wave-square", "sv-app-memo", Boolean(this.unheardMemos?.size)]] : []),
+      ...(this.radioAppOn?.() ? [["radio", "라디오", "radio", "sv-app-radio", false]] : []),
     ];
     body.innerHTML = `
             <div class="sv-smartphone-app-home" data-phone-wallpaper>
@@ -909,6 +965,7 @@ export const shell = {
                 </div>
                 ${widgets.length ? `<div class="sv-phone-widgets">${widgets.map(([contact, alert]) => widget(contact, alert)).join("")}</div>` : ""}
                 <div class="sv-smartphone-app-grid">
+                  <div class="sv-app-track${apps.length + 1 > 4 ? " sv-app-scroll" : ""}">
                     ${apps
                       .map(
                         ([app, label, icon, tone, alert]) => `
@@ -921,14 +978,45 @@ export const shell = {
                     <button type="button" data-phone-action="settings">
                         <span class="sv-app-icon sv-app-settings"><i class="fa-solid fa-gear" aria-hidden="true"></i></span><strong>설정</strong>
                     </button>
+                  </div>
                 </div>
             </div>`;
+    this.bindAppTrack(body.querySelector(".sv-app-scroll"));
+  },
+
+  /**
+   * More than four apps: one row to slide sideways (a mouse wheel slides it too). The side with
+   * more apps fades out, and the row keeps its place through redraws.
+   */
+  bindAppTrack(track) {
+    if (!track) return;
+    const edges = () => {
+      track.classList.toggle("sv-more-left", track.scrollLeft > 2);
+      track.classList.toggle("sv-more-right", track.scrollLeft + track.clientWidth < track.scrollWidth - 2);
+    };
+    track.scrollLeft = this.appTrackScroll || 0;
+    track.addEventListener(
+      "scroll",
+      () => {
+        this.appTrackScroll = track.scrollLeft;
+        edges();
+      },
+      { passive: true },
+    );
+    track.addEventListener("wheel", (event) => {
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      track.scrollLeft += event.deltaY;
+    });
+    edges();
+    requestAnimationFrame(edges);
   },
 
   renderPhoneContacts(body, people) {
     const hidden = this.phoneContacts({ includeHidden: true }).length - people.length;
     body.innerHTML = `
             <div class="sv-contacts">
+                ${people.length > 1 ? '<button type="button" class="sv-msg-new-group sv-group-call-new" data-group-call><i class="fa-solid fa-users" aria-hidden="true"></i><span>단체 통화</span></button>' : ""}
                 <h3 class="sv-recents-title">연락처</h3>
                 <div class="sv-contact-list">
                     ${people

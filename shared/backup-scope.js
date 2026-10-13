@@ -21,6 +21,8 @@ const LISTS = [
   ["phone", "sessions", (row) => [row.character_key, row.character_name, row.chat_id]],
   ["phone", "messages", (row) => [row.character_key, row.character_name, row.chat_id, row.thread_key]],
   ["phone", "groups", (row) => ["", "", row.chat_id, `group:${row.id}`]],
+  ["phone", "memos", (row) => [row.character_key, row.character_name, row.chat_id]],
+  ["phone", "radio", (row) => [row.hosts?.[0]?.key, row.hosts?.[0]?.name, row.chat_id]],
   ["states", "stateHistory", (row) => [row.character_key, row.character_name, row.chat_id]],
 ];
 // Records kept by key: [kind, the map, the person an entry belongs to, counted in the summary].
@@ -74,6 +76,8 @@ export function audioHolders(data) {
     ...(data.generations || []),
     ...(data.favorites || []),
     ...(data.messages || []),
+    ...(data.memos || []),
+    ...(data.radio || []).flatMap((show) => show.lines || []),
     ...(data.sessions || []).flatMap((session) => session.turns || []),
   ].flatMap((row) => [row, ...(Array.isArray(row.versions) ? row.versions : [])]);
 }

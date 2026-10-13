@@ -42,7 +42,8 @@ export const memory = {
     const name = session?.character_name || this.getStateIdentity().characterName;
     const me = this.memoryUserName();
     const [caller, callee] = session?.call_direction === "incoming" ? [name, me] : [me, name];
-    const characterName = this.memoryAttribute(name);
+    // More people on the same call (통화 맡기기 with several): all of them by name.
+    const characterName = this.memoryAttribute([name, ...(session?.others || []).map((other) => other.name)].join(", "));
     const contextLine = this.memoryContext(session?.situation, `${caller} called ${callee}`);
     // With real-time awareness, the call keeps when it happened.
     const time = this.realtimeFor(session?.character_key)
@@ -55,7 +56,9 @@ export const memory = {
     for (const turn of Array.isArray(session?.turns) ? session.turns : []) {
       const text = String(turn?.text || "").trim();
       if (!text) continue;
-      lines.push(`${turn.role === "user" ? me : turn.voicemail ? `${name} (voicemail)` : name}: ${text}`);
+      const who = turn.role === "user" ? me : turn.speaker_name || name;
+      const label = turn.voicemail ? `${who} (voicemail)` : turn.aside ? `${who} (in the background)` : who;
+      lines.push(`${label}: ${text}`);
     }
     lines.push("</CALL>");
     return lines.join("\n");
@@ -63,8 +66,11 @@ export const memory = {
 
   /** 엿듣는 통화: a call between two people the user's character didn't hear (and doesn't know of). */
   formatOverheardMemoryText(session) {
-    const names = [session?.character_name, session?.callee_name].map((name) => this.memoryAttribute(name));
-    const time = [session?.character_key, session?.callee_key].some((key) => this.realtimeFor(key))
+    const others = session?.others || [];
+    const names = [session?.character_name, session?.callee_name, ...others.map((other) => other.name)].map((name) =>
+      this.memoryAttribute(name),
+    );
+    const time = [session?.character_key, session?.callee_key, ...others.map((other) => other.key)].some((key) => this.realtimeFor(key))
       ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at))}"`
       : "";
     const lines = [
@@ -107,8 +113,10 @@ export const memory = {
     const events = message?.extra?.[CHAT_MEMORY_KEY];
     if (!Array.isArray(events)) return [];
     const swipe = typeof message.swipe_id === "number" ? message.swipe_id : 0;
+    // Voice memos kept here before they were taken out of the chat memory stay out of it.
     return events.filter(
-      (item) => item?.llm_text && (typeof item.swipe_id !== "number" || item.swipe_id === swipe),
+      (item) =>
+        item?.llm_text && item.type !== "memo" && (typeof item.swipe_id !== "number" || item.swipe_id === swipe),
     );
   },
 
@@ -140,7 +148,7 @@ export const memory = {
     const normalized = {
       version: 1,
       id: String(event.id),
-      type: ["voice_message", "texts"].includes(event.type) ? event.type : "call",
+      type: ["voice_message", "texts", "memo"].includes(event.type) ? event.type : "call",
       character_name: String(event.character_name || "").slice(0, 300),
       llm_text: String(event.llm_text).trim(),
       // The swipe it was made on; another swipe of the same message doesn't show it.
@@ -173,7 +181,7 @@ export const memory = {
     const me = this.memoryUserName();
     const lines = items.map((item) => {
       // With real-time awareness each text keeps when it was sent.
-      const text = `${timed ? `(${this.realTimeLabel(item.created_at)}) ` : ""}${String(item.text || "")
+      const text = `${timed ? `(${this.realTimeLabel(item.created_at)}) ` : ""}${String(this.messageWords?.(item) ?? item.text ?? "")
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
@@ -407,12 +415,14 @@ export const memory = {
       const hasCall = events.some((item) => item.type === "call");
       const hasVoice = events.some((item) => item.type === "voice_message");
       const hasTexts = events.some((item) => item.type === "texts");
+      const hasMemo = events.some((item) => item.type === "memo");
       const icon = [
         hasCall ? '<i class="fa-solid fa-phone" aria-hidden="true"></i>' : "",
         hasVoice
           ? '<i class="fa-solid fa-microphone-lines" aria-hidden="true"></i>'
           : "",
         hasTexts ? '<i class="fa-solid fa-comment-dots" aria-hidden="true"></i>' : "",
+        hasMemo ? '<i class="fa-solid fa-wave-square" aria-hidden="true"></i>' : "",
       ].join("");
       details.innerHTML = `
                 <summary><span class="sv-memory-icons">${icon}</span>통화·메시지 채팅 기억 <span class="sv-memory-count">${events.length}</span></summary>

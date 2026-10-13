@@ -58,12 +58,68 @@ const VERSION_FIELDS = [
   "sounds_mixed",
   "edited_at",
   "should_end",
+  // 통화 중 옆 사람: who said it (handed the phone), and a remark in the background.
+  "speaker_key",
+  "speaker_name",
+  "aside",
 ];
 const MAX_VERSIONS = 10;
 // Set aside for at most 10 minutes: if the page was closed before a new answer came, it shows again.
 const stashedNow = (item) => Boolean(item.stashed) && Date.now() - Date.parse(item.stashed) < 600000;
 const versionOf = (item) =>
   Object.fromEntries(VERSION_FIELDS.filter((field) => item[field] !== undefined).map((field) => [field, item[field]]));
+const forwardOf = (value) =>
+  value && typeof value === "object"
+    ? {
+        type: ["call", "voice", "memo"].includes(value.type) ? value.type : "voice",
+        title: text(value.title, 200),
+        lines: (Array.isArray(value.lines) ? value.lines : [])
+          .slice(0, 40)
+          .map((line) => ({ from: text(line?.from, 120), text: text(line?.text, 800) }))
+          .filter((line) => line.text),
+        source_id: text(value.source_id, 64),
+        ...(value.note ? { note: true } : {}),
+      }
+    : null;
+// A live call's line said by someone other than the one called: who, and whether in the
+// background (not into the phone).
+const nearbySpeaker = (body) => ({
+  ...(body.role !== "user" && text(body.speaker_key)
+    ? { speaker_key: text(body.speaker_key), speaker_name: text(body.speaker_name, 300) }
+    : {}),
+  ...(body.role !== "user" && body.aside === true ? { aside: true } : {}),
+});
+const radioItem = (show) => ({ ...show, lines: (show.lines || []).map((line) => audioItem(line)) });
+// The extra people on a written call (beyond its first one or two), at most three.
+const callPeople = (value) =>
+  (Array.isArray(value) ? value : [])
+    .map((person) => ({ key: text(person?.key), name: text(person?.name, 300) }))
+    .filter((person) => person.key || person.name)
+    .slice(0, 3);
+// A written call's lines added in order: mine as mine, everyone else's with who said them.
+function writtenLines(session, lines, mine, part, stamp) {
+  for (const line of lines) {
+    const speech = normalizeSpeech(line);
+    const user = mine && line.role === "user";
+    session.turns.push({
+      id: newId(),
+      session_id: session.id,
+      turn_index: session.turns.length,
+      role: user ? "user" : "character",
+      ...(user ? {} : { speaker_key: text(line.speaker_key), speaker_name: text(line.speaker_name, 300) }),
+      text: speech.text,
+      script: speech.script,
+      translation: text(line.translation, 5000),
+      tags: speech.tags,
+      emotion: speech.emotion,
+      direction: speech.direction,
+      language: speech.language,
+      intensity: speech.intensity,
+      ...(part ? { part } : {}),
+      created_at: stamp,
+    });
+  }
+}
 const sessionItem = (session) => ({
   ...session,
   turns: session.turns.map((turn) => audioItem(turn)),
@@ -181,7 +237,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.1.1",
+          version: "1.2.0",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
@@ -334,6 +390,10 @@ export class SceneService {
       };
     if (path === "/message-groups")
       return { items: newest(data.groups, query) };
+    if (path === "/phone/memos")
+      return { items: newest(data.memos || [], query).map((item) => audioItem(item)) };
+    if (path === "/phone/radio")
+      return { items: newest(data.radio || [], query).map(radioItem) };
     if (path === "/history") {
       const speakers = [
         ...new Map(
@@ -533,10 +593,13 @@ export class SceneService {
       );
       if (previous) return { status: "exists", session: sessionItem(previous) };
       const status = body.status === "ringing" ? "ringing" : "active";
+      // 단체 통화: more people on the same live call.
+      const others = callPeople(body.others);
       const session = {
         ...who,
         id: newId(),
         status,
+        ...(others.length ? { others } : {}),
         call_direction: body.direction === "incoming" ? "incoming" : "outgoing",
         situation: text(body.situation, 4000),
         started_at: stamp,
@@ -544,6 +607,43 @@ export class SceneService {
         ended_at: null,
         turns: [],
       };
+      data.sessions.push(session);
+      return { status: "success", session: sessionItem(session) };
+    }
+    // My call that went to their voicemail (they were busy): what I left there, if anything.
+    if (path === "/phone/voicemail-left" && method === "POST") {
+      const who = identity(body);
+      const session = {
+        ...who,
+        id: newId(),
+        status: "missed",
+        call_direction: "outgoing",
+        situation: "",
+        started_at: stamp,
+        answered_at: null,
+        ended_at: stamp,
+        turns: [],
+      };
+      const said = text(body.text, 2000)
+        ? normalizeSpeech({ text: body.text, script: body.script, language: body.language })
+        : null;
+      if (said?.text)
+        session.turns.push({
+          id: newId(),
+          session_id: session.id,
+          turn_index: 0,
+          role: "user",
+          voicemail: true,
+          text: said.text,
+          script: said.script,
+          translation: "",
+          tags: said.tags,
+          emotion: said.emotion,
+          direction: said.direction,
+          language: said.language,
+          intensity: said.intensity,
+          created_at: stamp,
+        });
       data.sessions.push(session);
       return { status: "success", session: sessionItem(session) };
     }
@@ -559,6 +659,7 @@ export class SceneService {
         session_id: session.id,
         turn_index: session.turns.length,
         role: body.role === "user" ? "user" : "character",
+        ...nearbySpeaker(body),
         text: speech.text,
         script: speech.script,
         translation: text(body.translation, 5000),
@@ -577,48 +678,50 @@ export class SceneService {
         session: sessionItem(session),
       };
     }
-    // 엿듣는 통화: a call between two people that the user's character isn't on, kept whole (its
-    // lines written at once; their voices are made when it is listened to).
-    // A call written whole (엿듣는 통화). With `user_side` the user's character is one of the two:
-    // it is kept as their own call, made or taken, with their lines as theirs.
+    // 엿듣는 통화 · 통화 맡기기: a call written whole by the helper model (its voices are made when
+    // it is listened to). With `user_side` the user's character is one of them: it is kept as
+    // their own call, made or taken, with their lines as theirs. `others`: more people on the same
+    // call. `open`: written a part at a time (이어 가며 듣기) until it is closed; each line keeps
+    // its part.
     if (path === "/phone/overheard" && method === "POST") {
       const who = identity(body);
       const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 30);
       if (!lines.length) throw new UserError("통화 대사가 없습니다.");
       const mine = ["caller", "callee"].includes(body.user_side);
+      const others = callPeople(body.others);
       const session = {
         ...who,
         id: newId(),
         status: "ended",
         call_direction: mine ? (body.user_side === "caller" ? "outgoing" : "incoming") : "overheard",
         ...(mine ? {} : { callee_key: text(body.callee_key), callee_name: text(body.callee_name, 300) }),
+        ...(others.length ? { others } : {}),
+        ...(body.open ? { continuing: true } : {}),
         situation: text(body.situation, 4000),
         started_at: stamp,
         answered_at: stamp,
         ended_at: stamp,
         turns: [],
       };
-      lines.forEach((line, index) => {
-        const speech = normalizeSpeech(line);
-        const user = mine && line.role === "user";
-        session.turns.push({
-          id: newId(),
-          session_id: session.id,
-          turn_index: index,
-          role: user ? "user" : "character",
-          ...(user || mine ? {} : { speaker_key: text(line.speaker_key), speaker_name: text(line.speaker_name, 300) }),
-          text: speech.text,
-          script: speech.script,
-          translation: text(line.translation, 5000),
-          tags: speech.tags,
-          emotion: speech.emotion,
-          direction: speech.direction,
-          language: speech.language,
-          intensity: speech.intensity,
-          created_at: stamp,
-        });
-      });
+      writtenLines(session, lines, mine, 0, stamp);
       data.sessions.push(session);
+      return { status: "success", session: sessionItem(session) };
+    }
+    // The next part of a call written a part at a time; `replace` writes its last part again,
+    // `close` ends it (with this last part, or with none).
+    const callPart = path.match(/^\/phone\/overheard\/([^/]+)\/part$/);
+    if (callPart && method === "POST") {
+      const session = find(data.sessions, callPart[1]);
+      checkChat(session, body);
+      if (!session.continuing) throw new UserError("이미 끝난 통화입니다.", 409);
+      const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 30);
+      const last = Math.max(0, ...session.turns.map((turn) => turn.part || 0));
+      if (body.replace) session.turns = session.turns.filter((turn) => (turn.part || 0) !== last);
+      if (session.turns.length + lines.length > 400) throw new UserError("통화가 너무 길어졌습니다. 마무리해 주세요.", 409);
+      const mine = session.call_direction !== "overheard";
+      writtenLines(session, lines, mine, body.replace ? last : last + 1, stamp);
+      if (body.close) delete session.continuing;
+      session.ended_at = stamp;
       return { status: "success", session: sessionItem(session) };
     }
     // 음성 사서함: a call of the character's that went unanswered (declined, or not picked up in
@@ -693,9 +796,14 @@ export class SceneService {
         throw new UserError("단체방 정보가 올바르지 않습니다.");
       if (thread)
         checkChat(find(data.groups, thread.slice("group:".length)), body);
+      // 음성 전달: a call, voice message or memo I pass on, with what was said in it (its voice
+      // file shared when it has one).
+      const forward = role === "user" ? forwardOf(body.forward) : null;
       const item = {
         ...identity(body),
         ...(thread ? { thread_key: thread } : {}),
+        ...(forward ? { forward } : {}),
+        ...(forward && validAudioName(body.audio_filename) ? { audio_filename: body.audio_filename } : {}),
         id: newId(),
         role,
         kind,
@@ -733,14 +841,14 @@ export class SceneService {
       return { status: "success", id: item.id, created_at: stamp, ...(old ? { versions: item.versions.length } : {}) };
     }
     const attach = path.match(
-      /^\/(phone\/turns|voice-messages)\/([^/]+)\/audio$/,
+      /^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)\/audio$/,
     );
     if (attach && method === "PUT") {
       const parent =
         attach[1] === "phone/turns"
           ? data.sessions.find((s) => s.turns.some((t) => t.id === attach[2]))
           : null;
-      const item = find(parent?.turns || data.messages, attach[2]);
+      const item = find(parent?.turns || (attach[1] === "phone/memos" ? data.memos : data.messages), attach[2]);
       checkChat(parent || item, body);
       const generation = find(data.generations, body.generation_id);
       if (
@@ -759,7 +867,7 @@ export class SceneService {
       });
       return {
         status: "success",
-        ...(parent ? { session: sessionItem(parent) } : {}),
+        ...(parent ? { session: sessionItem(parent) } : { item: audioItem(item) }),
       };
     }
     // Group conversations: made, renamed or given other members, and left (with their messages).
@@ -809,6 +917,116 @@ export class SceneService {
       items.forEach((item) => checkChat(item, body));
       data.messages = data.messages.filter((x) => !ids.has(x.id));
       return { status: "success", removed: items.length };
+    }
+    // 음성 메모: one a character recorded for themselves (asked for, or on their own).
+    if (path === "/phone/memos" && method === "POST") {
+      const speech = normalizeSpeech(body);
+      const memo = {
+        ...identity(body),
+        id: newId(),
+        text: speech.text,
+        script: speech.script,
+        translation: text(body.translation, 5000),
+        tags: speech.tags,
+        emotion: speech.emotion,
+        direction: speech.direction,
+        language: speech.language,
+        intensity: speech.intensity,
+        about: text(body.about, 600),
+        origin: body.origin === "auto" ? "auto" : "asked",
+        created_at: stamp,
+      };
+      (data.memos ||= []).push(memo);
+      return { status: "success", item: audioItem(memo) };
+    }
+    // 라디오: a show written whole (who was on air, how it was asked for, and its lines).
+    if (path === "/phone/radio" && method === "POST") {
+      const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 40);
+      if (!lines.length) throw new UserError("방송 대사가 없습니다.");
+      const show = {
+        ...identity(body),
+        id: newId(),
+        title: text(body.title, 120),
+        mode: body.mode === "story" ? "story" : "talk",
+        hosts: callPeople(body.hosts),
+        story: text(body.story, 2000),
+        lines: lines.map((line) => {
+          const speech = normalizeSpeech(line);
+          return {
+            id: newId(),
+            speaker_key: text(line.speaker_key),
+            speaker_name: text(line.speaker_name, 300),
+            text: speech.text,
+            script: speech.script,
+            translation: text(line.translation, 5000),
+            tags: speech.tags,
+            emotion: speech.emotion,
+            direction: speech.direction,
+            language: speech.language,
+            intensity: speech.intensity,
+          };
+        }),
+        created_at: stamp,
+      };
+      (data.radio ||= []).push(show);
+      return { status: "success", item: radioItem(show) };
+    }
+    const removeShow = path.match(/^\/phone\/radio\/([^/]+)$/);
+    if (removeShow && method === "DELETE") {
+      const show = find(data.radio || [], removeShow[1]);
+      checkChat(show, body);
+      data.radio = data.radio.filter((x) => x.id !== show.id);
+      return { status: "success" };
+    }
+    // 고치기 on a show's line: its words change and its old voice no longer goes with it.
+    const radioEdit = path.match(/^\/phone\/radio-lines\/([^/]+)$/);
+    if (radioEdit && method === "PUT") {
+      const show = (data.radio || []).find((x) => x.lines.some((line) => line.id === radioEdit[1]));
+      if (!show) throw new UserError("기록을 찾을 수 없습니다.", 404);
+      checkChat(show, body);
+      const line = show.lines.find((x) => x.id === radioEdit[1]);
+      const speech = normalizeSpeech({
+        text: body.text,
+        script: body.script,
+        tags: body.tags,
+        language: body.language || line.language,
+        intensity: line.intensity,
+      });
+      for (const field of ["generation_id", "audio_filename", "mime_type", "sounds_mixed"]) delete line[field];
+      Object.assign(line, {
+        text: speech.text,
+        script: speech.script,
+        tags: speech.tags,
+        emotion: speech.emotion,
+        direction: speech.direction,
+        translation: text(body.translation, 5000),
+        edited_at: stamp,
+      });
+      return { status: "success", item: radioItem(show) };
+    }
+    const radioLine = path.match(/^\/phone\/radio-lines\/([^/]+)\/audio$/);
+    if (radioLine && method === "PUT") {
+      const show = (data.radio || []).find((x) => x.lines.some((line) => line.id === radioLine[1]));
+      if (!show) throw new UserError("기록을 찾을 수 없습니다.", 404);
+      checkChat(show, body);
+      const line = show.lines.find((x) => x.id === radioLine[1]);
+      const generation = find(data.generations, body.generation_id);
+      if (generation.chat_id !== show.chat_id || generation.text !== line.text)
+        throw new UserError("이 대사에 해당하는 음성이 아닙니다.", 409);
+      Object.assign(line, {
+        generation_id: generation.id,
+        audio_filename: generation.audio_filename,
+        mime_type: audioType(generation.audio_filename),
+        sounds_mixed: Boolean(generation.sounds?.length),
+      });
+      return { status: "success", item: radioItem(show) };
+    }
+    const removeMemo = path.match(/^\/phone\/memos\/([^/]+)$/);
+    if (removeMemo && method === "DELETE") {
+      const item = find(data.memos || [], removeMemo[1]);
+      checkChat(item, body);
+      data.memos = data.memos.filter((x) => x.id !== item.id);
+      return { status: "success" };
     }
     // A message is deleted; its voice file stays in the audio history.
     const removeMessage = path.match(/^\/voice-messages\/([^/]+)$/);
@@ -899,6 +1117,7 @@ export class SceneService {
           language: speech.language,
           intensity: speech.intensity,
           should_end: Boolean(body.should_end),
+          ...nearbySpeaker(body),
         });
         while (list.length > MAX_VERSIONS) list.shift();
         index = list.length - 1;
@@ -923,13 +1142,13 @@ export class SceneService {
     }
     // The user rewrites a call line or voice message; its old voice no longer fits. In a call
     // still going only the other side's lines; in a past one (a call written whole) mine too.
-    const rewrite = path.match(/^\/(phone\/turns|voice-messages)\/([^/]+)$/);
+    const rewrite = path.match(/^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)$/);
     if (rewrite && method === "PUT") {
       const parent =
         rewrite[1] === "phone/turns"
           ? data.sessions.find((s) => s.turns.some((t) => t.id === rewrite[2]))
           : null;
-      const item = find(parent?.turns || data.messages, rewrite[2]);
+      const item = find(parent?.turns || (rewrite[1] === "phone/memos" ? data.memos : data.messages), rewrite[2]);
       checkChat(parent || item, body);
       if (parent && item.role === "user" && ["active", "ringing"].includes(parent.status))
         throw new UserError("통화 중에는 상대의 대사만 고칠 수 있습니다.", 409);
@@ -1164,6 +1383,8 @@ export class SceneService {
       );
       for (const item of [
         ...data.messages,
+        ...(data.memos || []),
+        ...(data.radio || []).flatMap((show) => show.lines || []),
         ...data.sessions.flatMap((s) => s.turns),
       ])
         for (const version of [item, ...(item.versions || [])])

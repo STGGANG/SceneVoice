@@ -144,7 +144,7 @@ export const outreach = {
         ? "캐릭터가 건 전화"
         : "사용자가 건 전화";
     const turns = (session.turns || []).slice(-4).map((turn) => ({
-      speaker: turn.role === "user" ? "사용자" : turn.voicemail ? "캐릭터(음성 사서함)" : "캐릭터",
+      speaker: `${turn.role === "user" ? "사용자" : "캐릭터"}${turn.voicemail ? "(음성 사서함)" : ""}`,
       text: stripMarkup(turn.text || "").slice(0, 240),
     }));
     return {

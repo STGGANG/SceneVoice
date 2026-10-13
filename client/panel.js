@@ -49,9 +49,6 @@ const PANES = [
   ["phone", "스마트폰", "mobile-screen-button"],
 ];
 
-// The playback filter of calls and voice messages, said the same way in both places.
-const FILTER_HINT =
-  "전화 너머로 듣는 것처럼 음역을 조금 좁힌 소리로 바꿉니다. 재생할 때만 입히고 저장된 음성은 그대로 둡니다.";
 
 const options = (items, selected) =>
   items
@@ -336,6 +333,15 @@ export const panel = {
         </div>
         ${divider}
         <div class="sv-row">
+          ${fieldHtml({ id: "sv-phone-profile", label: "연결 프로필", control: profileSelect("sv-phone-profile", config.phone?.connection_profile_id, "보조모델 분석과 같게") })}
+          ${fieldHtml({ id: "sv-phone-context", label: "참고할 최근 메시지 수", control: number("sv-phone-context", Number(config.phone?.context_messages ?? 10), 'min="1"'), hint: "실리태번 채팅 메시지 수입니다. 최대 입력 토큰을 넘으면 오래된 메시지부터 잘립니다.", tip: "개수 제한은 없습니다. 많이 넣을수록 요청 비용이 늘어납니다.\n보낼 자료가 ‘보조모델 분석 → 최대 입력 토큰’(0이면 연결 프로필 프리셋의 컨텍스트 크기)을 넘으면, 지시문과 캐릭터 설정(프로필·월드 인포·연기 메모)은 그대로 두고 채팅과 지금 주고받는 통화·문자가 남은 자리를 나눠 씁니다. 둘 다 오래된 것부터 잘립니다." })}
+        </div>
+        <div class="sv-row">
+          ${fieldHtml({ id: "sv-default-language", label: "통화·메시지 언어", control: `<select id="sv-default-language">${options(LANGUAGES, config.default_language)}</select>`, hint: "자동이면 인물마다 정한 언어, 정하지 않았으면 대화 언어로 말합니다.", tip: "여기서 언어를 고르면 인물 설정과 상관없이 모든 인물이 그 언어로 말합니다." })}
+          ${switchHtml({ id: "sv-phone-translation", label: "한국어 번역 함께 보기", hint: "한국어가 아닌 통화·메시지에 번역을 아래에 붙입니다.", checked: config.phone?.show_translation !== false, tip: "같은 요청에서 함께 받으므로 요청 수는 늘지 않습니다." })}
+        </div>
+        ${divider}
+        <div class="sv-row">
           <div class="sv-field">
             <div class="sv-label-line"><span id="sv-phone-launcher-label">표시 위치</span></div>
             <div class="sv-seg" role="radiogroup" aria-labelledby="sv-phone-launcher-label">
@@ -349,15 +355,14 @@ export const panel = {
             </div>
           </div>
         </div>
-        ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
+        <div class="sv-row">
+          ${switchHtml({ id: "sv-phone-launcher-alerts", label: "알림이 올 때만 플로팅 버튼 표시", hint: "플로팅 버튼을 숨겼다가, 알림이 오면 확인할 때까지 보여 줍니다.", checked: config.phone?.launcher_events_only === true })}
+          ${switchHtml({ id: "sv-phone-filter", label: "폰 음질 효과", hint: "통화·음성 메시지·음성 메모는 폰 너머 소리처럼, 라디오는 라디오 소리처럼 들려요. 켜면 모두, 끄면 모두.", tip: "재생할 때만 입히고 저장된 음성은 그대로 둡니다. 영상·내려받기의 통화 소리에도 같은 효과가 들어갑니다.", checked: config.phone?.audio_filter !== false })}
+        </div>
         ${divider}
         <div class="sv-row">
-          ${fieldHtml({ id: "sv-phone-profile", label: "연결 프로필", control: profileSelect("sv-phone-profile", config.phone?.connection_profile_id, "보조모델 분석과 같게") })}
-          ${fieldHtml({ id: "sv-phone-context", label: "참고할 최근 메시지 수", control: number("sv-phone-context", Number(config.phone?.context_messages ?? 10), 'min="1"'), hint: "실리태번 채팅 메시지 수입니다. 최대 입력 토큰을 넘으면 오래된 메시지부터 잘립니다.", tip: "개수 제한은 없습니다. 많이 넣을수록 요청 비용이 늘어납니다.\n보낼 자료가 ‘보조모델 분석 → 최대 입력 토큰’(0이면 연결 프로필 프리셋의 컨텍스트 크기)을 넘으면, 지시문과 캐릭터 설정(프로필·월드 인포·연기 메모)은 그대로 두고 채팅과 지금 주고받는 통화·문자가 남은 자리를 나눠 씁니다. 둘 다 오래된 것부터 잘립니다." })}
-        </div>
-        <div class="sv-row">
-          ${fieldHtml({ id: "sv-default-language", label: "통화·메시지 언어", control: `<select id="sv-default-language">${options(LANGUAGES, config.default_language)}</select>`, hint: "자동이면 인물마다 정한 언어, 정하지 않았으면 대화 언어로 말합니다.", tip: "여기서 언어를 고르면 인물 설정과 상관없이 모든 인물이 그 언어로 말합니다." })}
-          ${switchHtml({ id: "sv-phone-translation", label: "한국어 번역 함께 보기", hint: "한국어가 아닌 통화·메시지에 번역을 아래에 붙입니다.", checked: config.phone?.show_translation !== false, tip: "같은 요청에서 함께 받으므로 요청 수는 늘지 않습니다." })}
+          ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿들어요. 홈 화면의 ‘음성 메모’에서 직접 만들거나, ‘상태 추적’ 기능을 켜 두면 인물이 가끔 알아서도 남겨요.", tip: "알아서 남기는 건 상태를 갱신할 때 ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
+          ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 들어요.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app === true })}
         </div>`,
     });
 
@@ -370,6 +375,7 @@ export const panel = {
       tip: [
         "글로 답하는 역할극 통화입니다(마이크 인식 아님). 상대 대사는 그 인물의 목소리로 읽습니다.",
         "걸려 온 전화는 받기 전에는 대사나 음성을 만들지 않고, 1분 동안 받지 않으면 부재중이 됩니다.",
+        "상태 추적을 켜 두면, ‘바쁨’인 인물에게 건 전화는 그 사람의 음성사서함으로 갑니다(인사말은 처음 한 번 만들어 둡니다). 남기든 그냥 끊든 몇 분 뒤 문자나 전화로 연락이 오고, 그 전에 다시 걸면 받습니다.",
       ].join("\n"),
       body: `<div class="sv-row">
           ${switchHtml({ id: "sv-phone-auto", label: "캐릭터가 먼저 전화하기", hint: "대화 흐름상 자연스러울 때 전화가 걸려 옵니다.", checked: config.phone?.auto_enabled })}
@@ -402,10 +408,9 @@ export const panel = {
           </div>
         </div>
         ${divider}
-        <div class="sv-row sv-row-3">
+        <div class="sv-row">
           ${switchHtml({ id: "sv-phone-ringtone", label: "수신 벨소리", checked: config.phone?.ringtone !== false })}
           ${switchHtml({ id: "sv-phone-vibration", label: "모바일 진동", hint: "안드로이드 크롬처럼 진동을 지원하는 브라우저에서만 됩니다(아이폰은 안 됨).", checked: config.phone?.vibration !== false })}
-          ${switchHtml({ id: "sv-phone-filter", label: "수화기 음질 필터", hint: FILTER_HINT, checked: config.phone?.audio_filter !== false })}
         </div>`,
     });
 
@@ -426,9 +431,7 @@ export const panel = {
         ${switchHtml({ id: "sv-voice-message-auto-audio", label: "음성 메시지는 받는 즉시 음성까지 생성", hint: "켜면 듣지 않은 음성 메시지도 음성 생성 비용이 듭니다.", tip: "문자는 이 설정과 상관없이 ‘재생’을 누를 때만 음성을 만듭니다.", checked: config.voice_message?.auto_generate_audio })}
         ${switchHtml({ id: "sv-voice-message-sounds", label: "문자 알림음", hint: "말풍선을 보내고 받을 때마다 짧은 소리를 냅니다.", checked: config.voice_message?.sounds !== false })}
       </div>
-      <div class="sv-row">
-        ${switchHtml({ id: "sv-voice-message-filter", label: "수화기 음질 필터", hint: FILTER_HINT, checked: config.voice_message?.audio_filter !== false })}
-      </div>`,
+`,
     });
 
     const memoryFold = groupHtml({
@@ -828,7 +831,7 @@ export const panel = {
     document
       .getElementById("sv-chat-memory-clear")
       ?.addEventListener("click", () => {
-        if (!confirm("현재 채팅에 저장된 통화·메시지 채팅 기억을 모두 삭제할까요?")) return;
+        if (!confirm("현재 채팅에 붙은 통화·메시지 채팅 기억을 모두 삭제할까요?\n캐릭터가 지난 통화·문자를 기억하지 못하게 되고, 다시 켜도 돌아오지 않습니다. 스마트폰의 통화 기록·문자는 그대로 남습니다.\n(기억에 넣지 않게만 하려면 스위치를 끄면 됩니다.)")) return;
         this.run(() => this.clearCurrentChatMemory());
       });
     document.querySelectorAll(".sv-tab").forEach((tab) => {
@@ -1015,6 +1018,8 @@ export const panel = {
         ringtone: document.getElementById("sv-phone-ringtone").checked,
         voicemail: document.getElementById("sv-phone-voicemail").checked,
         overheard_calls: document.getElementById("sv-phone-overheard").checked,
+        memo_app: document.getElementById("sv-phone-memo")?.checked ?? this.config.phone?.memo_app !== false,
+        radio_app: document.getElementById("sv-phone-radio")?.checked ?? this.config.phone?.radio_app === true,
         overheard_length:
           document.querySelector('input[name="sv-phone-overheard-length"]:checked')
             ?.value || "normal",
@@ -1040,8 +1045,6 @@ export const panel = {
       },
       voice_message: {
         enabled: document.getElementById("sv-voice-message-enabled").checked,
-        audio_filter: document.getElementById("sv-voice-message-filter")
-          .checked,
         auto_generate_audio: document.getElementById(
           "sv-voice-message-auto-audio",
         ).checked,

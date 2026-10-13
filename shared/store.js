@@ -12,6 +12,10 @@ export function emptyDatabase() {
     messages: [],
     // Group conversations in the messaging app.
     groups: [],
+    // 음성 메모: what characters recorded for themselves.
+    memos: [],
+    // 라디오: shows written whole, each with its lines.
+    radio: [],
     generations: [],
     favorites: [],
   };
@@ -32,6 +36,8 @@ export function checkDatabase(data) {
     typeof data.states !== "object" ||
     Array.isArray(data.states) ||
     (data.groups !== undefined && !Array.isArray(data.groups)) ||
+    (data.memos !== undefined && !Array.isArray(data.memos)) ||
+    (data.radio !== undefined && !Array.isArray(data.radio)) ||
     (data.lineEdits !== undefined &&
       (!data.lineEdits ||
         typeof data.lineEdits !== "object" ||
@@ -42,8 +48,10 @@ export function checkDatabase(data) {
     );
   }
   data.lineEdits ||= {};
-  // Files written before group conversations have none.
+  // Files written before group conversations (or voice memos) have none.
   data.groups ||= [];
+  data.memos ||= [];
+  data.radio ||= [];
   return data;
 }
 export const validAudioName = (name) =>

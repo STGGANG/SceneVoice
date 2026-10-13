@@ -20,7 +20,7 @@ export const PARTS = {
   core: ["version", "settings"],
   analyses: ["analyses"],
   states: ["states", "stateHistory"],
-  phone: ["sessions", "messages", "groups"],
+  phone: ["sessions", "messages", "groups", "memos", "radio"],
   media: ["generations", "favorites", "audioFiles", "lineEdits"],
 };
 const PART_NAMES = Object.keys(PARTS);

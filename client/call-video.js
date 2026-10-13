@@ -264,26 +264,37 @@ export const callVideo = {
     return canEncode() || Boolean(recordingType() && typeof HTMLCanvasElement.prototype.captureStream === "function");
   },
 
-  /** 영상: gathers the voices (asking before making missing ones), then records in real time. */
+  /** 영상 of a past call. */
   async downloadCallVideo(body, session, away = false) {
+    const current = await this.makeRecordingVideo({
+      heading: "통화 영상 만들기",
+      scene: session,
+      gather: (onStep) => this.callClips(session, onStep, { captions: true }),
+      name: this.callFileName(session),
+    });
+    if (current && current !== session && body.isConnected) this.renderPhoneHistoryDetail(body, current, away);
+  },
+
+  /**
+   * Gathers the voices (`gather(onStep)`, asking before making missing ones), draws `scene` (a
+   * call, or the radio: `call_direction` "radio") over them and saves the video. Returns what
+   * `gather` gave as `current` (a call with the voices made meanwhile).
+   */
+  async makeRecordingVideo({ heading, scene, gather, name, trackOptions = null }) {
     if (!this.canMakeCallVideo()) throw new Error("이 브라우저에서는 영상을 만들 수 없어요.");
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     // Made and resumed within the click, or phones keep it silent.
     const audio = new AudioContextClass();
     audio.resume?.();
-    const view = this.openCallVideoDialog();
-    let gathered = { clips: [], current: session, left: 0 };
+    const view = this.openCallVideoDialog(heading);
+    let gathered = { clips: [], left: 0 };
     try {
-      gathered = await this.callClips(
-        session,
-        (done, total) => view.status(`목소리 준비 중 ${done + 1}/${total}`),
-        { captions: true },
-      );
+      gathered = await gather((done, total) => view.status(`목소리 준비 중 ${done + 1}/${total}`));
       if (!gathered.clips.some((clip) => clip.url)) throw new Error("영상에 넣을 음성이 없습니다.");
-      const blob = await this.recordCallVideo(session, gathered.clips, audio, view);
+      const blob = await this.recordCallVideo(scene, gathered.clips, audio, view, await trackOptions?.(audio));
       if (blob) {
         const type = blob.type.includes("mp4") ? "mp4" : "webm";
-        this.saveFile(blob, `${this.callFileName(session)}.${type}`);
+        this.saveFile(blob, `${name}.${type}`);
         if (gathered.left) this.notify(`목소리가 없는 대사 ${gathered.left}개는 빠졌습니다.`, "info");
       }
     } finally {
@@ -291,10 +302,10 @@ export const callVideo = {
       audio.close?.();
       view.close();
     }
-    if (gathered.current !== session && body.isConnected) this.renderPhoneHistoryDetail(body, gathered.current, away);
+    return gathered.current;
   },
 
-  openCallVideoDialog() {
+  openCallVideoDialog(heading = "통화 영상 만들기") {
     document.getElementById("sv-video-dialog")?.remove();
     const dialog = document.createElement("dialog");
     dialog.id = "sv-video-dialog";
@@ -302,7 +313,7 @@ export const callVideo = {
     dialog.innerHTML = `<form method="dialog">
       <header class="sv-dialog-head">
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-film"></i></span>
-        <div><h3>통화 영상 만들기</h3><small data-video-status>준비 중…</small></div>
+        <div><h3>${heading}</h3><small data-video-status>준비 중…</small></div>
       </header>
       <div class="sv-video-preview" data-video-preview></div>
       <div class="sv-video-bar" aria-hidden="true"><i data-video-bar></i></div>
@@ -338,8 +349,12 @@ export const callVideo = {
     return view;
   },
 
-  /** The voices on one timeline (with the phone sound where it applies) and when each line plays. */
-  async callVideoTrack(clips, audio) {
+  /**
+   * The voices on one timeline (with the phone sound where it applies) and when each line plays.
+   * `lead`, `gap`, `tail`: seconds before, between and after the lines; `mix(data, rate, lines)`
+   * lays more on top (the radio's music).
+   */
+  async callVideoTrack(clips, audio, { lead = LEAD, gap = GAP, tail = TAIL, mix = null } = {}) {
     const decoded = [];
     for (const clip of clips) {
       if (clip.silent) {
@@ -350,37 +365,40 @@ export const callVideo = {
       if (!response.ok) throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
       const bytes = await response.arrayBuffer();
       let buffer = await new Promise((resolve, reject) => audio.decodeAudioData(bytes, resolve, reject));
-      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer);
+      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer, { radio: clip.radio });
       decoded.push({ buffer, turn: clip.turn });
     }
     const rate = audio.sampleRate;
     const frames = (seconds) => Math.round(seconds * rate);
     const lengthOf = ({ buffer, seconds }) => Math.ceil((buffer ? buffer.duration : seconds) * rate);
     const total =
-      frames(LEAD + TAIL) +
+      frames(lead + tail) +
       decoded.reduce((sum, item) => sum + lengthOf(item), 0) +
-      frames(GAP) * Math.max(0, decoded.length - 1);
+      frames(gap) * Math.max(0, decoded.length - 1);
     const track = audio.createBuffer(1, total, rate);
     const data = track.getChannelData(0);
     const lines = [];
-    let at = frames(LEAD);
+    let at = frames(lead);
     for (const item of decoded) {
       const { buffer, turn } = item;
       const length = lengthOf(item);
+      // A remark in the background on the call sounds fainter.
+      const level = turn.aside ? 0.45 : 1;
       for (let channel = 0; channel < (buffer?.numberOfChannels || 0); channel++) {
         const source = buffer.getChannelData(channel);
         const step = buffer.sampleRate / rate;
-        for (let i = 0; i < length; i++) data[at + i] += (source[Math.floor(i * step)] || 0) / buffer.numberOfChannels;
+        for (let i = 0; i < length; i++) data[at + i] += ((source[Math.floor(i * step)] || 0) * level) / buffer.numberOfChannels;
       }
       lines.push({ start: at / rate, end: (at + length) / rate, turn });
-      at += length + frames(GAP);
+      at += length + frames(gap);
     }
+    mix?.(data, rate, lines);
     return { track, lines, duration: total / rate };
   },
 
-  async recordCallVideo(session, clips, audio, view) {
+  async recordCallVideo(session, clips, audio, view, trackOptions = {}) {
     view.status("소리 준비 중…");
-    const { track, lines, duration } = await this.callVideoTrack(clips, audio);
+    const { track, lines, duration } = await this.callVideoTrack(clips, audio, trackOptions);
     if (view.cancelled) return null;
     const { canvas, draw } = await this.callVideoScene(session, lines);
     view.show(canvas);
@@ -398,29 +416,107 @@ export const callVideo = {
     return this.recordCallVideoLive(canvas, draw, track, duration, audio, view);
   },
 
-  /** The call screen: who is on the call, the time, and the line being said (`draw(time)`). */
+  /**
+   * The call screen: who is on the call, the time, and the line being said (`draw(time)`). The
+   * radio: its set at the top (ON AIR, the frequency on its dial), the hosts and the title, a
+   * level meter that moves while someone talks, and no end-call button.
+   */
   async callVideoScene(session, lines) {
     const between = session.call_direction === "overheard";
-    const people = between
-      ? [this.phoneContact(session.character_key), this.phoneContact(session.callee_key)]
-      : [this.phoneContact(session.character_key)];
+    const radio = session.call_direction === "radio";
+    // Everyone on the call but my character, up to four pictures in a row.
+    const people = (this.callMembers?.(session) || [this.phoneContact(session.character_key)]).slice(0, 4);
     const images = await Promise.all(people.map((person) => loadImage(person?.avatarUrl)));
     const background = backdrop(images[0]);
-    const faces = people.map((person, index) => avatar(images[index], person?.name, between ? 180 : 220));
+    // The radio has its set at the top, so everything under it sits lower and a little smaller.
+    const size = (radio ? [170, 150, 130, 115] : [220, 180, 150, 130])[people.length - 1];
+    const faceY = radio ? 432 : 300;
+    const titleY = radio ? 594 : 490;
+    const statusY = radio ? 640 : 540;
+    const faces = people.map((person, index) => avatar(images[index], person?.name, size));
     const me = this.userCharacterName?.() || "나";
     const speakerOf = (turn) =>
       turn.role === "user" ? me : turn.speaker_name || session.character_name || "";
-    const title = between
-      ? `${people[0]?.name || session.character_name} ↔ ${people[1]?.name || session.callee_name}`
-      : people[0]?.name || session.character_name || "";
+    const title = radio
+      ? session.radio_title
+      : (this.callNames?.(session) || [session.character_name || ""]).join(", ");
 
     const canvas = canvasOf(WIDTH, HEIGHT);
     const ctx = canvas.getContext("2d");
     let caption = null;
-    // The caption stays clear of the end-call button. A long line gets smaller letters; one too
-    // long even then shows a part at a time while it is said, never cut.
-    const top = 610;
-    const room = BUTTON_Y - BUTTON_R - 24 - top;
+    // The caption stays clear of the end-call button (the radio has none). A long line gets
+    // smaller letters; one too long even then shows a part at a time while it is said, never cut.
+    const top = radio ? 740 : 610;
+    const room = (radio ? HEIGHT - 50 : BUTTON_Y - BUTTON_R - 24) - top;
+    // The level meter in the phone's accent (the theme's colour when it has one).
+    const accent =
+      getComputedStyle(document.getElementById("sv-smartphone") || document.body).getPropertyValue("--ph-blue").trim() || "#0a84ff";
+    const needle = Math.min(1, Math.max(0, (Number(session.radio_frequency) - 88) / 20));
+    // ON AIR, the frequency, and the dial with its needle, as on the phone.
+    const radioSet = () => {
+      const x = 60;
+      const y = 118;
+      const w = 600;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
+      roundRect(ctx, x, y, w, 196, 36);
+      ctx.fill();
+      ctx.save();
+      ctx.shadowColor = "rgba(255, 59, 48, 0.65)";
+      ctx.shadowBlur = 26;
+      ctx.fillStyle = "#ff3b30";
+      roundRect(ctx, x + 36, y + 36, 152, 52, 12);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `800 26px ${FONT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("ON AIR", x + 36 + 76, y + 36 + 27);
+      ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "right";
+      const right = x + w - 36;
+      const base = y + 86;
+      ctx.font = `700 24px ${FONT}`;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fillText("MHz", right, base);
+      const unit = ctx.measureText("MHz").width + 12;
+      ctx.font = `700 66px ${FONT}`;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(session.radio_frequency, right - unit, base);
+      const number = ctx.measureText(session.radio_frequency).width + 12;
+      ctx.font = `700 24px ${FONT}`;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fillText("FM", right - unit - number, base);
+      const left = x + 40;
+      const span = w - 80;
+      const dial = y + 124;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+      for (let tick = 0; tick <= 10; tick++) ctx.fillRect(left + (span * tick) / 10 - 1, dial, 2, 16);
+      ctx.font = `500 20px ${FONT}`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.66)";
+      [88, 92, 96, 100, 104, 108].forEach((mark, index) => ctx.fillText(String(mark), left + (span * index) / 5, dial + 48));
+      ctx.fillStyle = "#ff3b30";
+      roundRect(ctx, left + span * needle - 2, dial - 7, 4, 32, 2);
+      ctx.fill();
+    };
+    // Bars that move only while someone is talking.
+    const meter = (time, talking) => {
+      const bars = 9;
+      const barWidth = 8;
+      const gap = 8;
+      const tall = 54;
+      const from = 360 - (bars * barWidth + (bars - 1) * gap) / 2;
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = talking ? 0.9 : 0.55;
+      for (let bar = 0; bar < bars; bar++) {
+        const swing = talking ? 0.22 + 0.78 * Math.abs(Math.sin(time * (5 + (bar % 3) * 1.7) + bar * 1.3)) : 0.18;
+        const height = tall * swing;
+        roundRect(ctx, from + bar * (barWidth + gap), 690 - height / 2, barWidth, height, 4);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
     const layout = (line) => {
       const sizes = [36, 32, 28];
       for (const size of sizes) {
@@ -457,26 +553,30 @@ export const callVideo = {
     };
     const draw = (time) => {
       ctx.drawImage(background, 0, 0);
-      if (between) {
-        ctx.drawImage(faces[0], 360 - 190, 200);
-        ctx.drawImage(faces[1], 360 + 10, 200);
-      } else ctx.drawImage(faces[0], 360 - 110, 190);
+      if (radio) radioSet();
+      const gap = 20;
+      const row = faces.length * size + (faces.length - 1) * gap;
+      faces.forEach((face, index) => ctx.drawImage(face, 360 - row / 2 + index * (size + gap), faceY - size / 2));
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
       ctx.fillStyle = "#ffffff";
-      ctx.font = `700 ${between ? 44 : 54}px ${FONT}`;
-      ctx.fillText(title, 360, 490, 660);
+      ctx.font = `700 ${people.length > 1 ? 44 : 54}px ${FONT}`;
+      ctx.fillText(title, 360, titleY, 660);
       ctx.font = `500 27px ${FONT}`;
       ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
-      const status = `${between ? "엿듣는 중" : "통화 중"} · ${clock(time)}`;
-      const width = ctx.measureText(status).width;
-      ctx.fillText(status, 360 + 12, 540);
-      ctx.fillStyle = "#34c759";
-      ctx.beginPath();
-      ctx.arc(360 - width / 2 - 6, 531, 7, 0, Math.PI * 2);
-      ctx.fill();
+      if (radio) ctx.fillText(`${(this.callNames?.(session) || []).join(", ")} · ${clock(time)}`, 360, statusY, 660);
+      else {
+        const status = `${between ? "엿듣는 중" : "통화 중"} · ${clock(time)}`;
+        const width = ctx.measureText(status).width;
+        ctx.fillText(status, 360 + 12, statusY);
+        ctx.fillStyle = "#34c759";
+        ctx.beginPath();
+        ctx.arc(360 - width / 2 - 6, statusY - 9, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       const current = [...lines].reverse().find((line) => time >= line.start) || null;
+      if (radio) meter(time, Boolean(current) && time < current.end);
       if (current && caption?.line !== current) caption = layout(current);
       if (current) {
         const { size, small, step, smallStep } = caption;
@@ -500,6 +600,7 @@ export const callVideo = {
           page.translation.forEach((text, index) => ctx.fillText(text, 80, from + index * smallStep));
         }
       }
+      if (radio) return;
       ctx.fillStyle = "#ff3b30";
       ctx.beginPath();
       ctx.arc(360, BUTTON_Y, BUTTON_R, 0, Math.PI * 2);

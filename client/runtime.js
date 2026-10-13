@@ -151,6 +151,22 @@ export const runtime = {
     this.phonePendingEvent = null;
     this.incomingTexts = [];
     this.incomingText = null;
+    // A voicemail being left, and their getting back to it, belonged to the chat before; so did a
+    // written call left open on its screen.
+    this.voicemailBox = null;
+    this.callListenOpen = null;
+    this.writtenCallBusy = "";
+    this.memoEditor = null;
+    this.groupCallPicker = null;
+    this.radioEditor = null;
+    if (this.radioPlaying) this.radioPlaying.stopped = true;
+    this.radioPlaying = null;
+    this.stopRadioMusic?.();
+    this.radioShowOpen = null;
+    this.radioStopAt = null;
+    this.unheardMemos?.clear();
+    for (const timer of this.voicemailAnswers?.values() || []) clearTimeout(timer);
+    this.voicemailAnswers?.clear();
     // The last 연락 판단 belonged to the message shown before (another swipe, another chat).
     this.lastContactDecisions = [];
     this.lastStateRound = null;

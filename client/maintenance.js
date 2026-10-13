@@ -13,6 +13,8 @@ const DATA_KINDS = [
   ["dialogue", "채팅 대사 음성·생성 기록", "대사 옆 재생 버튼으로 만든 음성"],
   ["phone", "전화 기록·통화 음성", "통화 내용과 통화 중 만든 음성"],
   ["voice_message", "메시지", "주고받은 문자와 음성 메시지"],
+  ["memos", "음성 메모", "인물들이 혼자 남긴 음성 메모"],
+  ["radio", "라디오", "만든 라디오 방송"],
   ["favorites", "보관함", "영구 보관한 음성 사본"],
   ["states", "캐릭터 상태 기록", "현재 상태와 변화 기록"],
   ["analyses", "대사 분석·수동 지정", "저장된 화자·연기 태그 분석과 대사별 수동 지정"],
@@ -210,6 +212,8 @@ export const maintenance = {
       dialogue: data.generations.filter((row) => (row.mode || "dialogue") === "dialogue").length,
       phone: data.sessions.length,
       voice_message: data.messages.length,
+      memos: (data.memos || []).length,
+      radio: (data.radio || []).length,
       favorites: data.favorites.length,
       states: Object.keys(data.states || {}).length + data.stateHistory.length,
       analyses: Object.keys(data.analyses || {}).length + Object.keys(data.lineEdits || {}).length,
@@ -322,6 +326,8 @@ export const maintenance = {
       db.generations = db.generations.filter(keep);
       if (kinds.phone) db.sessions = [];
       if (kinds.voice_message) db.messages = [];
+      if (kinds.memos) db.memos = [];
+      if (kinds.radio) db.radio = [];
       if (kinds.favorites) db.favorites = [];
       if (kinds.states) {
         db.states = {};
@@ -331,16 +337,8 @@ export const maintenance = {
         db.analyses = {};
         db.lineEdits = {};
       }
-      const used = new Set(
-        [
-          ...db.generations,
-          ...db.favorites,
-          ...db.messages,
-          ...db.sessions.flatMap((session) => session.turns || []),
-        ]
-          .map((row) => row.audio_filename)
-          .filter(Boolean),
-      );
+      // Earlier versions' voices (답변 재생성) are in use too.
+      const used = new Set(audioHolders(db).map((row) => row.audio_filename).filter(Boolean));
       for (const name of Object.keys(db.audioFiles || {}))
         if (allAudio || !used.has(name)) {
           orphaned.push(name);

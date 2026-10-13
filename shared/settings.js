@@ -130,6 +130,7 @@ export const DEFAULT_SETTINGS = {
     auto_cooldown_messages: 0,
     ringtone: true,
     vibration: true,
+    // 폰 음질 효과: calls, voice messages, memos (phone sound) and the radio (radio sound).
     audio_filter: true,
     // Sound effects mixed into a line's saved voice (off: the voice alone, sounds played around it).
     sfx_in_file: true,
@@ -147,6 +148,10 @@ export const DEFAULT_SETTINGS = {
     overheard_calls: false,
     // 엿듣는 통화 길이 (lines asked for: see overheardCallSystem).
     overheard_length: "normal",
+    // 음성 메모: the app on the home screen, and memos on their own (with state tracking).
+    memo_app: true,
+    // 라디오: the radio app on the home screen (a fourth-wall extra, off at first).
+    radio_app: false,
     theme: "default",
     // 월드인포 참고, per bot card (switched on there): entries the call or text conversation
     // triggers go to the prompt, from the books and entries chosen for the card:
@@ -156,7 +161,6 @@ export const DEFAULT_SETTINGS = {
   // The messaging app. enabled: the character may text or send a voice message first.
   voice_message: {
     enabled: false,
-    audio_filter: true,
     auto_generate_audio: false,
     // Replies to the user's texts may now and then come as a voice message.
     reply_voice: true,

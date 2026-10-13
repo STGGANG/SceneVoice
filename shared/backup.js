@@ -43,6 +43,12 @@ export function validateBackup(input) {
   ])
     data[key] = rows(raw[key]);
   data.groups = rows(raw.groups);
+  data.memos = rows(raw.memos || []);
+  data.radio = rows(raw.radio || []);
+  for (const show of data.radio) {
+    if (!Array.isArray(show.lines)) fail();
+    rows(show.lines);
+  }
   for (const group of data.groups) if (!Array.isArray(group.members)) fail();
   for (const session of data.sessions) {
     if (!Array.isArray(session.turns)) fail();
