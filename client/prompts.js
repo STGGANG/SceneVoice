@@ -406,12 +406,12 @@ export function callSystem({
           : "The user's character has just called the character: give the character's natural, brief answer as they pick up."
         : "Reply to the latest line of the user's character in <call_transcript>, keeping continuity with the whole call.",
       nearby
-        ? "The character clearly knows this is a phone call. Write only what is said into the phone, usually by the character alone: no narration or actions."
+        ? "The character clearly knows this is a phone call. Write only what is said: the line into the phone, and any remarks heard around it. No narration or actions."
         : "The character clearly knows this is a phone call. Write only what they say into the phone: no narration, actions, or lines for anyone else.",
       nearby &&
-        "Someone in <nearby_people> can be heard only when the story makes it plausible they are right there with the character now (<recent_chat> or their saved state puts them together). Then the line can be a short remark of theirs in the background (\"from\" their key, \"aside\": true), or the phone handed to them so they speak into it themselves (\"from\" their key). Hand it over when the user's character asks to talk to them and they are there, or when it would really happen; otherwise this stays rare.",
+        "Someone in <nearby_people> is there with the character when <recent_chat> or their saved state puts them together, or when the user's character says or assumes they are there and nothing in the story says otherwise. Whoever is there speaks up whenever it is natural: they are mentioned or asked about, the talk touches something they know or care about, they are greeted, or they just can't help butting in. They are heard in the background, near the phone but not into it: put their words in background, after the line into the phone (one or two short remarks; whoever has the phone can react to them in their next line).",
       nearby &&
-        "Whoever has the phone keeps it until they hand it back or on: lines into the phone carry their key in from.",
+        "When the user's character asks to talk to someone who is there (or it would really happen), the phone is handed over: the line into the phone is then theirs (from their key), as close and clear as anyone on the phone. Whoever has the phone keeps it until they hand it back or on.",
       "Keep the reply brief and natural, like real speech on a call: usually one to three sentences. Don't repeat earlier lines.",
       ...TALK_FLOW,
       OWN_VIEW,
@@ -423,14 +423,14 @@ export function callSystem({
     deliveryRules({ soundEffects }),
     spokenMatureContent("on a call they can't touch or be seen"),
     spokenOutput({
-      schema: `{"text":"[quiet] the spoken line, with [tags] where they belong","intensity":0.5,"language":"${language}"${translationField(translation)},"should_end":false${nearby ? ',"from":"the key of who says it","aside":false' : ""}}`,
+      schema: `{"text":"[quiet] the spoken line, with [tags] where they belong","intensity":0.5,"language":"${language}"${translationField(translation)},"should_end":false${nearby ? `,"from":"the key of who speaks into the phone","background":[{"from":"a key from <nearby_people>","text":"[teasing] their remark, with [tags]","intensity":0.5,"language":"${language}"${translationField(translation)}}]` : ""}}`,
       emotions,
       language,
       translation,
       extra: [
         "should_end: true only when the character is ending the call with this line.",
         nearby &&
-          "from: the key of who says this line (the one on the phone, or someone in <nearby_people>). aside: true only for a remark said in the background, not into the phone.",
+          "from: the key of who says the line into the phone (whoever has it). background: remarks of people who are there, heard behind that line, in order; [] when nobody else speaks up, and none once the call ends.",
       ].filter(Boolean),
     }),
   );

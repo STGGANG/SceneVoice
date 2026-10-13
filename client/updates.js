@@ -8,7 +8,7 @@ const SEEN_KEY = "scenevoice_seen_update";
 // on top; `highlight`: [title, lines] in a tinted box under it.
 export const UPDATE_NOTES = [
   {
-    version: "1.2.0",
+    version: "1.2.1",
     highlight: [
       "기타 안내",
       ["스마트폰 관련 프롬프트는 보완 및 테스트 중으로, 유의미한 변경이 있으면 추가 안내하겠습니다."],

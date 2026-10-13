@@ -222,7 +222,10 @@ export const groupCall = {
     if (this.config.phone?.auto_voice !== false) void this.voiceGroupRound(made.filter(Boolean));
   },
 
-  /** The lines of a round voiced and played in order (each made while the one before plays). */
+  /**
+   * The lines of a round voiced and played in order (each made while the one before plays): a
+   * group call's, or a 1:1 reply with remarks behind it.
+   */
   async voiceGroupRound(ids) {
     const sessionId = this.phoneSession?.id;
     const turnOf = (id) => this.phoneSession?.turns?.find((turn) => turn.id === id);
@@ -249,6 +252,8 @@ export const groupCall = {
         this.playWithSounds(ready.url, turn?.script || "", null, ready.revoke, {
           mixed: ready.mixed,
           communicationFilter: this.shouldApplyCommunicationFilter("phone"),
+          // A remark from behind the phone (a 1:1 call's background) sounds fainter.
+          aside: Boolean(turn?.aside),
           onEnded: resolve,
           onStop: resolve,
         }),

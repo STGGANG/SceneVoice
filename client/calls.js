@@ -202,8 +202,9 @@ export const calls = {
     if (!latest) return '<p class="sv-call-waiting">연결되었습니다. 답이 없으면 비워 둔 채 보내기를 누르세요.</p>';
     const group = this.isGroupCall?.(session);
     const lastMine = turns.findLastIndex((turn) => turn.role === "user");
-    const round = group ? turns.slice(lastMine + 1).filter((turn) => turn.role === "character") : [];
-    const shown = round.length ? round.find((turn) => turn.id === this.groupCallShown?.id) || round[0] : latest;
+    // Several lines since mine (a group's round, or a reply with remarks behind it): one at a time.
+    const round = turns.slice(lastMine + 1).filter((turn) => turn.role === "character");
+    const shown = round.length > 1 ? round.find((turn) => turn.id === this.groupCallShown?.id) || round[0] : latest;
     const at = round.indexOf(shown);
     const busy = Boolean(shown.id) && this.phoneAudioBusyTurnId === shown.id;
     const off = busy ? "disabled" : "";
@@ -819,34 +820,52 @@ export const calls = {
     );
     if (!draft.text)
       throw new Error("보조 모델이 통화 대사를 반환하지 않았습니다.");
-    // Said by someone nearby (into the phone, or in the background), or by whoever has it.
-    const from = String(parsed?.from || "").trim().toLowerCase();
-    const speaker =
-      [character, ...others].find((person) => person.key.toLowerCase() === from) ||
-      [character, ...others].find((person) => person.name.trim().toLowerCase() === from) ||
-      character;
-    const aside = speaker.key !== character.key && parsed?.aside === true;
-    const line = {
-      role: "character",
-      ...(speaker.key !== this.phoneSession.character_key
-        ? { speaker_key: speaker.key, speaker_name: speaker.name }
-        : {}),
-      ...(aside ? { aside: true } : {}),
-      text: draft.text,
-      script: draft.script,
-      translation: draft.translation,
-      tags: draft.tags,
-      language: draft.language,
-      intensity: draft.intensity,
-      should_end: Boolean(parsed?.should_end),
+    // Said into the phone by whoever has it (or someone it was just handed to); people there may
+    // be heard behind it.
+    const personOf = (value) => {
+      const name = String(value || "").trim().toLowerCase();
+      return (
+        [character, ...others].find((person) => person.key.toLowerCase() === name) ||
+        [character, ...others].find((person) => person.name.trim().toLowerCase() === name) ||
+        null
+      );
     };
+    const speaker = personOf(parsed?.from) || character;
+    const who = (person) =>
+      person.key !== this.phoneSession.character_key ? { speaker_key: person.key, speaker_name: person.name } : {};
+    const spoken = (piece) => ({
+      text: piece.text,
+      script: piece.script,
+      translation: piece.translation,
+      tags: piece.tags,
+      language: piece.language,
+      intensity: piece.intensity,
+    });
+    // An older reply could still mark the line itself as said in the background.
+    const aside = speaker.key !== character.key && parsed?.aside === true;
+    const ends = Boolean(parsed?.should_end);
+    const line = { role: "character", ...who(speaker), ...(aside ? { aside: true } : {}), ...spoken(draft), should_end: ends };
+    const background = ends
+      ? []
+      : (Array.isArray(parsed?.background) ? parsed.background : [])
+          .map((item) => ({ person: personOf(item?.from), piece: this.normalizePhoneDraft(item, this.phoneSession.situation || "") }))
+          .filter(({ person, piece }) => person && person.key !== speaker.key && piece.text)
+          .slice(0, 2)
+          .map(({ person, piece }) => ({ role: "character", ...who(person), aside: true, ...spoken(piece), should_end: false }));
     if (replaces) await this.changePhoneTurn(replaces, "answer", line);
     else await this.savePhoneTurn(line, sessionId);
+    const made = [this.phoneSession?.turns?.at(-1)?.id];
+    for (const remark of background) {
+      await this.savePhoneTurn(remark, sessionId);
+      made.push(this.phoneSession?.turns?.at(-1)?.id);
+    }
+    // A reply with remarks behind it shows from its first line.
+    this.groupCallShown = null;
     await this.renderSmartphone();
     // Like a real call: the reply is voiced and played as soon as it arrives (setting, on by default).
-    const turn = this.phoneSession?.turns?.at(-1);
-    if (this.config.phone?.auto_voice !== false && turn?.role === "character")
-      void this.handlePhoneTurnPlayback(turn.id);
+    if (this.config.phone?.auto_voice === false) return;
+    if (made.length > 1) void this.voiceGroupRound(made.filter(Boolean));
+    else if (this.phoneSession?.turns?.at(-1)?.role === "character") void this.handlePhoneTurnPlayback(made[0]);
   },
 
   async handlePhoneTurnPlayback(turnId, regenerate = false, button = null) {
@@ -1529,12 +1548,16 @@ export const calls = {
           opening: !this.phoneSession.turns.some((turn) => turn.role !== "user"),
           operationToken,
         });
-      } else
+      } else {
+        // Remarks heard behind the last answer go with it; the answer gets its new version.
+        const answer = await this.dropTrailingAsides();
+        if (!answer) return;
         await this.generateCharacterPhoneTurn({
-          opening: !session.turns.some((turn) => turn.role !== "user" && turn.id !== turnId),
+          opening: !this.phoneSession.turns.some((turn) => turn.role !== "user" && turn.id !== answer.id),
           operationToken,
-          replaces: turnId,
+          replaces: answer.id,
         });
+      }
     } catch (error) {
       if (operation.signal.aborted) return;
       this.notify(error.message || "대사를 다시 받을 수 없습니다.", "error");
@@ -1543,6 +1566,22 @@ export const calls = {
         this.phoneBusy = false;
         await this.renderSmartphone();
       }
+    }
+  },
+
+  /** Background remarks at the end of the call taken back; returns the line before them. */
+  async dropTrailingAsides() {
+    for (;;) {
+      const last = this.phoneSession?.turns?.at(-1);
+      if (!last || last.role !== "character" || !last.aside) return last?.role === "character" ? last : null;
+      const response = await this.request(`/api/plugins/scenevoice/phone/turns/${encodeURIComponent(last.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: this.phoneSession.chat_id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "대사를 다시 받을 수 없습니다.");
+      this.phoneSession = data.session;
     }
   },
 

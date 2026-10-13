@@ -237,7 +237,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.2.0",
+          version: "1.2.1",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
