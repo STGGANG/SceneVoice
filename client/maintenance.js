@@ -74,6 +74,7 @@ export const maintenance = {
       const tasks = {
         "update-notes": () => this.showUpdateNotes({ force: true }),
         backup: () => this.openBackupDialog(),
+        relink: () => this.openRelinkDialog(),
         "reset-settings": () => this.openResetDialog("settings"),
         "reset-data": () => this.openResetDialog("data"),
         "reset-all": () => this.openResetDialog("all"),
@@ -83,6 +84,108 @@ export const maintenance = {
         await tasks[action]?.();
       });
     });
+  },
+
+  /**
+   * A bot card's records moved from its old key to `to` (both "character:<file>"): what each of
+   * its chats kept under the old key, and the people registered under it. Returns how many
+   * records moved (0: nothing was there).
+   */
+  async relinkCard(from, to, name = "") {
+    const context = window.SillyTavern?.getContext?.() || {};
+    const avatar = to.slice("character:".length);
+    const card = (context.characters || []).find((item) => item.avatar === avatar);
+    // The card's chats keep their file names when it is renamed (only their folder moves).
+    let chats = [];
+    try {
+      const response = await this.transport.network?.("/api/characters/chats", {
+        method: "POST",
+        body: JSON.stringify({ avatar_url: avatar, simple: true }),
+      });
+      const list = response?.ok ? await response.json() : [];
+      if (Array.isArray(list)) chats = list.map((item) => String(item.file_id || item.file_name || "").replace(/\.jsonl$/, ""));
+    } catch (error) {
+      console.warn("[SceneVoice] chat list unavailable", error);
+    }
+    if (context.chatId && card && context.characterId !== undefined && context.characters?.[context.characterId]?.avatar === avatar)
+      chats.push(String(context.chatId));
+    // Not tied to the open chat: 실리태번 reloads it right after a rename, which would cancel it.
+    const response = await this.transport.request(
+      "/api/plugins/scenevoice/cards/relink",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, name: name || card?.name || "", chats: [...new Set(chats.filter(Boolean))] }),
+      },
+      30000,
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `기록을 옮기지 못했습니다 (${response.status})`);
+    await this.loadConfig();
+    this.chatIdCache = null;
+    await this.refreshChatMemory?.();
+    if (document.getElementById("sv-smartphone") && !document.getElementById("sv-smartphone").classList.contains("hidden"))
+      await this.renderSmartphone?.();
+    const { records = 0, states = 0, people = 0 } = data.moved || {};
+    return records + states + people;
+  },
+
+  /**
+   * 봇카드 기록 다시 잇기: for a card renamed before its records could follow it. Its old key is
+   * picked from the ones the records still name (or typed as its old name), and moved to the card
+   * open now.
+   */
+  async openRelinkDialog() {
+    const context = window.SillyTavern?.getContext?.() || {};
+    const current = context.characters?.[context.characterId];
+    if (!current?.avatar || context.groupId)
+      throw new Error("기록을 이어 줄 봇카드의 채팅을 먼저 열어 주세요. (단체 채팅 말고 1:1)");
+    const to = `character:${current.avatar}`;
+    const live = new Set((context.characters || []).map((item) => `character:${item.avatar}`));
+    const response = await this.request("/api/plugins/scenevoice/cards/keys", { cache: "no-store" });
+    const data = await response.json();
+    const left = (data.items || []).filter((item) => !live.has(item.key));
+    document.getElementById("sv-relink-dialog")?.remove();
+    const dialog = document.createElement("dialog");
+    dialog.id = "sv-relink-dialog";
+    dialog.className = "sv-dialog";
+    dialog.innerHTML = `<form method="dialog">
+      <header class="sv-dialog-head">
+        <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-link"></i></span>
+        <div><h3>봇카드 기록 다시 잇기</h3><small>이름을 바꾼 봇카드의 예전 기록을 지금 카드(${escapeHtml(current.name)})로 옮겨요.</small></div>
+        ${infoTip("실리태번에서 캐릭터 이름을 바꾸면 카드 파일 이름이 바뀌어, 그 전에 쌓인 통화·문자·메모·라디오·상태와 등록한 인물이 이어지지 않아요. 예전 카드를 고르면 그 기록을 지금 카드로 옮깁니다.\n이제는 이름을 바꾸면 자동으로 옮겨지니, 이건 예전에 바꾼 카드에만 쓰면 돼요.", "다시 잇기 설명")}
+      </header>
+      <div class="sv-relink-list">${
+        left.length
+          ? left
+              .map(
+                (item, index) =>
+                  `<label class="sv-check"><input type="radio" name="from" value="${escapeHtml(item.key)}" ${index === 0 ? "checked" : ""}><span>${escapeHtml(item.name || item.key.slice("character:".length))}<small>${escapeHtml(item.key.slice("character:".length))} · 기록 ${item.count}개</small></span></label>`,
+              )
+              .join("")
+          : '<p class="sv-hint">남아 있는 예전 봇카드를 찾지 못했어요. 아래에 예전 이름을 적어 주세요.</p>'
+      }</div>
+      <label class="sv-field"><span class="sv-label-line">또는 예전 이름</span><input type="text" id="sv-relink-name" placeholder="예: 고죠 (예전 카드 파일 이름, .png는 빼고)" autocomplete="off"></label>
+      <footer class="sv-dialog-actions"><button type="submit" class="sv-btn">취소</button><button type="button" class="sv-btn sv-btn-primary" data-relink><i class="fa-solid fa-link" aria-hidden="true"></i><span>옮기기</span></button></footer>
+    </form>`;
+    document.body.append(dialog);
+    bindInfoTips(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.querySelector("[data-relink]").addEventListener("click", () =>
+      this.run(async () => {
+        const typed = dialog.querySelector("#sv-relink-name").value.trim().replace(/\.png$/i, "");
+        const from = typed ? `character:${typed}.png` : dialog.querySelector('input[name="from"]:checked')?.value;
+        if (!from) throw new Error("옮길 예전 봇카드를 고르거나 예전 이름을 적어 주세요.");
+        if (from === to) throw new Error("지금 카드와 같은 이름이에요.");
+        const moved = await this.relinkCard(from, to, current.name);
+        dialog.close();
+        this.notify(
+          moved ? `예전 기록을 ‘${current.name}’ 카드로 옮겼어요.` : "옮길 기록을 찾지 못했어요. 예전 이름을 다시 확인해 주세요.",
+          moved ? "success" : "info",
+        );
+      }),
+    );
+    dialog.showModal();
   },
 
   /** 백업 파일 저장: bot cards and kinds to save (all at first), as a zip with voices or JSON. */

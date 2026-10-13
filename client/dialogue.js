@@ -212,9 +212,17 @@ export const dialogue = {
           this.generatingSince = 0;
           this.scheduleScan(null);
         };
+        // A bot card renamed in 실리태번 gets a new file (and key): its records follow it.
+        const renamed = (oldAvatar, newAvatar) =>
+          this.run(async () => {
+            if (!oldAvatar || !newAvatar || oldAvatar === newAvatar) return;
+            const moved = await this.relinkCard(`character:${oldAvatar}`, `character:${newAvatar}`);
+            if (moved) this.notify("봇카드 이름이 바뀌어, 씬보이스 기록을 새 이름으로 옮겼어요.", "success");
+          });
         for (const [eventName, listener] of [
           [events.GENERATION_STARTED, generating],
           [events.GENERATION_STOPPED, stopped],
+          [events.CHARACTER_RENAMED, renamed],
         ]) {
           if (!eventName) continue;
           source.on(eventName, listener);

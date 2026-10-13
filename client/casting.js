@@ -425,8 +425,8 @@ export const casting = {
       </section>
       <div class="sv-combo sv-member-add">
         <input id="sv-cast-new" maxlength="120" placeholder="인물 이름" autocomplete="off" aria-label="새 인물 이름">
-        <select id="sv-cast-scope" aria-label="등록 범위"><option value="card">이 봇카드에만</option><option value="global">글로벌 (여러 봇카드)</option></select>
-        <button type="button" id="sv-cast-add" class="sv-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>인물 추가</span></button>
+        <select id="sv-cast-scope" aria-label="등록 범위" title="이 봇카드에만, 또는 여러 봇카드에서 쓰는 글로벌 인물로"><option value="card">이 봇카드</option><option value="global">글로벌</option></select>
+        <button type="button" id="sv-cast-add" class="sv-btn" title="인물 추가"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>추가</span></button>
       </div>`;
     // The world info list is read when its fold is first opened.
     this.bindLorePicker();

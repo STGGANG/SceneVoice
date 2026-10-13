@@ -79,8 +79,9 @@ export const runtime = {
     const match = String(record?.anchor_message_id ?? "").match(/^\d+$/);
     if (!match) return "here";
     const message = window.SillyTavern?.getContext?.()?.chat?.[Number(match[0])];
-    // The message it was made at is gone: the chat went back to before it.
-    if (!message) return "gone";
+    // The message it was made at is gone: the chat went back to before it. One made in a chat
+    // with no messages yet (kept at message 0, with nothing to mark) stays.
+    if (!message) return match[0] === "0" && !record.anchor_tag && !record.anchor_fingerprint ? "here" : "gone";
     const made = this.anchorSwipeOf(record);
     const current = typeof message.swipe_id === "number" ? message.swipe_id : 0;
     if (made !== null && made !== current) {

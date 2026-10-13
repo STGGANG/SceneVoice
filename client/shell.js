@@ -865,6 +865,8 @@ export const shell = {
   /** Where in the chat a record was made (a memo, a radio show), for its card: "채팅 #N 무렵". */
   chatSpotLabel(record) {
     const index = String(record?.anchor_message_id ?? "");
+    // Made in a chat with no messages yet: there is no place to name.
+    if (index === "0" && !record?.anchor_tag && !record?.anchor_fingerprint) return "";
     return /^\d+$/.test(index) ? `채팅 #${index} 무렵` : "";
   },
 

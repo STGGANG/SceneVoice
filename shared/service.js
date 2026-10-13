@@ -96,6 +96,22 @@ const callPeople = (value) =>
     .map((person) => ({ key: text(person?.key), name: text(person?.name, 300) }))
     .filter((person) => person.key || person.name)
     .slice(0, 3);
+/**
+ * Every exact string in `swap` (a card's key, a chat's id under it) replaced, in values and in
+ * object keys; a key already there keeps its own entry (the newer one wins over the moved one).
+ */
+function rekey(value, swap) {
+  if (typeof value === "string") return swap.get(value) ?? value;
+  if (Array.isArray(value)) return value.map((item) => rekey(item, swap));
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  for (const [key, item] of Object.entries(value)) if (!swap.has(key)) out[key] = rekey(item, swap);
+  for (const [key, item] of Object.entries(value))
+    if (swap.has(key) && !Object.hasOwn(out, swap.get(key))) out[swap.get(key)] = rekey(item, swap);
+  return out;
+}
+// Records that belong to a chat (under a bot card) or name a person by key.
+const CARD_LISTS = ["sessions", "messages", "groups", "memos", "radio", "stateHistory", "generations", "favorites"];
 // A written call's lines added in order: mine as mine, everyone else's with who said them.
 function writtenLines(session, lines, mine, part, stamp) {
   for (const line of lines) {
@@ -237,7 +253,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.2.1",
+          version: "1.2.2",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
@@ -312,6 +328,27 @@ export class SceneService {
     };
   }
   readRoute(path, query, data) {
+    // Bot card keys the records name (a card renamed in 실리태번 leaves its old one behind).
+    if (path === "/cards/keys") {
+      const found = new Map();
+      const note = (key, label = "") => {
+        if (typeof key !== "string" || !key.startsWith("character:")) return;
+        const entry = found.get(key) || { key, name: "", count: 0 };
+        entry.count += 1;
+        entry.name ||= label;
+        found.set(key, entry);
+      };
+      for (const [key, entry] of Object.entries(data.settings.character_voices || {})) {
+        note(key, key.startsWith("character:") ? entry?.name : "");
+        note(entry?.card);
+      }
+      for (const list of CARD_LISTS)
+        for (const row of data[list] || []) {
+          note(row?.character_key, row?.character_name);
+          note(row?.speaker_key, row?.speaker_name);
+        }
+      return { items: [...found.values()] };
+    }
     if (path === "/line-state") {
       const edits = Object.fromEntries(
         Object.entries(data.lineEdits || {}).filter(
@@ -511,6 +548,56 @@ export class SceneService {
           .slice(0, keys.length - ANALYSIS_KEEP)
           .forEach((key) => delete data.analyses[key]);
       return { status: "success" };
+    }
+    // A bot card renamed in 실리태번 (its file, and so its key, changed): everything kept under the
+    // old key moves to the new one. `chats`: the card's chat ids, under which its records were kept.
+    if (path === "/cards/relink" && method === "POST") {
+      const from = required(body.from, "이전 봇카드");
+      const to = required(body.to, "봇카드");
+      if (!from.startsWith("character:") || !to.startsWith("character:") || from === to)
+        throw new UserError("옮길 봇카드가 올바르지 않습니다.");
+      const chats = (Array.isArray(body.chats) ? body.chats : []).map((id) => text(id, 500)).filter(Boolean).slice(0, 5000);
+      const chatSwap = new Map(
+        chats.map((chatId) => [contentKey({ chatId, character: from }), contentKey({ chatId, character: to })]),
+      );
+      const swap = new Map([[from, to], ...chatSwap]);
+      const name = text(body.name, 300);
+      const renamed = (row) => {
+        // The card's own lines and calls take its new name.
+        if (!name || !row || typeof row !== "object") return row;
+        for (const [keyField, nameField] of [["character_key", "character_name"], ["speaker_key", "speaker_name"]])
+          if (row[keyField] === to && row[nameField]) row[nameField] = name;
+        return row;
+      };
+      let records = 0;
+      for (const list of CARD_LISTS) {
+        const rows = data[list] || [];
+        records += rows.filter((row) => chatSwap.has(row?.chat_id)).length;
+        data[list] = rekey(rows, swap).map(renamed);
+      }
+      // A person's state is kept under a key made from the chat and the person.
+      const stateMoves = new Map();
+      const states = {};
+      for (const [key, item] of Object.entries(data.states || {})) {
+        const moved = renamed(rekey(item, swap));
+        let target = key;
+        if (chatSwap.has(item?.chat_id)) {
+          target = key.startsWith("state-round-")
+            ? `state-round-${sha256(moved.chat_id)}`
+            : `state-${sha256(`${moved.chat_id}|${moved.character_key || ""}`)}`;
+          if (moved.state_key) moved.state_key = target;
+          stateMoves.set(key, target);
+        }
+        const kept = states[target];
+        if (kept && String(kept.updated_at || "") > String(moved.updated_at || "")) continue;
+        states[target] = moved;
+      }
+      data.states = states;
+      for (const item of data.stateHistory || []) if (stateMoves.has(item.state_key)) item.state_key = stateMoves.get(item.state_key);
+      data.lineEdits = rekey(data.lineEdits || {}, swap);
+      const people = Object.values(data.settings.character_voices || {}).filter((entry) => entry?.card === from).length;
+      data.settings = rekey(data.settings, swap);
+      return { status: "success", moved: { records, states: stateMoves.size, people } };
     }
     // A person made again (a new key): the state and its history saved under the old key move to
     // the new one.

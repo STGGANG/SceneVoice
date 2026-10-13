@@ -493,6 +493,7 @@ export const panel = {
                             <hr>
                             <button type="button" role="menuitem" data-sv-action="backup"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i><span>백업 파일 저장<small>봇카드·항목을 골라서</small></span></button>
                             <label role="menuitem" class="sv-menu-file" tabindex="0"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><span>백업 파일 복원<small>zip 또는 JSON</small></span><input type="file" id="sv-import-catalog" accept=".json,.zip,application/json,application/zip"></label>
+                            <button type="button" role="menuitem" data-sv-action="relink"><i class="fa-solid fa-link" aria-hidden="true"></i><span>봇카드 기록 다시 잇기<small>이름 바꾼 카드의 예전 기록</small></span></button>
                             <hr>
                             <button type="button" role="menuitem" data-sv-action="reset-settings"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>설정 초기화…</span></button>
                             <button type="button" role="menuitem" data-sv-action="reset-data"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>데이터 초기화…</span></button>

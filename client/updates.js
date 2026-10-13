@@ -5,14 +5,26 @@ import { escapeHtml } from "./common.js";
 const SEEN_KEY = "scenevoice_seen_update";
 
 // Newest first. Short and plain: what a user notices, not how it works. `bubble`: a line said
-// on top; `highlight`: [title, lines] in a tinted box under it.
+// on top; `highlight`: [title, lines] in a tinted box under it; `fold`: kept under 이전 업데이트
+// (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
-    version: "1.2.1",
+    version: "1.2.2",
     highlight: [
       "기타 안내",
       ["스마트폰 관련 프롬프트는 보완 및 테스트 중으로, 유의미한 변경이 있으면 추가 안내하겠습니다."],
     ],
+    sections: [
+      [
+        "새로 생긴 것",
+        ["봇카드 이름을 바꿔도 스마트폰 기록이 그대로 이어짐 (이미 끊긴 건 ⋯ 메뉴 → ‘봇카드 기록 다시 잇기’)"],
+      ],
+      ["좋아진 것", ["통화 중 옆에 있는 인물이 대답 뒤에서 자연스럽게 끼어들기 (‘같이 있다던데?’에도 반응)"]],
+      ["고친 것", ["메시지가 없는 채팅방에서 만든 통화·문자·음성 메모·라디오가 사라진 것처럼 보이던 문제"]],
+    ],
+  },
+  {
+    version: "1.2.1",
     sections: [
       [
         "새로 생긴 것",
@@ -40,6 +52,7 @@ export const UPDATE_NOTES = [
   },
   {
     version: "1.1.0",
+    fold: true,
     sections: [
       [
         "새로 생긴 것",
@@ -86,7 +99,9 @@ const notesHtml = (entry) =>
 export const updates = {
   /** `force`: from the ⋯ menu, even when this version was already seen. */
   showUpdateNotes({ force = false } = {}) {
-    const [latest, ...older] = UPDATE_NOTES;
+    const [latest, ...rest] = UPDATE_NOTES;
+    const open = rest.filter((entry) => !entry.fold);
+    const older = rest.filter((entry) => entry.fold);
     if (!latest || document.getElementById("sv-update-dialog")) return;
     const key = updateNotesKey();
     try {
@@ -103,7 +118,9 @@ export const updates = {
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-bullhorn"></i></span>
         <div><h3>씬보이스 업데이트</h3><small>v${escapeHtml(latest.version)}</small></div>
       </header>
-      <div class="sv-update-notes">${notesHtml(latest)}${
+      <div class="sv-update-notes">${notesHtml(latest)}${open
+        .map((entry) => `<h4 class="sv-update-version sv-update-open">v${escapeHtml(entry.version)}</h4>${notesHtml(entry)}`)
+        .join("")}${
         older.length
           ? `<details class="sv-update-older"><summary><i class="fa-solid fa-chevron-right" aria-hidden="true"></i>이전 업데이트 (${escapeHtml(older[0].version)}까지) 보기</summary>${older.map((entry) => `<h4 class="sv-update-version">v${escapeHtml(entry.version)}</h4>${notesHtml(entry)}`).join("")}</details>`
           : ""

@@ -2124,11 +2124,24 @@
   font-size: var(--sv-fs-xs);
 }
 
+/* 봇카드 기록 다시 잇기: the old cards to pick from, one a line. */
+#sv-relink-dialog .sv-relink-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+}
+#sv-relink-dialog .sv-relink-list .sv-check small {
+  display: block;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+
 /* ----- 14. 대화상자 (대사 편집 · 백업 · 초기화) ----- */
 #sv-line-editor.sv-dialog,
 #sv-backup-dialog.sv-dialog,
 #sv-restore-dialog.sv-dialog,
 #sv-reset-dialog.sv-dialog,
+#sv-relink-dialog.sv-dialog,
 #sv-update-dialog.sv-dialog,
 #sv-video-dialog.sv-dialog {
   z-index: 2147483620;
@@ -5932,10 +5945,11 @@
 #sv-cast-panel > .sv-member-add {
   margin-top: 14px;
 }
+/* The scope stays as narrow as its short words, so the name has room (on a phone too). */
 #sv-cast-scope {
   flex: 0 0 auto;
   width: auto;
-  min-width: 150px;
+  min-width: 0;
 }
 .sv-member-quick {
   display: flex;
@@ -7608,6 +7622,12 @@ body:has(#sv-call-banner) #sv-now-reading {
 }
 .sv-update-notes details[open] > summary {
   margin-bottom: 4px;
+}
+/* An earlier version shown open under the newest: set apart by a line. */
+.sv-update-notes .sv-update-version.sv-update-open {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sv-line);
 }
 .sv-update-notes .sv-update-version {
   color: var(--sv-muted);
