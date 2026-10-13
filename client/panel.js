@@ -362,7 +362,7 @@ export const panel = {
         ${divider}
         <div class="sv-row">
           ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿들어요. 홈 화면의 ‘음성 메모’에서 직접 만들거나, ‘상태 추적’ 기능을 켜 두면 인물이 가끔 알아서도 남겨요.", tip: "알아서 남기는 건 상태를 갱신할 때 ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
-          ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 들어요.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app === true })}
+          ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 들어요.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app !== false })}
         </div>`,
     });
 
@@ -1019,7 +1019,7 @@ export const panel = {
         voicemail: document.getElementById("sv-phone-voicemail").checked,
         overheard_calls: document.getElementById("sv-phone-overheard").checked,
         memo_app: document.getElementById("sv-phone-memo")?.checked ?? this.config.phone?.memo_app !== false,
-        radio_app: document.getElementById("sv-phone-radio")?.checked ?? this.config.phone?.radio_app === true,
+        radio_app: document.getElementById("sv-phone-radio")?.checked ?? this.config.phone?.radio_app !== false,
         overheard_length:
           document.querySelector('input[name="sv-phone-overheard-length"]:checked')
             ?.value || "normal",

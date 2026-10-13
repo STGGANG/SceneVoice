@@ -150,8 +150,8 @@ export const DEFAULT_SETTINGS = {
     overheard_length: "normal",
     // 음성 메모: the app on the home screen, and memos on their own (with state tracking).
     memo_app: true,
-    // 라디오: the radio app on the home screen (a fourth-wall extra, off at first).
-    radio_app: false,
+    // 라디오: the radio app on the home screen (a fourth-wall extra).
+    radio_app: true,
     theme: "default",
     // 월드인포 참고, per bot card (switched on there): entries the call or text conversation
     // triggers go to the prompt, from the books and entries chosen for the card:

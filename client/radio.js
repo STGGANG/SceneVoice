@@ -1,4 +1,4 @@
-// 라디오 (a fun extra, off at first): a show written in one request and voiced on demand. "토크":
+// 라디오 (a fun extra): a show written in one request and voiced on demand. "토크":
 // the hosts talk about the story so far as its cast, outside it (fourth wall); "사연": a DJ in
 // the story's world reads my listener's story on air. Never part of the chat memory or any
 // other prompt; each show only says where in the chat it was made.
@@ -30,7 +30,7 @@ const outroLevels = (spoken) => envelope([[1.5, MUSIC_UNDER], [spoken, MUSIC_UND
 
 export const radio = {
   radioAppOn() {
-    return this.phoneOn() && this.config.phone?.radio_app === true;
+    return this.phoneOn() && this.config.phone?.radio_app !== false;
   },
 
   async loadShows() {
