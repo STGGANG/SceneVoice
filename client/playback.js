@@ -586,21 +586,36 @@ export const playback = {
    * (a longer message typed, the QR bar wrapping).
    */
   placeNowReading(bar = document.getElementById("sv-now-reading")) {
+    if (!bar) return;
     const form = document.getElementById("form_sheld");
-    if (!bar || !form) return;
-    const top = form.getBoundingClientRect().top;
-    if (top > 0) bar.style.setProperty("--sv-now-bottom", `${Math.round(window.innerHeight - top + 14)}px`);
-    if (this.nowReadingWatch || typeof ResizeObserver !== "function") return;
+    const viewport = window.visualViewport;
+    const visibleTop = viewport?.offsetTop || 0;
+    const visibleBottom = visibleTop + (viewport?.height || window.innerHeight);
+    const rect = form?.getBoundingClientRect();
+    // Use one coordinate space: anchor the strip's bottom edge to the input's top.
+    // iOS keyboards/browser bars can shrink and move the visible viewport independently.
+    const inputTop = rect?.height > 0 && rect.top > visibleTop && rect.top < visibleBottom
+      ? rect.top : visibleBottom - 90;
+    const edge = Math.max(visibleTop + bar.offsetHeight + 20, Math.min(inputTop - 14, visibleBottom - 20));
+    bar.style.setProperty("--sv-now-top", `${Math.round(edge)}px`);
+    if (this.nowReadingWatch) return;
     const follow = () => {
       if (document.getElementById("sv-now-reading")?.classList.contains("sv-at-bottom")) this.placeNowReading();
     };
-    const watch = new ResizeObserver(follow);
-    watch.observe(form);
+    const watch = typeof ResizeObserver === "function" ? new ResizeObserver(follow) : null;
+    if (form) watch?.observe(form);
+    watch?.observe(bar);
     window.addEventListener("resize", follow);
-    this.nowReadingWatch = watch;
+    window.addEventListener("scroll", follow, true);
+    viewport?.addEventListener("resize", follow);
+    viewport?.addEventListener("scroll", follow);
+    this.nowReadingWatch = watch || true;
     this.eventCleanups.push(() => {
-      watch.disconnect();
+      watch?.disconnect();
       window.removeEventListener("resize", follow);
+      window.removeEventListener("scroll", follow, true);
+      viewport?.removeEventListener("resize", follow);
+      viewport?.removeEventListener("scroll", follow);
       this.nowReadingWatch = null;
     });
   },

@@ -2517,7 +2517,9 @@
   width: auto !important;
   height: auto !important;
   min-width: 0 !important;
-  padding: 3px 9px !important;
+  margin: 0 !important;
+  padding: 3px 5px !important;
+  flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   border-radius: 999px;
   background: transparent;
@@ -6699,12 +6701,12 @@ body.sv-hide-line-buttons .sv-inline-actions {
   -webkit-tap-highlight-color: transparent;
 }
 #sv-now-reading.sv-at-bottom {
-  top: auto;
-  bottom: var(--sv-now-bottom, calc(120px + env(safe-area-inset-bottom)));
-  transform: translate(-50%, 6px);
+  top: var(--sv-now-top, calc(100dvh - 120px - env(safe-area-inset-bottom, 0px)));
+  bottom: auto;
+  transform: translate(-50%, calc(-100% + 6px));
 }
 #sv-now-reading.sv-at-bottom.sv-shown {
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -100%);
 }
 #sv-now-reading .sv-now-reading-icon {
   order: -1;

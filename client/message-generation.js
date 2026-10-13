@@ -8,13 +8,11 @@ const PREPARE_AHEAD = 3;
 const CATCH_UP_AHEAD = 2;
 
 // The message button's word and its icon: 음성 (nothing made yet), 재생 (made, play from the
-// start), 이어서 (stopped partway), 중지 (making or playing: a press stops).
+// start or resume), 준비중 (waiting for voices). Pressing an active button stops it.
 const GENERATE_ICONS = {
   음성: "fa-wave-square",
   재생: "fa-play",
-  이어서: "fa-play",
-  중지: "fa-stop",
-  "중지 중…": "fa-stop",
+  준비중: "fa-hourglass-half",
 };
 
 export const messageGeneration = {
@@ -237,7 +235,9 @@ export const messageGeneration = {
         current.playback.stopped = true;
         this.stopPlayback();
       }
-      this.setGenerateLabel(control, "중지 중…");
+      this.setGenerateLabel(control, "재생");
+      control.classList.remove("sv-queued");
+      control.disabled = true;
       control.title =
         "현재 요청이 끝나면 중지합니다. 이미 만든 음성은 남습니다.";
       return;
@@ -259,7 +259,7 @@ export const messageGeneration = {
     this.syncMultiCast?.();
     const tools = this.messageTools(control);
     for (const tool of tools) tool.disabled = true;
-    this.setGenerateLabel(control, "중지");
+    this.setGenerateLabel(control, "준비중");
     control.title = "생성 대기 중 · 누르면 멈춥니다.";
     control.classList.add("sv-queued");
     const messageId = Number(container.closest(".mes")?.getAttribute("mesid"));
@@ -328,7 +328,7 @@ export const messageGeneration = {
     const total = buttons.length;
     const playing = this.playMessageLines(buttons, playback, made, (index, waiting) => {
       control.classList.toggle("sv-queued", waiting);
-      this.setGenerateLabel(control, "중지");
+      this.setGenerateLabel(control, waiting ? "준비중" : "재생");
       control.title = `${waiting ? `${index + 1}/${total} 준비 중` : `${index + 1}/${total} 재생 중`} · 누르면 만들기와 재생을 멈춥니다. 이미 만든 음성은 남습니다.`;
     });
     Promise.all([prepared, playing])
@@ -356,7 +356,8 @@ export const messageGeneration = {
         }
         // Heard to the end (lines left out along the way included): 재생 from the start.
         const resume = playback.position > 0 || job.failed || job.cancelled;
-        this.setGenerateLabel(control, resume ? "이어서" : "재생");
+        control.disabled = false;
+        this.setGenerateLabel(control, "재생");
         control.title = resume
           ? "남은 대사를 만들고 멈춘 곳부터 이어서 들려줍니다."
           : `이 메시지의 대사를 처음부터 다시 들려줍니다. 만든 음성은 다시 만들지 않습니다.${job.skipped || job.unvoiced ? " 건너뛴 대사는 화자를 고르거나 목소리를 정한 뒤 다시 들으면 만듭니다." : ""}`;
@@ -402,6 +403,7 @@ export const messageGeneration = {
       // Its lines stop playing too (also between two lines, when nothing is sounding).
       if (job.playback) job.playback.stopped = true;
       control.classList.remove("sv-queued");
+      control.disabled = false;
       this.setGenerateLabel(control, "음성");
     }
     this.messageJobs.clear();
