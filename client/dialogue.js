@@ -449,7 +449,13 @@ export const dialogue = {
         wrapper.append(range.extractContents());
         range.insertNode(wrapper);
       }
-      wrapper.append(group);
+      // Themes paint quotes (<q>) as a highlight; a line filling its <q> has its buttons after the
+      // <q>, so the highlight stays on the words and no theme rule meets buttons inside it.
+      const quote = wrapper.parentElement;
+      const filled = quote?.tagName === "Q" && quote !== container &&
+        !/[^\s"'“”‘’「」『』«»]/.test(quote.textContent.replace(wrapper.textContent, ""));
+      if (filled) quote.after(group);
+      else wrapper.append(group);
     }
     // Keep visible reading order stable, including Markdown emphasis and custom renderers.
     container.querySelectorAll(".sv-play-btn").forEach((button, index) => {
@@ -750,10 +756,10 @@ export const dialogue = {
         button.classList.remove("sv-loading", "sv-queued");
         this.setPlayButtonIcon(button, "waiting");
         button.title = this.speakerSkipped(speaker.key)
-          ? "음성 준비에서 건너뛰도록 설정한 인물입니다. 누르면 만듭니다."
+          ? "메시지 음성 버튼에서 건너뛰도록 설정한 인물입니다. 누르면 만듭니다."
           : this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name)
             ? `‘${speaker.name}’에게 목소리가 없어 건너뛰었습니다. 캐릭터별 목소리에서 정하거나 ⋯에서 인물을 고르세요.`
-            : "목소리를 등록하지 않은 인물이라 음성 준비에서 건너뛰었습니다. 누르면 기본 목소리로 만듭니다.";
+            : "목소리를 등록하지 않은 인물이라 메시지 음성 버튼에서 건너뛰었습니다. 누르면 기본 목소리로 만듭니다.";
         return "unvoiced";
       }
       if (this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name))
@@ -971,6 +977,7 @@ export const dialogue = {
           .forEach((item) => item.remove());
         delete line.dataset.svDecorated;
       });
+    document.querySelectorAll("q + .sv-inline-actions").forEach((item) => item.remove());
     document.querySelectorAll(".sv-utterance").forEach((wrapper) => {
       // A line may hold formatting (bold, italics); only its buttons go.
       wrapper.querySelectorAll(":scope > .sv-inline-actions").forEach((item) => item.remove());

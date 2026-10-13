@@ -89,10 +89,11 @@ export const DEFAULT_SETTINGS = {
   reading: { rules: structuredClone(DEFAULT_READING_RULES), thought_effect: true, version: 2 },
   // auto_new: a new AI reply is voiced and read through at once (its 음성 준비 is pressed).
   // caption: the line being read shown under 실리태번's top bar: "off", "auto" (only for lines
-  // read from the original while a translation is on screen) or "always".
+  // read from the original while a translation is on screen) or "always". caption_at: "top"
+  // (under the top bar) or "bottom" (above the input bar).
   // line_buttons: the play buttons beside the lines (off: hidden, 음성 준비 still reads them).
   // prepare: the message's 음성 준비 / 이어 듣기 button.
-  playback: { auto_new: false, caption: "always", line_buttons: true, prepare: true },
+  playback: { auto_new: false, caption: "always", caption_at: "top", line_buttons: true, prepare: true },
   // uncertain: what 음성 준비 does with a line whose speaker is unclear: "skip" it, or read it
   // with the default voice (the male or female one when the analysis tells).
   // multicast_sync: MultiCast TTS's cast kept in step with the people here (when it is installed).
@@ -300,6 +301,8 @@ export function validateSettings(current, patch) {
   next.phone.world_info_choice = cleanLoreChoice(next.phone.world_info_choice);
   if (!["off", "auto", "always"].includes(next.playback.caption))
     next.playback.caption = DEFAULT_SETTINGS.playback.caption;
+  if (!["top", "bottom"].includes(next.playback.caption_at))
+    next.playback.caption_at = DEFAULT_SETTINGS.playback.caption_at;
   if (!["skip", "default"].includes(next.casting.uncertain))
     next.casting.uncertain = DEFAULT_SETTINGS.casting.uncertain;
   if (!PHONE_LAUNCHERS.includes(next.phone.launcher))

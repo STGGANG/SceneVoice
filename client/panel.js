@@ -101,19 +101,31 @@ export const panel = {
         <div class="sv-basic-chat">
           ${multicastReads ? '<div class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>MultiCast 확장도 채팅 대사를 읽고 있습니다. 한 확장만 읽게 하세요. 이쪽 ‘채팅 대사 읽기’를 끄면 씬보이스는 스마트폰만 씁니다.</span></div>' : ""}
           <div class="sv-row">
-            ${switchHtml({ id: "sv-line-buttons", label: "대사 옆 재생 버튼", hint: "끄면 대사 옆 버튼을 숨기고 ‘음성 준비’로만 듣습니다.", checked: config.playback?.line_buttons !== false })}
-            ${switchHtml({ id: "sv-prepare", label: "음성 준비·이어 듣기", hint: "메시지 버튼 줄의 ‘음성 준비’로 대사를 차례로 만들며 이어서 들려줍니다.", checked: config.playback?.prepare !== false })}
+            ${switchHtml({ id: "sv-line-buttons", label: "대사 옆 재생 버튼", hint: "끄면 대사 옆 버튼을 숨기고 메시지의 ‘음성’ 버튼으로만 듣습니다.", checked: config.playback?.line_buttons !== false })}
+            ${switchHtml({ id: "sv-prepare", label: "메시지 음성 버튼", hint: "메시지 버튼 줄의 ‘음성’으로 대사를 차례로 만들며 이어서 들려줍니다.", checked: config.playback?.prepare !== false })}
           </div>
           <div class="sv-row sv-basic-prepare">
             ${switchHtml({ id: "sv-auto-play", label: "새 답변 자동 재생", hint: "새 메시지가 도착하면 분석·생성·재생까지 바로 합니다.", tip: "지난 메시지와 통화 중에는 읽지 않습니다. 휴대폰에서는 화면을 한 번 누른 뒤부터 자동으로 재생됩니다.", checked: config.playback?.auto_new === true })}
           </div>
           <div class="sv-row">
             <div class="sv-field">
-              <div class="sv-label-line"><span id="sv-caption-label">읽고 있는 대사 자막</span>${infoTip("지금 읽는 대사를 실리태번 상단바 아래에 한 줄로 띄웁니다. ‘필요할 때만’은 화면의 대사와 짝이 맞지 않을 때(번역문만 보일 때)나 재생 버튼을 숨겼을 때 띄웁니다.", "읽고 있는 대사 자막 설명")}</div>
+              <div class="sv-label-line"><span id="sv-caption-label">읽고 있는 대사 자막</span>${infoTip("지금 읽는 대사를 한 줄로 띄웁니다. ‘필요할 때만’은 화면의 대사와 짝이 맞지 않을 때(번역문만 보일 때)나 재생 버튼을 숨겼을 때 띄웁니다.\n자막을 누르면 멈추고, 한 번 더 누르면 멈춘 곳부터 이어 듣습니다.", "읽고 있는 대사 자막 설명")}</div>
               <div class="sv-seg" role="radiogroup" aria-labelledby="sv-caption-label">
                 ${[["off", "끔"], ["auto", "필요할 때만"], ["always", "항상"]].map(([value, label]) => `<label><input type="radio" name="sv-caption" value="${value}" ${(config.playback?.caption || "always") === value ? "checked" : ""}><span>${label}</span></label>`).join("")}
               </div>
+              <small class="sv-hint">자막을 누르면 멈춤·이어 듣기</small>
             </div>
+            <div class="sv-field">
+              <div class="sv-label-line"><span id="sv-caption-at-label">자막 위치</span></div>
+              <div class="sv-seg" role="radiogroup" aria-labelledby="sv-caption-at-label">
+                ${[["top", "위"], ["bottom", "아래"]].map(([value, label]) => `<label><input type="radio" name="sv-caption-at" value="${value}" ${(config.playback?.caption_at || "top") === value ? "checked" : ""}><span>${label}</span></label>`).join("")}
+              </div>
+              <small class="sv-hint">위: 상단바 밑 · 아래: 입력창 위</small>
+            </div>
+          </div>
+          <div class="sv-pause-command">
+            <p class="sv-hint">QR 버튼으로도 멈춤·이어 듣기: <code>/sv-pause</code></p>
+            <button type="button" id="sv-pause-qr" class="sv-btn sv-btn-sm"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>QR에 추가</span></button>
           </div>
         </div>
       </div>`,
@@ -249,8 +261,8 @@ export const panel = {
       ${choiceListHtml({
         name: "sv-casting-uncertain",
         cls: "sv-chat-only sv-casting-only sv-choices-across",
-        label: "화자가 불확실한 대사 (음성 준비·이어 듣기)",
-        tip: "‘음성 준비’로 한 번에 만들 때만 적용됩니다. 대사 버튼을 하나씩 누를 때는 화자를 고르라고 알려 드립니다.",
+        label: "화자가 불확실한 대사 (메시지 음성 버튼)",
+        tip: "메시지의 ‘음성’ 버튼으로 한 번에 만들 때만 적용됩니다. 대사 버튼을 하나씩 누를 때는 화자를 고르라고 알려 드립니다.",
         value: config.casting?.uncertain === "default" ? "default" : "skip",
         choices: [
           ["skip", "forward", "건너뛰기", "화자를 고를 때까지 만들지 않습니다"],
@@ -795,6 +807,9 @@ export const panel = {
       .getElementById("sv-engine-check")
       ?.addEventListener("click", () => this.checkEngineConnection());
     document
+      .getElementById("sv-pause-qr")
+      ?.addEventListener("click", () => this.run(() => this.addPauseQuickReply()));
+    document
       .getElementById("sv-load-voices")
       ?.addEventListener("click", () =>
         this.run(async () => {
@@ -958,6 +973,7 @@ export const panel = {
       playback: {
         auto_new: document.getElementById("sv-auto-play").checked,
         caption: document.querySelector('input[name="sv-caption"]:checked')?.value || "always",
+        caption_at: document.querySelector('input[name="sv-caption-at"]:checked')?.value || "top",
         line_buttons: document.getElementById("sv-line-buttons").checked,
         prepare: document.getElementById("sv-prepare").checked,
       },

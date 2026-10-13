@@ -7,12 +7,24 @@ import { withoutVoiceTags } from "./common.js";
 const PREPARE_AHEAD = 3;
 const CATCH_UP_AHEAD = 2;
 
+// The message button's word and its icon: 음성 (nothing made yet), 재생 (made, play from the
+// start), 이어서 (stopped partway), 중지 (making or playing: a press stops).
+const GENERATE_ICONS = {
+  음성: "fa-wave-square",
+  재생: "fa-play",
+  이어서: "fa-play",
+  중지: "fa-stop",
+  "중지 중…": "fa-stop",
+};
+
 export const messageGeneration = {
   messageJobs: new Map(),
   setGenerateLabel(control, text) {
     const label = control.querySelector(".sv-generate-label");
     if (label) label.textContent = text;
     else control.textContent = text;
+    const icon = control.querySelector("i");
+    if (icon && GENERATE_ICONS[text]) icon.className = `fa-solid ${GENERATE_ICONS[text]}`;
   },
   decorateMessageGeneration(container) {
     if (this.config.playback?.prepare === false) return;
@@ -30,7 +42,7 @@ export const messageGeneration = {
       }
       existing.dataset.print = print;
       this.messagePlayback?.delete(existing);
-      this.setGenerateLabel(existing, "음성 준비");
+      this.setGenerateLabel(existing, "음성");
       existing.title = existing.dataset.firstTitle || existing.title;
       for (const tool of this.messageTools(existing)) tool.hidden = true;
     }
@@ -40,7 +52,7 @@ export const messageGeneration = {
     button.type = "button";
     button.className = "mes_button sv-message-generate";
     button.innerHTML =
-      '<i class="fa-solid fa-wave-square" aria-hidden="true"></i><span class="sv-generate-label">음성 준비</span>';
+      '<i class="fa-solid fa-wave-square" aria-hidden="true"></i><span class="sv-generate-label">음성</span>';
     button.title =
       "이 메시지의 대사·생각을 차례로 만들며 이어서 들려줍니다. 앞의 몇 대사가 준비되면 시작합니다. 번역 확장으로 번역문이 보이는 메시지는 원문으로 만듭니다.";
     button.dataset.firstTitle = button.title;
@@ -56,7 +68,7 @@ export const messageGeneration = {
     again.className = "mes_button sv-message-tool sv-message-reanalyze";
     again.hidden = !container.querySelector('.sv-play-btn[data-status="ready"]');
     again.innerHTML =
-      '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span class="sv-generate-label">분석 다시</span>';
+      '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span class="sv-generate-label">분석</span>';
     again.title =
       "이 메시지의 화자·연기를 다시 분석합니다(보조모델 요청 1번). 다음에 들을 때 연기가 바뀐 대사만 새로 만듭니다.";
     again.setAttribute("aria-label", again.title);
@@ -89,8 +101,11 @@ export const messageGeneration = {
     const source = this.sourceLineButtons(container);
     if (source) await this.hydrateLines(source.host);
     const lines = source ? source.buttons : [...container.querySelectorAll(".sv-play-btn")];
-    if (lines.some((line) => line.dataset.status === "ready"))
-      for (const tool of tools) tool.hidden = false;
+    if (!lines.some((line) => line.dataset.status === "ready")) return;
+    for (const tool of tools) tool.hidden = false;
+    // Voices made on an earlier visit: the button plays them.
+    if (!this.messageJobs.has(control) && control.querySelector(".sv-generate-label")?.textContent === "음성")
+      this.setGenerateLabel(control, "재생");
   },
 
   /** The buttons beside a message's 음성 준비 (분석 다시, 내려받기). */
@@ -107,7 +122,7 @@ export const messageGeneration = {
     const buttons = source ? source.buttons : [...container.querySelectorAll(".sv-play-btn")];
     await this.hydrateLines(source ? source.host : container);
     const ready = buttons.filter((line) => line.dataset.status === "ready" && line.dataset.audioUrl);
-    if (!ready.length) throw new Error("내려받을 음성이 없습니다. 먼저 ‘음성 준비’로 만들어 주세요.");
+    if (!ready.length) throw new Error("내려받을 음성이 없습니다. 먼저 메시지의 ‘음성’ 버튼으로 만들어 주세요.");
     const messageId = container.closest(".mes")?.getAttribute("mesid") || "";
     await this.downloadJoinedAudio(
       ready.map((line) => ({ url: line.dataset.audioUrl })),
@@ -136,7 +151,7 @@ export const messageGeneration = {
     }
     const playback = this.messagePlayback?.get(control);
     if (playback) playback.position = 0;
-    this.setGenerateLabel(control, "다시 듣기");
+    this.setGenerateLabel(control, "재생");
     control.title = "새 분석으로 처음부터 들려줍니다. 연기가 바뀐 대사만 새로 만듭니다.";
     this.notify("분석을 다시 했습니다. 다음에 들을 때 바뀐 대사만 새로 만듭니다.", "info");
   },
@@ -244,7 +259,8 @@ export const messageGeneration = {
     this.syncMultiCast?.();
     const tools = this.messageTools(control);
     for (const tool of tools) tool.disabled = true;
-    this.setGenerateLabel(control, "생성 대기 · 중지");
+    this.setGenerateLabel(control, "중지");
+    control.title = "생성 대기 중 · 누르면 멈춥니다.";
     control.classList.add("sv-queued");
     const messageId = Number(container.closest(".mes")?.getAttribute("mesid"));
     const sourceText = () =>
@@ -301,19 +317,9 @@ export const messageGeneration = {
           }
           settle[index]();
         }
+        // No notice: a line left out keeps its own button, whose title says why.
         job.skipped = skipped;
         job.unvoiced = unvoiced;
-        if (!job.cancelled && !job.failed) {
-          const notes = [
-            skipped ? `화자가 불확실한 ${skipped}개` : "",
-            unvoiced ? `목소리 미등록·건너뛰기 인물 ${unvoiced}개` : "",
-          ].filter(Boolean);
-          // Told once per message, at its first preparation; 이어 듣기 stays quiet.
-          if (notes.length && !playback.noticed) {
-            playback.noticed = true;
-            this.notify(`${notes.join(", ")}는 건너뛰었습니다.`, "info");
-          }
-        }
         return !job.cancelled && !job.failed;
       })
       .finally(settleAll));
@@ -322,11 +328,8 @@ export const messageGeneration = {
     const total = buttons.length;
     const playing = this.playMessageLines(buttons, playback, made, (index, waiting) => {
       control.classList.toggle("sv-queued", waiting);
-      this.setGenerateLabel(
-        control,
-        waiting ? `${index + 1}/${total} 준비 중 · 중지` : "재생 중 · 중지",
-      );
-      control.title = "누르면 만들기와 재생을 멈춥니다. 이미 만든 음성은 남습니다.";
+      this.setGenerateLabel(control, "중지");
+      control.title = `${waiting ? `${index + 1}/${total} 준비 중` : `${index + 1}/${total} 재생 중`} · 누르면 만들기와 재생을 멈춥니다. 이미 만든 음성은 남습니다.`;
     });
     Promise.all([prepared, playing])
       .catch((error) => {
@@ -351,9 +354,9 @@ export const messageGeneration = {
           tool.disabled = false;
           tool.hidden = false;
         }
-        // Heard to the end (lines left out along the way included): 다시 듣기.
+        // Heard to the end (lines left out along the way included): 재생 from the start.
         const resume = playback.position > 0 || job.failed || job.cancelled;
-        this.setGenerateLabel(control, resume ? "이어 듣기" : "다시 듣기");
+        this.setGenerateLabel(control, resume ? "이어서" : "재생");
         control.title = resume
           ? "남은 대사를 만들고 멈춘 곳부터 이어서 들려줍니다."
           : `이 메시지의 대사를 처음부터 다시 들려줍니다. 만든 음성은 다시 만들지 않습니다.${job.skipped || job.unvoiced ? " 건너뛴 대사는 화자를 고르거나 목소리를 정한 뒤 다시 들으면 만듭니다." : ""}`;
@@ -399,7 +402,7 @@ export const messageGeneration = {
       // Its lines stop playing too (also between two lines, when nothing is sounding).
       if (job.playback) job.playback.stopped = true;
       control.classList.remove("sv-queued");
-      this.setGenerateLabel(control, "음성 준비");
+      this.setGenerateLabel(control, "음성");
     }
     this.messageJobs.clear();
     this.syncMultiCast?.();

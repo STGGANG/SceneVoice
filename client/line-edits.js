@@ -240,7 +240,7 @@ export const lineEdits = {
         )}
       </header>
       <blockquote class="sv-line-text">${escapeHtml(button.dataset.text)}</blockquote>
-      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 음성 준비로 생성하세요.</span></p>
+      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 메시지의 ‘음성’ 버튼으로 생성하세요.</span></p>
       <div class="sv-row">
         ${fieldHtml({ id: "sv-edit-speaker", label: "화자", control: '<select id="sv-edit-speaker"></select>' })}
         ${fieldHtml({ id: "sv-edit-language", label: "언어", control: `<select id="sv-edit-language">${LANGUAGE_CHOICES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select>` })}

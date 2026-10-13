@@ -35,6 +35,7 @@ export const lifecycle = {
     );
     this.bindMultiCast();
     this.exposePublicApi();
+    this.registerPauseCommand();
     this.updatePhoneLauncherVisibility();
     this.applyChatDisplay();
     if (this.isActive()) {

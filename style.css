@@ -1511,6 +1511,28 @@
   padding-top: 12px;
   border-top: 1px dashed var(--sv-line);
 }
+/* QR 버튼으로도 멈춤·이어 듣기: the command, and a button that puts it on the QR bar. */
+.sv-pause-command {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.sv-pause-command .sv-hint {
+  flex: 1 1 200px;
+  margin: 0;
+}
+/* 실리태번's own code style is white text on a dark box; here it follows the panel's text. */
+.sv-pause-command code {
+  padding: 0 5px;
+  border: 1px solid var(--sv-line);
+  border-radius: 4px;
+  background: var(--sv-soft);
+  color: var(--sv-fg);
+  font-family: var(--sv-mono);
+  font-size: 0.95em;
+  line-height: inherit;
+}
 .sv-engine-check-result {
   flex: 1 1 220px;
   min-width: 0;
@@ -2417,6 +2439,10 @@
   background: var(--sv-brand) !important;
   color: #fff !important;
   animation: sv-play-pulse 1.2s ease-in-out infinite;
+}
+.sv-play-btn.sv-playing.sv-paused {
+  animation: none;
+  opacity: 0.7;
 }
 .sv-play-btn.sv-loading i {
   animation: sv-spin 1s linear infinite;
@@ -6636,11 +6662,12 @@ body.sv-hide-line-buttons .sv-inline-actions {
   opacity: 1;
 }
 
-/* 읽는 대사 자막: ── the line being read ── in a strip under the top bar (no clicks, no layout). */
+/* 읽는 대사 자막: ── the line being read ── in a strip under the top bar (or above the input
+   bar), taking no room in the page. A tap on it pauses and resumes. */
 #sv-now-reading {
   --sv-now-ink: var(--SmartThemeBodyColor, #e6e6e6);
   position: fixed;
-  top: calc(var(--topBarBlockSize, 46px) + 8px + env(safe-area-inset-top));
+  top: calc(var(--topBarBlockSize, 46px) + 16px + env(safe-area-inset-top));
   left: 50%;
   z-index: 2147483540;
   display: flex;
@@ -6677,6 +6704,33 @@ body.sv-hide-line-buttons .sv-inline-actions {
 #sv-now-reading.sv-shown {
   opacity: 1;
   transform: translate(-50%, 0);
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#sv-now-reading.sv-at-bottom {
+  top: auto;
+  bottom: var(--sv-now-bottom, calc(120px + env(safe-area-inset-bottom)));
+  transform: translate(-50%, 6px);
+}
+#sv-now-reading.sv-at-bottom.sv-shown {
+  transform: translate(-50%, 0);
+}
+#sv-now-reading .sv-now-reading-icon {
+  order: -1;
+  flex: 0 0 auto;
+  margin-right: -4px;
+  font-size: 10px;
+  opacity: 0.55;
+}
+#sv-now-reading.sv-paused .sv-now-reading-icon {
+  opacity: 0.9;
+}
+#sv-now-reading.sv-paused .sv-now-reading-window {
+  opacity: 0.5;
+}
+#sv-now-reading.sv-paused .sv-now-reading-text.sv-scroll {
+  animation-play-state: paused;
 }
 @supports (color: rgb(from red r g b / 1)) {
   #sv-now-reading {
@@ -6684,8 +6738,8 @@ body.sv-hide-line-buttons .sv-inline-actions {
   }
 }
 /* Under the incoming-call banner when both are up. */
-body:has(#sv-call-banner) #sv-now-reading {
-  top: calc(var(--topBarBlockSize, 46px) + 84px + env(safe-area-inset-top));
+body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
+  top: calc(var(--topBarBlockSize, 46px) + 92px + env(safe-area-inset-top));
 }
 /* The speaker's name sits on the strip's top edge, small. */
 #sv-now-reading .sv-now-reading-who {

@@ -241,6 +241,11 @@ export const playback = {
     { communicationFilter = false, thoughtEffect = false, aside = false, radio = false, onEnded = null, onStop = null } = {},
   ) {
     if (!url) return;
+    if (this.playbackPaused && button && this.currentPlayButton === button && this.currentAudio) {
+      this.resumePlayback();
+      return;
+    }
+    this.markPaused(false);
     // Another TTS extension playing now stops first.
     this.quietMultiCast?.();
     // The audio playing until now was cut short.
@@ -320,6 +325,7 @@ export const playback = {
       audio.onended = null;
       audio.onerror = null;
       this.playToken += 1;
+      this.markPaused(false);
       button?.classList.remove("sv-playing");
       if (chatLine) this.hideNowReading();
       this.currentAudioNodes.forEach((node) => {
@@ -358,7 +364,7 @@ export const playback = {
         : Promise.resolve();
     Promise.resolve(resume)
       .then(() => {
-        if (live()) return audio.play();
+        if (live() && !this.playbackPaused) return audio.play();
       })
       .catch((error) => {
         if (!live() || error.name === "AbortError") return;
@@ -506,10 +512,15 @@ export const playback = {
       bar.id = "sv-now-reading";
       bar.setAttribute("role", "status");
       bar.setAttribute("aria-live", "polite");
+      bar.title = "누르면 멈춤 · 이어 듣기";
       bar.innerHTML =
-        '<span class="sv-now-reading-who" hidden></span><div class="sv-now-reading-window"><span class="sv-now-reading-text"></span></div>';
+        '<i class="sv-now-reading-icon fa-solid fa-pause" aria-hidden="true"></i><span class="sv-now-reading-who" hidden></span><div class="sv-now-reading-window"><span class="sv-now-reading-text"></span></div>';
+      bar.addEventListener("click", () => this.togglePause());
       document.body.appendChild(bar);
     }
+    const bottom = this.config.playback?.caption_at === "bottom";
+    bar.classList.toggle("sv-at-bottom", bottom);
+    if (bottom) this.placeNowReading(bar);
     const label = bar.querySelector(".sv-now-reading-text");
     const token = (this.nowReadingToken = (this.nowReadingToken || 0) + 1);
     const glide = (overflow) => {
@@ -568,6 +579,128 @@ export const playback = {
     };
     if (now) hide();
     else this.nowReadingTimer = setTimeout(hide, 900);
+  },
+
+  /**
+   * 자막 위치 "아래": just above 실리태번's input area (with the QR bar), followed as it grows
+   * (a longer message typed, the QR bar wrapping).
+   */
+  placeNowReading(bar = document.getElementById("sv-now-reading")) {
+    const form = document.getElementById("form_sheld");
+    if (!bar || !form) return;
+    const top = form.getBoundingClientRect().top;
+    if (top > 0) bar.style.setProperty("--sv-now-bottom", `${Math.round(window.innerHeight - top + 14)}px`);
+    if (this.nowReadingWatch || typeof ResizeObserver !== "function") return;
+    const follow = () => {
+      if (document.getElementById("sv-now-reading")?.classList.contains("sv-at-bottom")) this.placeNowReading();
+    };
+    const watch = new ResizeObserver(follow);
+    watch.observe(form);
+    window.addEventListener("resize", follow);
+    this.nowReadingWatch = watch;
+    this.eventCleanups.push(() => {
+      watch.disconnect();
+      window.removeEventListener("resize", follow);
+      this.nowReadingWatch = null;
+    });
+  },
+
+  /**
+   * 멈춤 / 이어 듣기 (a tap on the caption strip, or /sv-pause): the voice holds where it is, and
+   * the row it is part of waits with it. Nothing playing: nothing to do.
+   */
+  togglePause() {
+    if (!this.currentAudio) return false;
+    if (this.playbackPaused) this.resumePlayback();
+    else this.pausePlayback();
+    return true;
+  },
+
+  pausePlayback() {
+    const audio = this.currentAudio;
+    if (!audio || this.playbackPaused) return;
+    this.markPaused(true);
+    audio.pause();
+    // The radio's music runs in Web Audio, beside the voice: it holds too.
+    if (this.radioBeds?.length && this.communicationAudioContext?.suspend) {
+      this.pauseSuspended = true;
+      this.communicationAudioContext.suspend().catch(() => undefined);
+    }
+    for (const sound of this.sideSounds || [])
+      if (!sound.paused) {
+        sound.svHeld = true;
+        sound.pause();
+      }
+  },
+
+  resumePlayback() {
+    const audio = this.currentAudio;
+    if (!audio || !this.playbackPaused) return;
+    this.markPaused(false);
+    const context = this.communicationAudioContext;
+    if (context && context.state !== "running") context.resume().catch(() => undefined);
+    audio.play().catch(() => undefined);
+    for (const sound of this.sideSounds || [])
+      if (sound.svHeld) {
+        sound.svHeld = false;
+        sound.play().catch(() => undefined);
+      }
+  },
+
+  /** The strip and the line's button show the pause (▶ to go on). */
+  markPaused(paused) {
+    if (!paused && !this.playbackPaused) return;
+    this.playbackPaused = paused;
+    if (!paused && this.pauseSuspended) {
+      this.pauseSuspended = false;
+      this.communicationAudioContext?.resume().catch(() => undefined);
+    }
+    this.currentPlayButton?.classList?.toggle("sv-paused", paused);
+    const bar = document.getElementById("sv-now-reading");
+    if (!bar) return;
+    bar.classList.toggle("sv-paused", paused);
+    const icon = bar.querySelector(".sv-now-reading-icon");
+    icon?.classList.toggle("fa-pause", !paused);
+    icon?.classList.toggle("fa-play", paused);
+  },
+
+  /** /sv-pause: the same 멈춤 / 이어 듣기, for a QR button (or typed). */
+  registerPauseCommand() {
+    const { SlashCommandParser, SlashCommand } = window.SillyTavern?.getContext?.() || {};
+    if (!SlashCommandParser?.addCommandObject || !SlashCommand?.fromProps) return;
+    SlashCommandParser.addCommandObject(
+      SlashCommand.fromProps({
+        name: "sv-pause",
+        callback: () => {
+          this.togglePause();
+          return "";
+        },
+        helpString: "씬보이스: 지금 읽는 음성을 멈추고, 한 번 더 하면 멈춘 곳부터 이어 듣습니다.",
+      }),
+    );
+  },
+
+  /** QR에 추가: a "SceneVoice" quick reply set with the ⏸ button, shown on the QR bar. */
+  async addPauseQuickReply() {
+    const api = globalThis.quickReplyApi;
+    if (!api?.createQuickReply) throw new Error("실리태번의 빠른 답장(Quick Reply) 확장을 찾을 수 없어요.");
+    const set = "SceneVoice";
+    const label = "씬보이스 멈춤·이어 듣기";
+    if (!api.getSetByName(set)) await api.createSet(set);
+    if (!api.getQrByLabel(set, label))
+      api.createQuickReply(set, label, {
+        icon: "fa-pause",
+        showLabel: false,
+        message: "/sv-pause",
+        title: "씬보이스 멈춤 · 이어 듣기",
+      });
+    api.addGlobalSet(set, true);
+    this.notify(
+      api.settings?.isEnabled === false
+        ? "QR 세트 ‘SceneVoice’에 ⏸ 버튼을 넣었어요. 빠른 답장 확장이 꺼져 있어서, 켜야 버튼이 보여요."
+        : "QR 바에 ⏸ 버튼을 넣었어요(세트 ‘SceneVoice’). 빼려면 빠른 답장 설정에서 세트를 지우면 돼요.",
+      "success",
+    );
   },
 
   /**
