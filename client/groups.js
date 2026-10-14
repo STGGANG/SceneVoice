@@ -478,6 +478,7 @@ export const groups = {
           "recent_chat",
           this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
         ),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
         ...this.currentTimeBlocks(members.map((member) => member.key)),
         dataBlock(

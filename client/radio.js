@@ -1,13 +1,18 @@
 // 라디오 (a fun extra): a show written in one request and voiced on demand. "토크":
 // the hosts talk about the story so far as its cast, outside it (fourth wall); "사연": a DJ in
-// the story's world reads my listener's story on air. Never part of the chat memory or any
-// other prompt; each show only says where in the chat it was made.
+// the story's world reads my listener's story on air; "시나리오": a show in the flow of an
+// outline I wrote. Never part of the chat memory or any other prompt; each show only says where
+// in the chat it was made.
 import { escapeHtml, OVERHEARD_LENGTH_CHOICES } from "./common.js";
 import { dataBlock, languageName, phoneMessages, radioFinal, radioSystem } from "./prompts.js";
 import { pcm16, wavFromParts } from "./wav.js";
 
 const RADIO_TOKENS = { short: 1800, normal: 3200, long: 4800 };
-const MODE_LABEL = { talk: "토크", story: "사연" };
+// 기억: the shows kept on record that the next one is given whole (newest few), and where the
+// 새 방송 choice is kept (it stays as it was last set; off at first).
+const PAST_SHOWS = 5;
+const REMEMBER_KEY = "scenevoice_radio_remember";
+const MODE_LABEL = { talk: "토크", story: "사연", scenario: "시나리오" };
 // The show's music: up front and under the first line, then under the last and after it. None
 // when the file isn't there.
 const MUSIC_URL = new URL("./assets/radio-music.mp3", import.meta.url).href;
@@ -61,8 +66,13 @@ export const radio = {
     };
   },
 
-  /** One show written and kept. `hosts`: contacts (the first leads); returns it. */
-  async writeRadioShow({ mode = "talk", hosts, length = "normal", phone = false, story = "" }) {
+  /**
+   * One show written and kept. `hosts`: contacts (the first leads); `story`: the listener's story
+   * (사연) or my outline (시나리오); `caller`: who may phone in ("auto": whoever fits, a key, or
+   * nobody); `remember`: the next shows know it. Returns it.
+   */
+  async writeRadioShow({ mode = "talk", hosts, length = "normal", phone = false, story = "", caller = "", remember = false }) {
+    if (mode === "scenario" && !story.trim()) throw new Error("시나리오를 적어 주세요.");
     const operation = this.captureChat();
     const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
     if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주십시오.");
@@ -70,6 +80,11 @@ export const radio = {
     // My character speaks in the language of the first other host.
     const other = people.find((person) => !person.me) || people[0];
     const languages = people.map((person) => this.conversationLanguage([], "", (person.me ? other : person).key));
+    const onAir = new Set(people.map((person) => person.key));
+    const callers = (caller === "auto" ? this.phoneContacts() : caller ? [this.phoneContact(caller)] : [])
+      .filter((person) => person?.key && !onAir.has(person.key))
+      .slice(0, 8);
+    const pastShows = await this.rememberedShows();
     const messages = phoneMessages(
       radioSystem({
         emotions: Array.from(this.analysisEmotionCandidates()).sort(),
@@ -79,6 +94,8 @@ export const radio = {
         mode,
         count: people.length,
         withUser: people.some((person) => person.me),
+        callers: callers.length ? (caller === "auto" ? "auto" : "chosen") : "",
+        pastShows: pastShows.length > 0,
       }),
       [
         dataBlock("user_character", this.userCharacterName()),
@@ -94,21 +111,39 @@ export const radio = {
             performance_note: person.note || "",
           })),
         ),
+        ...(callers.length
+          ? [
+              dataBlock(
+                "callers",
+                callers.map((person) => ({
+                  key: person.key,
+                  name: person.name,
+                  language: languageName(this.conversationLanguage([], "", person.key)),
+                  emotional_range: this.emotionalRange(person.key),
+                  performance_note: person.note || "",
+                })),
+              ),
+            ]
+          : []),
         dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
         ...(phone ? [dataBlock("phone_log", await this.radioPhoneLog())] : []),
+        ...(pastShows.length ? [dataBlock("past_shows", pastShows)] : []),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.([story])) || []),
         ...(mode === "story" ? [dataBlock("listener_story", story || "(make one up that fits)")] : []),
+        ...(mode === "scenario" ? [dataBlock("scenario", story)] : []),
       ],
       radioFinal(people.map((person) => person.name)),
     );
     this.assertChat(operation);
     const parsed = await this.requestSpokenReply(profileId, messages, RADIO_TOKENS[length] || RADIO_TOKENS.normal);
     this.assertChat(operation);
+    const voices = [...people, ...callers.map((person) => ({ ...person, caller: true }))];
     const speakerOf = (from) => {
       const value = String(from || "").trim().toLowerCase();
       return (
-        people.find((person) => person.key.toLowerCase() === value) ||
-        people.find((person) => person.name.trim().toLowerCase() === value) ||
+        voices.find((person) => person.key.toLowerCase() === value) ||
+        voices.find((person) => person.name.trim().toLowerCase() === value) ||
         null
       );
     };
@@ -119,6 +154,7 @@ export const radio = {
       .map(({ speaker, draft }) => ({
         speaker_key: speaker.key,
         speaker_name: speaker.name,
+        ...(speaker.caller ? { caller: true } : {}),
         text: draft.text,
         script: draft.script,
         translation: draft.translation,
@@ -139,11 +175,48 @@ export const radio = {
         mode,
         hosts: people.map(({ key, name }) => ({ key, name })),
         story,
+        remember,
         lines,
       }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || `방송 저장 실패 (${response.status})`);
+    return data.item;
+  },
+
+  /** 기억: the shows on record in this chat (as shown now), oldest first, as the next show reads them. */
+  async rememberedShows() {
+    const shows = (await this.loadShows().catch(() => []))
+      .filter((show) => show.remember && this.anchorShown(show))
+      .slice(0, PAST_SHOWS)
+      .reverse();
+    return shows.map((show) => ({
+      title: this.radioTitle(show),
+      kind: MODE_LABEL[show.mode] || "",
+      on_air: show.hosts.map((host) => host.name),
+      lines: show.lines.map((line) => `${line.speaker_name}${line.caller ? " (on the phone)" : ""}: ${line.text}`),
+    }));
+  },
+
+  /** The 새 방송 choice for 기억, as last set (off at first). */
+  radioRememberChoice(value) {
+    try {
+      if (value !== undefined) localStorage.setItem(REMEMBER_KEY, value ? "1" : "0");
+      return localStorage.getItem(REMEMBER_KEY) === "1";
+    } catch {
+      return Boolean(value);
+    }
+  },
+
+  /** 기억 on a kept show, switched on or off. */
+  async setRadioRemember(show, remember) {
+    const response = await this.request(`/api/plugins/scenevoice/phone/radio/${encodeURIComponent(show.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: show.chat_id, remember }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "방송 기억을 바꾸지 못했습니다.");
     return data.item;
   },
 
@@ -159,6 +232,11 @@ export const radio = {
 
   radioLineVoiced(line) {
     return !this.radioLineMine(line) || this.personaVoiceReady();
+  },
+
+  /** Who says a line, as shown: a caller is marked as on the phone. */
+  radioSpeaker(line) {
+    return `${line.speaker_name || ""}${line.caller ? " · 전화 연결" : ""}`;
   },
 
   radioTitle(show) {
@@ -207,7 +285,7 @@ export const radio = {
                   (show) => `
           <button type="button" class="sv-memo sv-radio-show" data-radio-open="${escapeHtml(show.id)}">
             <span class="sv-radio-badge">${escapeHtml(MODE_LABEL[show.mode] || "라디오")}</span>
-            <span class="sv-recent-main"><strong>${escapeHtml(this.radioTitle(show))}</strong><small>${escapeHtml(show.hosts.map((host) => host.name).join(", "))}</small><small>${escapeHtml(this.radioPlace(show))}</small></span>
+            <span class="sv-recent-main"><strong>${show.remember ? '<i class="fa-solid fa-bookmark sv-radio-kept" aria-label="기억" title="다음 방송이 기억"></i>' : ""}${escapeHtml(this.radioTitle(show))}</strong><small>${escapeHtml(show.hosts.map((host) => host.name).join(", "))}</small><small>${escapeHtml(this.radioPlace(show))}</small></span>
             <i class="fa-solid fa-chevron-right sv-recent-chevron" aria-hidden="true"></i>
           </button>`,
                 )
@@ -216,7 +294,17 @@ export const radio = {
         }
       </div>`;
     body.querySelector("[data-radio-new]")?.addEventListener("click", () => {
-      this.radioEditor = { mode: "talk", hosts: [contacts[0].key], length: "normal", phone: false, story: "", busy: false };
+      this.radioEditor = {
+        mode: "talk",
+        hosts: [contacts[0].key],
+        length: "normal",
+        phone: false,
+        story: "",
+        scenario: "",
+        caller: "auto",
+        remember: this.radioRememberChoice(),
+        busy: false,
+      };
       this.renderSmartphone();
     });
     body.querySelectorAll("[data-radio-open]").forEach((button) =>
@@ -239,13 +327,16 @@ export const radio = {
         <div class="sv-detail-head">
           ${hosts.length > 1 ? this.threadAvatarMarkup({ group: true, members: hosts }) : this.contactAvatarMarkup(hosts[0])}
           <div><h3>${escapeHtml(this.radioTitle(show))}</h3><small>${escapeHtml([MODE_LABEL[show.mode], hosts.map((host) => host.name).join(", ")].filter(Boolean).join(" · "))}</small><small>${escapeHtml(this.radioPlace(show))}</small></div>
-          <button type="button" class="sv-call-history-delete sv-detail-delete" data-radio-delete aria-label="이 방송 삭제" title="이 방송 삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+          <div class="sv-radio-head-tools">
+            <button type="button" class="sv-radio-remember${show.remember ? " sv-on" : ""}" data-radio-remember aria-pressed="${show.remember ? "true" : "false"}" aria-label="기억" title="${show.remember ? "기억 켜짐: 다음 방송이 이 방송 내용을 압니다(채팅에는 안 들어감)" : "기억 꺼짐: 다음 방송은 이 방송을 모릅니다"}"><i class="fa-solid fa-bookmark" aria-hidden="true"></i></button>
+            <button type="button" class="sv-call-history-delete sv-detail-delete" data-radio-delete aria-label="이 방송 삭제" title="이 방송 삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+          </div>
         </div>
         <div class="sv-call-aloud-row">
           <button type="button" class="sv-call-aloud" data-radio-download aria-label="내려받기" title="내려받기: 음성 파일 또는 영상"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
           <button type="button" class="sv-call-aloud" data-radio-play aria-label="${resume ? "이어 듣기" : "듣기"}" title="${resume ? "이어 듣기: 멈춘 대사부터" : "듣기: 라디오 화면에서 처음부터"}"><i class="fa-solid fa-headphones" aria-hidden="true"></i></button>
         </div>
-        ${show.mode === "story" && show.story ? `<p class="sv-radio-story"><b>보낸 사연</b>${escapeHtml(show.story)}</p>` : ""}
+        ${show.story && show.mode !== "talk" ? `<p class="sv-radio-story"><b>${show.mode === "scenario" ? "내 시나리오" : "보낸 사연"}</b>${escapeHtml(show.story)}</p>` : ""}
         <div class="sv-call-transcript sv-history-transcript">
           ${show.lines
             .map((line, index) => {
@@ -253,7 +344,7 @@ export const radio = {
               const sounding = this.playingTurnId === line.id && this.currentAudio;
               const named = (label) => (index === 0 ? `<span>${label}</span>` : "");
               const voiced = this.radioLineVoiced(line);
-              return `<article class="${this.radioLineMine(line) ? "sv-call-user" : "sv-call-character"}${sounding ? " sv-call-reading" : ""}" data-index="${index}" aria-label="${escapeHtml(line.speaker_name || "")}"><small class="sv-voicemail-label">${escapeHtml(line.speaker_name || "")}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}<div class="sv-call-line-tools${index === 0 ? " sv-labeled" : ""}">${
+              return `<article class="${this.radioLineMine(line) ? "sv-call-user" : "sv-call-character"}${sounding ? " sv-call-reading" : ""}" data-index="${index}" aria-label="${escapeHtml(line.speaker_name || "")}"><small class="sv-voicemail-label">${escapeHtml(this.radioSpeaker(line))}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}<div class="sv-call-line-tools${index === 0 ? " sv-labeled" : ""}">${
                 line.audio_url && voiced
                   ? `<button type="button" data-radio-line-reroll="${index}" aria-label="음성 재생성" title="음성 재생성: 같은 대사로 목소리만 새로 만듭니다"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>${named("음성 재생성")}</button>`
                   : ""
@@ -272,6 +363,20 @@ export const radio = {
       this.renderSmartphone();
     });
     body.querySelector("[data-radio-play]").addEventListener("click", () => this.run(() => this.playRadioShow(body, show, resume)));
+    const keep = body.querySelector("[data-radio-remember]");
+    keep.addEventListener("click", () =>
+      this.run(async () => {
+        keep.disabled = true;
+        try {
+          const current = await this.setRadioRemember(show, !show.remember);
+          Object.assign(show, { remember: current.remember });
+          if (this.radioShowOpen?.id === show.id) this.radioShowOpen = show;
+          this.notify(show.remember ? "다음 방송부터 이 방송 내용을 기억합니다." : "이제 다음 방송은 이 방송을 모릅니다.", "info");
+        } finally {
+          if (body.isConnected && body.querySelector(".sv-radio-detail")) this.renderRadioShow(body, show);
+        }
+      }),
+    );
     const save = body.querySelector("[data-radio-download]");
     save.addEventListener("click", () =>
       this.run(async () => {
@@ -319,17 +424,25 @@ export const radio = {
         .map((contact) => `<option value="${escapeHtml(contact.key)}" ${contact.key === selected ? "selected" : ""}>${escapeHtml(contact.name)}</option>`)
         .join("");
     const story = editor.mode === "story";
+    const scenario = editor.mode === "scenario";
+    const modes = [
+      ["talk", "토크 · 지금까지 이야기로 수다 (제4의 벽)"],
+      ["story", "사연 · 내 사연을 읽어 주는 방송"],
+      ["scenario", "시나리오 · 내가 쓴 흐름대로 만드는 방송"],
+    ];
     body.innerHTML = `
       <div class="sv-room-editor sv-radio-editor">
         <header class="sv-msg-head">
           <button type="button" class="sv-phone-back" data-radio-cancel><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> 라디오</button>
           <strong class="sv-room-editor-title">새 방송</strong>
         </header>
-        <label class="sv-room-name"><span>무슨 방송</span><select id="sv-radio-mode" ${off}><option value="talk" ${story ? "" : "selected"}>토크 · 지금까지 이야기로 수다 (제4의 벽)</option><option value="story" ${story ? "selected" : ""}>사연 · 내 사연을 읽어 주는 방송</option></select></label>
+        <label class="sv-room-name"><span>무슨 방송</span><select id="sv-radio-mode" ${off}>${modes.map(([value, label]) => `<option value="${value}" ${value === editor.mode ? "selected" : ""}>${label}</option>`).join("")}</select></label>
         <p class="sv-room-hint">${
           story
             ? "첫 번째 사람이 이야기 속 세계의 DJ가 되어 내 사연을 읽고 답해 줍니다."
-            : "인물들이 이야기 밖으로 잠깐 나와, 지금까지 일을 두고 떠듭니다. 채팅 기억에는 들어가지 않습니다."
+            : scenario
+              ? "적어 준 흐름(설정, 일어나는 순서, 결말)을 따라 비슷하게 방송을 만듭니다. 대본이 아니라 줄거리라, 대사는 인물들이 자기 말투로 채웁니다."
+              : "인물들이 이야기 밖으로 잠깐 나와, 지금까지 일을 두고 떠듭니다. 채팅 기억에는 들어가지 않습니다."
         }</p>
         ${editor.hosts
           .map(
@@ -340,9 +453,19 @@ export const radio = {
           )
           .join("")}
         ${editor.hosts.length < 3 ? `<button type="button" class="sv-call-person-add" data-radio-host-add ${off}><i class="fa-solid fa-plus" aria-hidden="true"></i><span>진행자 추가</span></button>` : ""}
+        <label class="sv-room-name"><span>전화 연결</span><select id="sv-radio-caller" ${off}>${[
+          ["auto", "알아서 (어울리면)"],
+          ["", "없음"],
+          ...contacts.filter((contact) => !editor.hosts.includes(contact.key)).map((contact) => [contact.key, contact.name]),
+        ]
+          .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === editor.caller ? "selected" : ""}>${escapeHtml(label)}</option>`)
+          .join("")}</select></label>
+        <p class="sv-room-hint">진행자가 아닌 인물이 전화로 연결돼 의견을 말하거나 질문을 받습니다. ‘알아서’는 어울릴 때만.</p>
         ${story ? `<label class="sv-room-name"><span>사연</span><textarea id="sv-radio-story" rows="4" maxlength="2000" placeholder="비워 두면 이야기에 어울리는 사연을 지어냅니다" ${off}>${escapeHtml(editor.story)}</textarea></label><p class="sv-room-hint">익명으로 전달됩니다. 내용에 따라 페르소나라는 걸 눈치챌 수도, 다른 사람으로 여길 수도 있습니다.</p>` : ""}
+        ${scenario ? `<label class="sv-room-name"><span>시나리오</span><textarea id="sv-radio-scenario" rows="6" maxlength="2000" placeholder="예: 심야 연애 고민 상담 코너. 누군가의 고민을 들어주다가 자기들끼리 불이 붙어 급히 라디오를 종료한다." ${off}>${escapeHtml(editor.scenario)}</textarea></label>` : ""}
         <label class="sv-room-name"><span>분량</span><select id="sv-radio-length" ${off}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${escapeHtml(label.split(" (")[0])}</option>`).join("")}</select></label>
         <label class="sv-room-check"><input type="checkbox" id="sv-radio-phone" ${editor.phone ? "checked" : ""} ${off}><span>전화·문자 내용도 참고</span></label>
+        <label class="sv-room-check"><input type="checkbox" id="sv-radio-remember" ${editor.remember ? "checked" : ""} ${off}><span>다음 방송이 이 방송을 기억 (라디오끼리만)</span></label>
         <div class="sv-room-actions">
           <button type="button" class="sv-room-save" data-radio-make ${off}>${editor.busy ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 방송 준비 중…' : "방송 만들기"}</button>
         </div>
@@ -354,6 +477,8 @@ export const radio = {
     body.querySelectorAll("[data-radio-host]").forEach((select) =>
       select.addEventListener("change", () => {
         editor.hosts[Number(select.dataset.radioHost)] = select.value;
+        // 전화 연결 lists whoever isn't on air now.
+        this.renderRadioEditor(body);
       }),
     );
     body.querySelectorAll("[data-radio-host-remove]").forEach((button) =>
@@ -369,11 +494,20 @@ export const radio = {
     body.querySelector("#sv-radio-story")?.addEventListener("input", (event) => {
       editor.story = event.target.value;
     });
+    body.querySelector("#sv-radio-scenario")?.addEventListener("input", (event) => {
+      editor.scenario = event.target.value;
+    });
     body.querySelector("#sv-radio-length").addEventListener("change", (event) => {
       editor.length = event.target.value;
     });
     body.querySelector("#sv-radio-phone").addEventListener("change", (event) => {
       editor.phone = event.target.checked;
+    });
+    body.querySelector("#sv-radio-caller").addEventListener("change", (event) => {
+      editor.caller = event.target.value;
+    });
+    body.querySelector("#sv-radio-remember").addEventListener("change", (event) => {
+      editor.remember = this.radioRememberChoice(event.target.checked);
     });
     body.querySelector("[data-radio-cancel]").addEventListener("click", () => {
       this.radioEditor = null;
@@ -390,7 +524,9 @@ export const radio = {
             hosts: [...new Set(editor.hosts)].map((key) => ({ key })),
             length: editor.length,
             phone: editor.phone,
-            story: editor.story.trim(),
+            story: (editor.mode === "scenario" ? editor.scenario : editor.mode === "story" ? editor.story : "").trim(),
+            caller: editor.hosts.includes(editor.caller) ? "auto" : editor.caller,
+            remember: editor.remember,
           });
           if (this.radioEditor === editor) this.radioEditor = null;
           this.radioShowOpen = show;
@@ -432,7 +568,7 @@ export const radio = {
         <div class="sv-call-live-line">
           <div class="sv-call-caption" data-radio-caption>${
             line
-              ? `<small>${escapeHtml(line.speaker_name || "")}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}`
+              ? `<small>${escapeHtml(this.radioSpeaker(line))}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}`
               : '<p class="sv-call-waiting">주파수를 맞추는 중…</p>'
           }</div>
         </div>
@@ -534,7 +670,8 @@ export const radio = {
     this.playWithSounds(ready.url, line.script, lit, ready.revoke, {
       mixed: ready.mixed,
       communicationFilter: this.shouldApplyCommunicationFilter("radio"),
-      radio: true,
+      // A caller comes down the phone line; the hosts sound like the radio.
+      radio: !line.caller,
       onEnded: done,
       onStop: done,
     });
@@ -544,23 +681,21 @@ export const radio = {
   async editRadioLine(body, show, index) {
     const line = show.lines[index];
     if (!line) return;
-    const value = await this.openLineSheet({ value: line.script || line.text });
-    if (value === null) return;
-    const edit = this.spokenEdit(value);
+    const sheet = await this.openLineSheet({ value: line.script || line.text, translation: line.translation });
+    if (sheet === null) return;
+    const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("대사를 비울 수는 없습니다.");
-    if (edit.text === line.text && edit.script === (line.script || "")) return;
+    const { changed, words, translation } = this.sheetChanges(line, edit, sheet);
+    if (!changed) return;
     const response = await this.request(`/api/plugins/scenevoice/phone/radio-lines/${encodeURIComponent(line.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: show.chat_id,
-        ...edit,
-        ...(edit.text === line.text && line.translation ? { translation: line.translation } : {}),
-      }),
+      body: JSON.stringify({ chat_id: show.chat_id, ...edit, translation }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "대사를 고치지 못했습니다.");
-    const voiced = Boolean(line.audio_url);
+    // Only new words need a new voice; a translation alone changes nothing heard.
+    const voiced = Boolean(line.audio_url) && words;
     const current = data.item;
     if (this.radioShowOpen?.id === current.id) this.radioShowOpen = current;
     if (!body.isConnected || !body.querySelector(".sv-radio-detail")) return;
@@ -680,7 +815,7 @@ export const radio = {
         const view = screen();
         const line = show.lines[index];
         const caption = view?.querySelector("[data-radio-caption]");
-        if (caption) caption.innerHTML = `<small>${escapeHtml(line.speaker_name || "")}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}`;
+        if (caption) caption.innerHTML = `<small>${escapeHtml(this.radioSpeaker(line))}</small><p>${escapeHtml(line.text)}</p>${this.translationHtml(line)}`;
         if (view) this.syncListenSteps(view, index, count);
         // The sign-off: the music comes back in under it.
         const last = index === count - 1;
@@ -694,7 +829,7 @@ export const radio = {
             this.playWithSounds(ready.url, line.script, null, false, {
               mixed: ready.mixed,
               communicationFilter: this.shouldApplyCommunicationFilter("radio"),
-              radio: true,
+              radio: !line.caller,
               onEnded: resolve,
               onStop: () => {
                 if (run.next === null) run.stopped = true;
@@ -749,7 +884,7 @@ export const radio = {
       }
       if (!line.audio_url && !make) continue;
       const ready = await this.radioLineVoice(show, line, index).catch(() => null);
-      if (ready) clips.push({ url: ready.url, revoke: ready.revoke, turn, filter, radio: true });
+      if (ready) clips.push({ url: ready.url, revoke: ready.revoke, turn, filter, radio: !line.caller });
     }
     return { clips, left: show.lines.length - clips.length };
   },

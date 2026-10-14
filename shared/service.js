@@ -253,7 +253,7 @@ export class SceneService {
           mode: this.env.mode,
           available_engines: this.env.engines,
           cache: await this.stats(),
-          version: "1.2.3",
+          version: "1.2.4",
         },
       };
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
@@ -396,7 +396,7 @@ export class SceneService {
     if (path === "/states")
       return {
         items: Object.values(data.states)
-          .filter((item) => item.chat_id === query.chat_id && !String(item.state_key).startsWith("state-round-"))
+          .filter((item) => item.chat_id === query.chat_id && !/^state-(round|status)-/.test(String(item.state_key)))
           .map(({ state_key, character_key, character_name, updated_at }) => ({
             state_key,
             character_key,
@@ -584,7 +584,7 @@ export class SceneService {
         if (chatSwap.has(item?.chat_id)) {
           target = key.startsWith("state-round-")
             ? `state-round-${sha256(moved.chat_id)}`
-            : `state-${sha256(`${moved.chat_id}|${moved.character_key || ""}`)}`;
+            : `${key.startsWith("state-status-") ? "state-status-" : "state-"}${sha256(`${moved.chat_id}|${moved.character_key || ""}`)}`;
           if (moved.state_key) moved.state_key = target;
           stateMoves.set(key, target);
         }
@@ -1034,15 +1034,17 @@ export class SceneService {
         ...identity(body),
         id: newId(),
         title: text(body.title, 120),
-        mode: body.mode === "story" ? "story" : "talk",
+        mode: ["story", "scenario"].includes(body.mode) ? body.mode : "talk",
         hosts: callPeople(body.hosts),
         story: text(body.story, 2000),
+        remember: body.remember === true,
         lines: lines.map((line) => {
           const speech = normalizeSpeech(line);
           return {
             id: newId(),
             speaker_key: text(line.speaker_key),
             speaker_name: text(line.speaker_name, 300),
+            ...(line.caller === true ? { caller: true } : {}),
             text: speech.text,
             script: speech.script,
             translation: text(line.translation, 5000),
@@ -1059,6 +1061,13 @@ export class SceneService {
       return { status: "success", item: radioItem(show) };
     }
     const removeShow = path.match(/^\/phone\/radio\/([^/]+)$/);
+    // 기억: whether later shows are given this one.
+    if (removeShow && method === "PUT") {
+      const show = find(data.radio || [], removeShow[1]);
+      checkChat(show, body);
+      show.remember = body.remember === true;
+      return { status: "success", item: radioItem(show) };
+    }
     if (removeShow && method === "DELETE") {
       const show = find(data.radio || [], removeShow[1]);
       checkChat(show, body);
@@ -1079,7 +1088,8 @@ export class SceneService {
         language: body.language || line.language,
         intensity: line.intensity,
       });
-      for (const field of ["generation_id", "audio_filename", "mime_type", "sounds_mixed"]) delete line[field];
+      if (speech.text !== line.text || speech.script !== (line.script || ""))
+        for (const field of ["generation_id", "audio_filename", "mime_type", "sounds_mixed"]) delete line[field];
       Object.assign(line, {
         text: speech.text,
         script: speech.script,
@@ -1227,8 +1237,9 @@ export class SceneService {
       session.turns.pop();
       return { status: "success", session: sessionItem(session) };
     }
-    // The user rewrites a call line or voice message; its old voice no longer fits. In a call
-    // still going only the other side's lines; in a past one (a call written whole) mine too.
+    // The user rewrites a call line or voice message; its old voice no longer fits new words (a
+    // translation alone keeps it). In a call still going only the other side's lines; in a past
+    // one (a call written whole) mine too.
     const rewrite = path.match(/^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)$/);
     if (rewrite && method === "PUT") {
       const parent =
@@ -1246,21 +1257,22 @@ export class SceneService {
         language: body.language || item.language,
         intensity: item.intensity,
       });
-      for (const field of [
-        "generation_id",
-        "audio_filename",
-        "mime_type",
-        "applied_control",
-        "audio_filtered",
-      ])
-        delete item[field];
+      const words = speech.text !== item.text || speech.script !== (item.script || "");
+      if (words)
+        for (const field of [
+          "generation_id",
+          "audio_filename",
+          "mime_type",
+          "applied_control",
+          "audio_filtered",
+        ])
+          delete item[field];
       Object.assign(item, {
         text: speech.text,
         script: speech.script,
         tags: speech.tags,
         emotion: speech.emotion,
         direction: speech.direction,
-        // A translation of the old words would be wrong now.
         translation: text(body.translation, 5000),
         edited_at: stamp,
       });

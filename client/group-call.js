@@ -170,6 +170,7 @@ export const groupCall = {
           })),
         ),
         dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.(transcript.map((turn) => turn.text))) || []),
         ...this.currentTimeBlocks(people.map((person) => person.key)),
         dataBlock("call_situation", session.situation || "(natural continuation of the chat)", {

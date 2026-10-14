@@ -940,6 +940,7 @@ export const messages = {
       const emotions = Array.from(this.analysisEmotionCandidates()).sort();
       const canCall = this.canCallAfterText(key);
       const me = this.userCharacterName();
+      const status = await this.statusLine?.(key).catch(() => "");
       const messages = phoneMessages(
         textSystem({
           emotions,
@@ -952,6 +953,7 @@ export const messages = {
           absent,
           unknown,
           canCall,
+          statusLine: typeof status === "string",
         }),
         [
           dataBlock("user_character", me),
@@ -965,6 +967,7 @@ export const messages = {
             "recent_chat",
             this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
           ),
+          ...((await this.statusLinesBlocks?.()) || []),
           ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
           ...this.currentTimeBlocks([key]),
           dataBlock("previous_calls", await this.loadPreviousCalls(key)),
@@ -980,6 +983,7 @@ export const messages = {
       this.assertChat(operation);
       const kind = allowVoice && String(parsed?.type).toLowerCase() === "voice" ? "voice" : "text";
       const record = await this.saveCharacterMessage({ character, kind, origin: "reply", parsed });
+      await this.textStatusChange(character, parsed, status);
       if (!viewing()) this.announceText(key, character.name, record?.text, kind);
       if (canCall && parsed?.call_after === true) this.callAfterText(character, record?.text);
     } finally {
@@ -1288,27 +1292,29 @@ export const messages = {
 
   async editVoiceMessage(item) {
     const mine = item.role === "user";
-    const value = await this.openLineSheet({
+    const sheet = await this.openLineSheet({
       title: mine ? "보낸 문자 고치기" : (item.kind || "voice") === "voice" ? "음성 메시지 고치기" : "문자 고치기",
       value: mine ? item.text : item.script || item.text,
+      translation: item.translation,
       ...(mine
         ? { hint: "상대가 이미 받은 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰입니다." }
         : {}),
     });
-    if (value === null) return;
+    if (sheet === null) return;
     // My text keeps [brackets] as words; a character's line reads them as tags.
-    const typed = String(value).trim().slice(0, 2000);
+    const typed = String(sheet.value).trim().slice(0, 2000);
     const edit = mine
       ? { text: typed, language: this.scriptLanguage(typed) || item.language || this.chatLanguage() }
-      : this.spokenEdit(value);
+      : this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("메시지를 비울 수는 없습니다.");
-    if (edit.text === item.text && (mine || edit.script === (item.script || ""))) return;
+    const { changed, words, translation } = this.sheetChanges(mine ? { ...item, script: "" } : item, edit, sheet);
+    if (!changed) return;
     const response = await this.request(
       `/api/plugins/scenevoice/voice-messages/${encodeURIComponent(item.id)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: item.chat_id, ...edit }),
+        body: JSON.stringify({ chat_id: item.chat_id, ...edit, translation }),
       },
     );
     const data = await response.json();
@@ -1323,8 +1329,8 @@ export const messages = {
     // The old voice no longer fits the words. Like on arrival, a voice message gets its new one at
     // once; so does a text that had been listened to (its 음성 다시 stays, turning, meanwhile).
     const arriving =
-      (data.item.kind || "voice") === "voice" && this.config.voice_message?.auto_generate_audio;
-    const remake = arriving || Boolean(item.audio_url);
+      words && (data.item.kind || "voice") === "voice" && this.config.voice_message?.auto_generate_audio;
+    const remake = words && (arriving || Boolean(item.audio_url));
     if (remake) (this.voicePending ||= new Set()).add(data.item.id);
     await this.renderSmartphone();
     if (!remake) return;
@@ -1359,6 +1365,7 @@ export const messages = {
     const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(
       await this.stateForPrompt(character.key),
     );
+    const status = kind === "text" ? await this.statusLine?.(character.key).catch(() => "") : undefined;
     const emotions = Array.from(this.analysisEmotionCandidates()).sort();
     const thread =
       kind === "text"
@@ -1388,6 +1395,7 @@ export const messages = {
             absent,
             unknown,
             canCall: this.canCallAfterText(character.key),
+            statusLine: typeof status === "string",
           })
         : messageSystem({
             emotions,
@@ -1410,6 +1418,7 @@ export const messages = {
           "recent_chat",
           this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
         ),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.([...thread.map((item) => item.text), reason])) || []),
         ...this.currentTimeBlocks([character.key]),
         dataBlock("previous_calls", await this.loadPreviousCalls(character.key)),
@@ -1427,7 +1436,16 @@ export const messages = {
         ? textFinal(character.name, language, me)
         : messageFinal(character.name, language, me),
     );
-    return this.requestSpokenReply(profileId, messages, 850);
+    const parsed = await this.requestSpokenReply(profileId, messages, 850);
+    if (parsed && typeof status === "string") parsed.previousStatus = status;
+    return parsed;
+  },
+
+  /** A text that came with a new 상태메시지 (rare): it shows on their profile from now. */
+  async textStatusChange(character, parsed, previous) {
+    const line = typeof parsed?.status_message === "string" ? parsed.status_message.trim() : "";
+    if (!line || line === previous || !this.saveStatusLine) return;
+    await this.saveStatusLine(character, line).catch((error) => console.warn("[SceneVoice] 상태메시지 저장 실패", error));
   },
 
   /**
@@ -1475,6 +1493,7 @@ export const messages = {
         reason: candidate?.reason || "",
         anchorIndex: this.phoneAnchorFromSource(candidate?.sourceMessageId).index,
       });
+      if (kind === "text") await this.textStatusChange(character, parsed, parsed?.previousStatus);
       this.incomingText = null;
       const shell = document.getElementById("sv-smartphone");
       const viewing =

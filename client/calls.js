@@ -87,6 +87,7 @@ export const calls = {
                     </div>
                     ${this.contactAvatarMarkup(character)}
                     <h3>${escapeHtml(character.name)}</h3>
+                    <p class="sv-contact-status" data-status-for="${escapeHtml(character.key)}" hidden></p>
                     <p>${character.key === character.cardKey ? "봇카드" : escapeHtml(this.cardInfo(character.cardKey).name || "등장인물")}</p>
                     <div class="sv-contact-actions">
                         <button type="button" class="sv-contact-action" data-phone-app="message" data-thread-key="${escapeHtml(character.key)}"><span><i class="fa-solid fa-comment-dots" aria-hidden="true"></i></span><small>메시지</small></button>
@@ -99,6 +100,7 @@ export const calls = {
         ?.addEventListener("click", (event) =>
           this.startOutgoingCall(event.currentTarget),
         );
+      void this.fillStatusLines?.(body);
       return;
     }
     const turns = Array.isArray(session.turns) ? session.turns : [];
@@ -787,6 +789,7 @@ export const calls = {
         }),
         ...stateBlocks,
         dataBlock("recent_chat", recent),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.(transcript.map((turn) => turn.text))) || []),
         ...this.currentTimeBlocks([character.key]),
         dataBlock(
@@ -1328,6 +1331,7 @@ export const calls = {
           })),
         ),
         dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.([reason, direction])) || []),
         ...this.currentTimeBlocks(people.filter((person) => !person.me).map((person) => person.key)),
         dataBlock("reason_to_call", reason || "(decide from context)"),
@@ -1471,23 +1475,37 @@ export const calls = {
    * A sheet over the phone screen for rewriting a spoken line. Resolves with the new text, or
    * null when cancelled. Tags in brackets may stay or be added; they are voiced, not shown.
    */
+  /**
+   * The phone's edit sheet. `translation`: the line's Korean translation, when it has one: a
+   * small 원문 / 번역 switch then edits either. Resolves to { value, translation } (translation
+   * undefined when there was none), or null when cancelled.
+   */
   openLineSheet({
     title = "대사 고치기",
     value = "",
     hint = "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있습니다. 저장하면 이전 음성은 지우고 새로 만듭니다.",
+    translation,
   } = {}) {
     const screen = document.querySelector("#sv-smartphone .sv-phone-screen");
     if (!screen) return Promise.resolve(null);
     screen.querySelector(".sv-ph-sheet")?.remove();
+    const both = typeof translation === "string" && Boolean(translation);
+    const texts = { text: value, translation: both ? translation : undefined };
+    const hints = { text: both ? `${hint} 번역은 그대로 남습니다.` : hint, translation: "화면에만 보이는 한국어 번역입니다. 음성은 바뀌지 않습니다." };
+    let side = "text";
     const sheet = document.createElement("div");
     sheet.className = "sv-ph-sheet";
     sheet.setAttribute("role", "dialog");
     sheet.setAttribute("aria-modal", "true");
     sheet.setAttribute("aria-label", title);
     sheet.innerHTML = `<form class="sv-ph-sheet-card">
-        <strong>${escapeHtml(title)}</strong>
+        <div class="sv-ph-sheet-head"><strong>${escapeHtml(title)}</strong>${
+          both
+            ? '<span class="sv-sheet-sides"><button type="button" data-sheet-side="text" aria-pressed="true">원문</button><button type="button" data-sheet-side="translation" aria-pressed="false">번역</button></span>'
+            : ""
+        }</div>
         <textarea rows="5" maxlength="5000" aria-label="${escapeHtml(title)}">${escapeHtml(value)}</textarea>
-        <small>${escapeHtml(hint)}</small>
+        <small>${escapeHtml(hints.text)}</small>
         <div class="sv-contact-edit-actions">
           <button type="button" data-sheet-cancel>취소</button>
           <button type="submit" class="sv-contact-save">저장</button>
@@ -1495,6 +1513,17 @@ export const calls = {
       </form>`;
     screen.append(sheet);
     const field = sheet.querySelector("textarea");
+    sheet.querySelectorAll("[data-sheet-side]").forEach((button) =>
+      button.addEventListener("click", () => {
+        if (button.dataset.sheetSide === side) return;
+        texts[side] = field.value;
+        side = button.dataset.sheetSide;
+        field.value = texts[side];
+        sheet.querySelector("small").textContent = hints[side];
+        sheet.querySelectorAll("[data-sheet-side]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+        field.focus();
+      }),
+    );
     return new Promise((resolve) => {
       const close = (result) => {
         sheet.remove();
@@ -1505,7 +1534,8 @@ export const calls = {
         event.preventDefault();
         // The tap that saves also unlocks audio for the new voice.
         this.unlockAudioForMobile();
-        close(field.value);
+        texts[side] = field.value;
+        close({ value: texts.text, translation: both ? texts.translation.trim() : undefined });
       });
       sheet.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
@@ -1611,17 +1641,18 @@ export const calls = {
   async editPhoneTurn(turnId) {
     const turn = this.phoneSession?.turns?.find((item) => item.id === turnId);
     if (!turn || turn.role === "user" || this.phoneBusy || this.phoneAudioBusyTurnId) return;
-    const value = await this.openLineSheet({ value: turn.script || turn.text });
-    if (value === null) return;
-    const edit = this.spokenEdit(value);
+    const sheet = await this.openLineSheet({ value: turn.script || turn.text, translation: turn.translation });
+    if (sheet === null) return;
+    const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("대사를 비울 수는 없습니다.");
-    if (edit.text === turn.text && edit.script === (turn.script || "")) return;
+    const { changed, words, translation } = this.sheetChanges(turn, edit, sheet);
+    if (!changed) return;
     const response = await this.request(
       `/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turnId)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: this.phoneSession.chat_id, ...edit }),
+        body: JSON.stringify({ chat_id: this.phoneSession.chat_id, ...edit, translation }),
       },
     );
     const data = await response.json();
@@ -1629,7 +1660,17 @@ export const calls = {
     this.phoneSession = data.session;
     await this.persistPhoneSessionToMessage();
     await this.renderSmartphone();
-    if (this.config.phone?.auto_voice !== false) void this.handlePhoneTurnPlayback(turnId);
+    if (words && this.config.phone?.auto_voice !== false) void this.handlePhoneTurnPlayback(turnId);
+  },
+
+  /**
+   * What an edit sheet changed on a line: its words (the voice goes with them) and its
+   * translation, which stays when only the words change.
+   */
+  sheetChanges(item, edit, sheet) {
+    const words = edit.text !== item.text || (edit.script ?? "") !== (item.script || "");
+    const translation = sheet.translation ?? item.translation ?? "";
+    return { words, translation, changed: words || translation !== (item.translation || "") };
   },
 
   /** Korean translation for calls and voice messages in another language (setting on by default). */

@@ -79,6 +79,7 @@ export const memos = {
         dataBlock("performance_note", person.note || "", { range: this.emotionalRange(person.key) }),
         ...stateBlocks,
         dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.([about])) || []),
         ...this.currentTimeBlocks([person.key]),
         ...(before.length ? [dataBlock("previous_memos", before)] : []),
@@ -183,19 +184,16 @@ export const memos = {
   },
 
   async editMemo(memo) {
-    const value = await this.openLineSheet({ title: "음성 메모 고치기", value: memo.script || memo.text });
-    if (value === null) return;
-    const edit = this.spokenEdit(value);
+    const sheet = await this.openLineSheet({ title: "음성 메모 고치기", value: memo.script || memo.text, translation: memo.translation });
+    if (sheet === null) return;
+    const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("메모를 비울 수는 없습니다.");
-    if (edit.text === memo.text && edit.script === (memo.script || "")) return;
+    const { changed, translation } = this.sheetChanges(memo, edit, sheet);
+    if (!changed) return;
     const response = await this.request(`/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: memo.chat_id,
-        ...edit,
-        ...(edit.text === memo.text && memo.translation ? { translation: memo.translation } : {}),
-      }),
+      body: JSON.stringify({ chat_id: memo.chat_id, ...edit, translation }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "메모를 고치지 못했습니다.");

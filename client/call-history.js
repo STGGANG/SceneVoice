@@ -445,25 +445,20 @@ export const callHistory = {
    */
   async editHistoryTurn(body, session, turn, away = false) {
     if (!turn) return;
-    const value = await this.openLineSheet({
+    const sheet = await this.openLineSheet({
       title: turn.role === "user" ? "내 대사 고치기" : "대사 고치기",
       value: turn.script || turn.text,
-      ...(turn.translation
-        ? { hint: "[sighs] 같은 대괄호 태그도 그대로 쓸 수 있습니다. 말을 바꾸면 한국어 번역은 지워지고, 음성은 새로 만듭니다." }
-        : {}),
+      translation: turn.translation,
     });
-    if (value === null) return;
-    const edit = this.spokenEdit(value);
+    if (sheet === null) return;
+    const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("대사를 비울 수는 없습니다.");
-    if (edit.text === turn.text && edit.script === (turn.script || "")) return;
+    const { changed, words, translation } = this.sheetChanges(turn, edit, sheet);
+    if (!changed) return;
     const response = await this.request(`/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turn.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: session.chat_id,
-        ...edit,
-        ...(edit.text === turn.text && turn.translation ? { translation: turn.translation } : {}),
-      }),
+      body: JSON.stringify({ chat_id: session.chat_id, ...edit, translation }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "대사를 고치지 못했습니다.");
@@ -473,7 +468,7 @@ export const callHistory = {
     this.renderPhoneHistoryDetail(body, current, away);
     const index = current.turns.findIndex((item) => item.id === turn.id);
     const button = body.querySelector(`.sv-call-replay[data-turn="${index}"]`);
-    if (turn.audio_url && button) await this.playHistoryTurn(body, current, current.turns[index], button, away);
+    if (words && turn.audio_url && button) await this.playHistoryTurn(body, current, current.turns[index], button, away);
   },
 
   /**

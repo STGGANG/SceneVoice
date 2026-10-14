@@ -148,6 +148,7 @@ export const runtime = {
     this.phoneOperationToken++;
     this.queue = Promise.resolve();
     this.analysisCache.clear();
+    this.statusLineCache?.clear();
     this.phoneSession = null;
     this.phonePendingEvent = null;
     this.incomingTexts = [];

@@ -436,7 +436,7 @@ export const callVideo = {
     const faces = people.map((person, index) => avatar(images[index], person?.name, size));
     const me = this.userCharacterName?.() || "나";
     const speakerOf = (turn) =>
-      turn.role === "user" ? me : turn.speaker_name || session.character_name || "";
+      turn.role === "user" ? me : `${turn.speaker_name || session.character_name || ""}${turn.caller ? " · 전화 연결" : ""}`;
     const title = radio
       ? session.radio_title
       : (this.callNames?.(session) || [session.character_name || ""]).join(", ");

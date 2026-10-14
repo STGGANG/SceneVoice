@@ -1026,7 +1026,7 @@ export const shell = {
                         (person) => `
                     <button type="button" class="sv-contact-row" data-contact="${escapeHtml(person.key)}">
                         ${this.contactAvatarMarkup(person)}
-                        <span class="sv-recent-main"><strong>${escapeHtml(person.name)}</strong></span>
+                        <span class="sv-recent-main"><strong>${escapeHtml(person.name)}</strong><small class="sv-contact-status" data-status-for="${escapeHtml(person.key)}" hidden></small></span>
                         <i class="fa-solid fa-chevron-right sv-recent-chevron" aria-hidden="true"></i>
                     </button>`,
                       )
@@ -1034,6 +1034,7 @@ export const shell = {
                 </div>
                 <p class="sv-contacts-note">${hidden > 0 ? `숨긴 연락처 ${hidden}명 · ` : ""}씬보이스 설정의 캐릭터별 목소리에 등록한 인물이 자동으로 들어옵니다.</p>
             </div>`;
+    void this.fillStatusLines?.(body);
   },
 
   /**
@@ -1059,6 +1060,7 @@ export const shell = {
                     </span>
                 </div>
                 <label class="sv-ph-field"><span>이름</span><input name="name" maxlength="120" value="${escapeHtml(person.name)}" autocomplete="off"></label>
+                <label class="sv-ph-field"><span>상태메시지 (이 채팅)</span><input name="status" maxlength="80" placeholder="프로필에 보이는 한 줄 · 인물이 가끔 직접 바꿉니다" autocomplete="off"></label>
                 <label class="sv-ph-toggle"><span>홈 화면에 보이기 (빠른 전화)</span><input type="checkbox" name="quick" ${this.isQuickCall(key) ? "checked" : ""}></label>
                 <label class="sv-ph-toggle"><span>${global ? "이 봇카드에서 사용" : "연락처에서 숨기기"}</span><input type="checkbox" name="hidden" ${(global ? !hiddenHere : hiddenHere) ? "checked" : ""}></label>
                 <div class="sv-contact-edit-actions"><button type="button" data-contact="${escapeHtml(key)}">취소</button><button type="submit">저장</button></div>
@@ -1069,6 +1071,13 @@ export const shell = {
       phone.querySelector(".sv-smartphone-title").textContent = "연락처 편집";
     }
     const form = body.querySelector("form");
+    let status = "";
+    this.statusLine?.(key)
+      .then((line) => {
+        status = line;
+        if (form.isConnected && !form.elements.status.value) form.elements.status.value = line;
+      })
+      .catch(() => undefined);
     const preview = (url) => {
       form.querySelector(".sv-contact-photo").innerHTML = this.contactAvatarMarkup({
         ...person,
@@ -1116,6 +1125,8 @@ export const shell = {
         if (!response.ok)
           throw new Error(data.detail || `연락처 저장 실패 (${response.status})`);
         this.config = mergeConfig(data.settings || {});
+        const line = form.elements.status.value.trim();
+        if (line !== status) await this.saveStatusLine?.({ key, name: next.name }, line);
         // Keep an open settings panel's speaker drafts in step with the phone edit.
         if (document.getElementById("sv-casting-settings")) this.renderCastingSettings();
         this.phoneContactKey = form.elements.hidden.checked ? "" : key;

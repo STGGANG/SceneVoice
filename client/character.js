@@ -2,6 +2,7 @@
 // the helper model every few replies and saved in rounds.
 import {
   dataBlock,
+  languageName,
   PROMPT_VERSION,
   stateFinal,
   stateSystem,
@@ -137,6 +138,67 @@ export const character = {
    */
   stateKeyFor(personKey, chatId = String(this.currentChatId())) {
     return `state-${simpleHash(`${chatId}|${personKey}`)}`;
+  },
+
+  /**
+   * 상태메시지: the one line on a person's messenger profile, per chat. Kept like a state (with
+   * its message, the last few as history), so a swipe or a deleted message brings back the one
+   * before.
+   */
+  statusKeyFor(personKey, chatId = String(this.currentChatId())) {
+    return `state-status-${simpleHash(`${chatId}|${personKey}`)}`;
+  },
+
+  async statusLine(key) {
+    const cacheKey = `${this.currentChatId()}|${key}`;
+    this.statusLineCache ||= new Map();
+    if (this.statusLineCache.has(cacheKey)) return this.statusLineCache.get(cacheKey);
+    const record = await this.loadStateRecord(this.statusKeyFor(key));
+    const line = String(record?.state?.text || "").trim();
+    this.statusLineCache.set(cacheKey, line);
+    return line;
+  },
+
+  /** A new 상태메시지 (empty clears it), from the chat message `sourceMessageId` names. */
+  async saveStatusLine(person, line, sourceMessageId = this.latestMessageSource()) {
+    const text = String(line || "").trim().slice(0, 80);
+    await this.saveStateRecord(this.statusKeyFor(person.key), person, sourceMessageId, { text });
+    this.statusLineCache ||= new Map();
+    this.statusLineCache.set(`${this.currentChatId()}|${person.key}`, text);
+    document.querySelectorAll("[data-status-for]").forEach((item) => {
+      if (item.dataset.statusFor === person.key) {
+        item.textContent = text;
+        item.hidden = !text;
+      }
+    });
+  },
+
+  /** The chat's newest message as a state names its source (so a swipe of it lets go). */
+  latestMessageSource() {
+    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const index = chat.length - 1;
+    return index < 0 ? "0" : `${index}-${this.messageHash(chat[index])}`;
+  },
+
+  /** Everyone's 상태메시지 as anyone with their number sees it, for a phone prompt (none: no block). */
+  async statusLinesBlocks() {
+    if (!this.phoneOn?.()) return [];
+    const lines = {};
+    for (const person of this.phoneContacts?.() || []) {
+      const line = await this.statusLine(person.key).catch(() => "");
+      if (line) lines[person.name] = line;
+    }
+    return Object.keys(lines).length ? [dataBlock("status_messages", lines)] : [];
+  },
+
+  /** Fills each [data-status-for] in `root` with that person's 상태메시지 (hidden when none). */
+  async fillStatusLines(root) {
+    for (const item of root?.querySelectorAll?.("[data-status-for]") || []) {
+      const line = await this.statusLine(item.dataset.statusFor).catch(() => "");
+      if (!item.isConnected) continue;
+      item.textContent = line;
+      item.hidden = !line;
+    }
   },
 
   /** The chat's record of the last state update round (no history): when it ran and for whom. */
@@ -746,7 +808,7 @@ export const character = {
    * one), marked unknown_whereabouts when nobody knows where they are now, and no_phone for
    * someone hidden from the phone, who can't reach out.
    */
-  statePeopleData(batch, records, statuses) {
+  statePeopleData(batch, records, statuses, statusLines = null) {
     return batch.map((person) => ({
       key: person.key,
       name: person.name,
@@ -754,6 +816,12 @@ export const character = {
       ...(person.note ? { performance_note: person.note } : {}),
       ...(person.hidden ? { no_phone: true } : {}),
       ...(statuses.get(person.key)?.unknown ? { unknown_whereabouts: true } : {}),
+      ...(statusLines && !person.hidden
+        ? {
+            status_message: statusLines.get(person.key) || "",
+            writes_in: languageName(this.conversationLanguage?.([], "", person.key) || "ko"),
+          }
+        : {}),
       previous_state: records.get(person.key)?.state || null,
     }));
   },
@@ -770,6 +838,7 @@ export const character = {
           language: round.language,
           sideCalls: round.sideCalls,
           voiceMemos: round.voiceMemos,
+          statusLines: Boolean(round.statusLines),
         }),
       },
       {
@@ -777,7 +846,7 @@ export const character = {
         content: userPrompt(
           [
             dataBlock("profile", round.roleplayProfile),
-            dataBlock("people", this.statePeopleData(batch, round.records, round.statuses)),
+            dataBlock("people", this.statePeopleData(batch, round.records, round.statuses, round.statusLines)),
             dataBlock("recent_chat", round.recent),
             dataBlock("recent_calls", round.contactContext.recent),
           ],
@@ -819,10 +888,12 @@ export const character = {
         !item.unchanged && item.state && typeof item.state === "object"
           ? this.normalizeCharacterState(item.state)
           : null;
+      const status = typeof item.status_message === "string" ? item.status_message.trim().slice(0, 80) : "";
       results.set(person.key, {
         present,
         ...(state && this.hasCharacterStateContent(state) ? { state } : {}),
         ...(unknown && !present ? { unknown: true } : {}),
+        ...(status ? { status } : {}),
       });
     }
     return {
@@ -1023,6 +1094,14 @@ export const character = {
         sideCalls: this.overheardCallsOn() && people.filter((person) => !person.hidden).length > 1,
         // 음성 메모: someone recording one for themselves, judged in the same request too.
         voiceMemos: Boolean(this.autoMemosOn?.()),
+        // 상태메시지: changed now and then, in the same request (only with the phone on).
+        statusLines: this.phoneOn?.()
+          ? new Map(
+              await Promise.all(
+                people.map(async (person) => [person.key, await this.statusLine(person.key).catch(() => "")]),
+              ),
+            )
+          : null,
       };
       const outcome = { updated: [], unchanged: [], failed: [] };
       const present = [];
@@ -1056,6 +1135,8 @@ export const character = {
             await this.saveStateRecord(person.stateKey, person, sourceMessageId, result.state);
             outcome.updated.push(person.key);
           }
+          if (result.status && round.statusLines && !person.hidden && result.status !== round.statusLines.get(person.key))
+            await this.saveStatusLine(person, result.status, sourceMessageId);
           if (result.present) {
             present.push(person.key);
             unknown.delete(person.key);
