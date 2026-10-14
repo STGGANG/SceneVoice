@@ -9,7 +9,7 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
-    version: "1.2.2",
+    version: "1.2.3",
     highlight: [
       "기타 안내",
       ["스마트폰 관련 프롬프트는 보완 및 테스트 중으로, 유의미한 변경이 있으면 추가 안내하겠습니다."],
@@ -86,12 +86,28 @@ export const UPDATE_NOTES = [
   },
 ];
 
-/** Changes with the newest notes' wording, not with the version number. */
-export function updateNotesKey() {
-  const text = JSON.stringify(UPDATE_NOTES[0] || "");
+function notesHash(entry) {
+  const text = JSON.stringify(entry || "");
   let hash = 5381;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
-  return `${UPDATE_NOTES[0]?.version || ""}-${hash.toString(36)}`;
+  return hash.toString(36);
+}
+
+/** Changes with the newest notes' wording only: a new version number alone doesn't bring them up. */
+export function updateNotesKey() {
+  return `notes-${notesHash({ ...UPDATE_NOTES[0], version: undefined })}`;
+}
+
+/**
+ * These notes were seen: under today's key, or under the key kept before (`<version>-<hash>`, the
+ * hash taken with that version in it), so a browser that saw them as 1.2.2 isn't shown them again.
+ */
+function notesSeen(seen) {
+  if (!seen) return false;
+  if (seen === updateNotesKey()) return true;
+  const at = seen.lastIndexOf("-");
+  const version = at > 0 ? seen.slice(0, at) : "";
+  return Boolean(version) && version !== "notes" && seen === `${version}-${notesHash({ ...UPDATE_NOTES[0], version })}`;
 }
 
 const listHtml = (lines) => `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
@@ -113,8 +129,9 @@ export const updates = {
     if (!latest || document.getElementById("sv-update-dialog")) return;
     const key = updateNotesKey();
     try {
-      if (!force && localStorage.getItem(SEEN_KEY) === key) return;
+      const seen = notesSeen(localStorage.getItem(SEEN_KEY));
       localStorage.setItem(SEEN_KEY, key);
+      if (!force && seen) return;
     } catch {
       /* storage blocked */
     }

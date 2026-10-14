@@ -479,15 +479,17 @@ export const character = {
     return this.statesAtMessage(index, [...keys]);
   },
 
+  /** State updates run: 상태 추적 사용, or something that needs them (먼저 연락, 엿듣는 통화). */
+  stateTrackingRuns() {
+    return Boolean(
+      this.config.state_tracking?.enabled || this.autoCallOn() || this.autoTextOn() || this.overheardCallsOn(),
+    );
+  },
+
   scheduleStateTracking(force = false) {
     clearTimeout(this.stateScanTimer);
     if (this.config.active === false) return;
-    const shouldTrack =
-      this.config.state_tracking?.enabled ||
-      this.autoCallOn() ||
-      this.autoTextOn() ||
-      this.overheardCallsOn();
-    if (!force && !shouldTrack) return;
+    if (!force && !this.stateTrackingRuns()) return;
     this.stateScanTimer = setTimeout(
       () =>
         this.run(async () => {
@@ -508,6 +510,10 @@ export const character = {
    */
   async stateTrackingDue() {
     if (!this.hasCharacterChat()) return false;
+    // Only the first message (the greeting, before the user says anything): left to 지금 분석, so
+    // opening a new chat doesn't start an update (and a call) at once.
+    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    if (!chat.some((message) => message?.is_user && !message.is_system)) return false;
     const every = Math.max(1, Number(this.config.state_tracking?.every_messages) || 1);
     const latest = this.latestReplyIndex();
     if (latest < 0) return false;
@@ -943,12 +949,7 @@ export const character = {
    */
   async trackCurrentState({ force = false } = {}) {
     const operation = this.captureChat();
-    const shouldTrack =
-      this.config.state_tracking?.enabled ||
-      this.autoCallOn() ||
-      this.autoTextOn() ||
-      this.overheardCallsOn();
-    if (this.stateTrackingBusy || (!force && !shouldTrack)) return null;
+    if (this.stateTrackingBusy || (!force && !this.stateTrackingRuns())) return null;
     const profileId =
       this.config.state_tracking?.connection_profile_id ||
       this.config.connection_profile_id ||

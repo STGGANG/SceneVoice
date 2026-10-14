@@ -28,6 +28,8 @@ const STATE_LABELS = {
   interaction: "상호작용",
   summary: "요약",
 };
+// 최근 변화: this many to a page (the server keeps a person's last 20).
+const HISTORY_PAGE = 5;
 // Saved as 0–1, edited as a percentage.
 const PERCENT_FIELDS = new Set(["energy", "intensity"]);
 const PRESENCE_CHOICES = [
@@ -247,6 +249,8 @@ export const stateTab = {
       /* 현재 상태 화면은 기록 조회 실패만으로 막지 않는다. */
     }
     const gone = history.filter((item) => !item.live);
+    const pages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE));
+    let page = Math.min(this.stateHistoryPage?.key === person.key ? this.stateHistoryPage.at : 0, pages - 1);
     const warn = (text) =>
       `<p class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>${text}</span></p>`;
     const notices = [
@@ -303,16 +307,19 @@ export const stateTab = {
                   )
             }
             <section class="sv-group sv-state-history">
-                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("상태는 그 상태를 만든 메시지에 연동됩니다. 그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 기록은 자동으로 지우지 않으니 필요하면 직접 지우십시오.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
+                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("채팅 분기, 스와이프 등의 대응을 위해 지난 상태도 인물마다 최근 20개까지 저장합니다(넘으면 오래된 것부터 지워집니다).\n상태는 그 상태를 만든 메시지에 연동됩니다. 그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 그때는 아직 채팅에 있는 메시지에서 나온 지난 상태를 대신 씁니다.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
                 ${
                   history.length
                     ? `<ol class="sv-timeline">${history
-                        .slice(0, 12)
                         .map(
-                          (item) =>
-                            `<li class="${item.live ? "" : "sv-timeline-gone"}"><time>${escapeHtml(this.formatDate(item.created_at))}</time><span>${item.live ? "" : '<em class="sv-badge">채팅에 없음</em> '}${escapeHtml(item.state?.summary || "상태 갱신")}</span><button type="button" class="sv-icon-btn sv-state-history-delete" data-id="${escapeHtml(item.id)}" aria-label="이 상태 기록 지우기" title="이 기록 지우기"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></li>`,
+                          (item, index) =>
+                            `<li class="${item.live ? "" : "sv-timeline-gone"}" data-page="${Math.floor(index / HISTORY_PAGE)}" ${Math.floor(index / HISTORY_PAGE) === page ? "" : "hidden"}><time>${escapeHtml(this.formatDate(item.created_at))}</time><span>${item.live ? "" : '<em class="sv-badge">채팅에 없음</em> '}${escapeHtml(item.state?.summary || "상태 갱신")}</span><button type="button" class="sv-icon-btn sv-state-history-delete" data-id="${escapeHtml(item.id)}" aria-label="이 상태 기록 지우기" title="이 기록 지우기"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></li>`,
                         )
-                        .join("")}</ol>`
+                        .join("")}</ol>${
+                        pages > 1
+                          ? `<div class="sv-timeline-pager"><button type="button" class="sv-icon-btn" data-history-step="-1" aria-label="더 최근 기록"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button><span data-history-at>${page + 1}/${pages}</span><button type="button" class="sv-icon-btn" data-history-step="1" aria-label="더 지난 기록"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></div>`
+                          : ""
+                      }`
                     : '<p class="sv-hint sv-timeline-empty">기록이 없습니다.</p>'
                 }
             </section>`;
@@ -350,6 +357,26 @@ export const stateTab = {
           ),
         ),
       );
+    // ‹ › turn the pages of 최근 변화 in place (kept for this person when the tab is drawn again).
+    const showPage = () => {
+      container.querySelectorAll(".sv-timeline li[data-page]").forEach((item) => {
+        item.hidden = Number(item.dataset.page) !== page;
+      });
+      const at = container.querySelector("[data-history-at]");
+      if (at) at.textContent = `${page + 1}/${pages}`;
+      container.querySelectorAll("[data-history-step]").forEach((button) => {
+        const to = page + Number(button.dataset.historyStep);
+        button.disabled = to < 0 || to >= pages;
+      });
+      this.stateHistoryPage = { key: person.key, at: page };
+    };
+    container.querySelectorAll("[data-history-step]").forEach((button) =>
+      button.addEventListener("click", () => {
+        page = Math.min(pages - 1, Math.max(0, page + Number(button.dataset.historyStep)));
+        showPage();
+      }),
+    );
+    if (pages > 1) showPage();
     container.querySelectorAll(".sv-state-history-delete").forEach((button) =>
       button.addEventListener("click", () =>
         this.run(() => removeHistory([button.dataset.id], "이 상태 기록을 지우시겠습니까?")),

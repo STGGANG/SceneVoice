@@ -13,9 +13,9 @@ export const memos = {
     return this.phoneOn() && this.config.phone?.memo_app !== false;
   },
 
-  /** Memos on their own: the app on, and state tracking (which suggests them). */
+  /** Memos on their own: the app on, and state updates running (they suggest them). */
   autoMemosOn() {
-    return this.memoAppOn() && Boolean(this.config.state_tracking?.enabled);
+    return this.memoAppOn() && Boolean(this.stateTrackingRuns?.());
   },
 
   /** The memo the state update suggests (voice_memo), or null. */

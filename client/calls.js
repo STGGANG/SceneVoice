@@ -582,7 +582,7 @@ export const calls = {
       const contact = this.phoneContact(
         this.phoneContactKey || identity.characterKey,
       );
-      // Busy (state tracking): their voicemail instead.
+      // Busy (their saved state): their voicemail instead.
       if (await this.callGoesToVoicemail?.(contact)) {
         this.phoneBusy = false;
         await this.openVoicemailBox(contact);

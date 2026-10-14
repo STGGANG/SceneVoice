@@ -317,6 +317,7 @@ export const panel = {
         "연락처의 인물마다(페르소나 제외) 신체·감정·생각·관계 상태를 따로 저장하고, 대사 분석과 전화·문자가 그 인물의 상태를 참고합니다.",
         "한 번의 요청으로 인물 전원을 살피며, 최근 채팅에서 새로 드러난 게 있는 인물만 바뀝니다(마지막으로 확인된 상태를 간직).",
         "장면을 떠난 인물은 ‘장면 밖’, 어디 있는지 모르면 ‘행방 모름’으로 표시합니다. 상태 탭에서 보고 직접 고칠 수 있습니다.",
+        "새 채팅에 첫 메시지(그리팅)만 있을 때는 자동으로 분석하지 않습니다. 필요하면 상태 탭의 ‘지금 분석’을 누르세요.",
       ].join("\n"),
       body: `<p class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>인물이 전화·메시지를 보낼지 판단하는 데 씁니다. 채팅 속 화자·대화를 분석하는 데에도 활용되지만, 스마트폰을 안 쓴다면 큰 의미는 없습니다. 자동 전화·문자를 켜면 이 스위치가 꺼져 있어도 새 AI 메시지마다 상태 분석을 요청합니다.</span></p>
       ${switchHtml({ id: "sv-state-enabled", label: "상태 추적 사용", checked: config.state_tracking?.enabled })}
@@ -373,7 +374,7 @@ export const panel = {
         </div>
         ${divider}
         <div class="sv-row">
-          ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿듣습니다. 홈 화면의 ‘음성 메모’에서 직접 만들거나, ‘상태 추적’ 기능을 켜 두면 인물이 가끔 알아서도 남깁니다.", tip: "알아서 남기는 건 상태를 갱신할 때 ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
+          ${switchHtml({ id: "sv-phone-memo", label: "음성 메모", hint: "인물이 혼자 휴대폰에 남긴 음성 메모를 엿듣습니다. 홈 화면의 ‘음성 메모’에서 직접 만들거나, 상태가 갱신될 때 인물이 가끔 알아서도 남깁니다.", tip: "알아서 남기는 건 상태를 갱신할 때(상태 추적 사용, 또는 먼저 연락하기·엿듣는 통화가 켜져 있을 때) ‘지금 메모를 남길 만한 사람’을 함께 판단해(추가 요청 없음) 그중 30% 정도만 실제로 남깁니다. 한 번에 한 명까지, 자는 중이면 남기지 않습니다.\n엿듣기용이라 채팅 기억에는 넣지 않고, 메모 카드에 몇 번째 채팅 무렵인지만 표시합니다. 메모 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다.", checked: config.phone?.memo_app !== false })}
           ${switchHtml({ id: "sv-phone-radio", label: "라디오", hint: "인물들이 지금까지의 이야기를 두고 떠드는 라디오, 또는 내 사연을 읽어 주는 방송을 홈 화면 ‘라디오’에서 만들어 듣습니다.", tip: "재미용 번외 기능입니다. 방송 하나에 보조모델 요청 1번, 목소리는 들을 때 만듭니다. 채팅 기억에는 들어가지 않습니다.", checked: config.phone?.radio_app !== false })}
         </div>`,
     });
@@ -387,7 +388,7 @@ export const panel = {
       tip: [
         "글로 답하는 역할극 통화입니다(마이크 인식 아님). 상대 대사는 그 인물의 목소리로 읽습니다.",
         "걸려 온 전화는 받기 전에는 대사나 음성을 만들지 않고, 1분 동안 받지 않으면 부재중이 됩니다.",
-        "상태 추적을 켜 두면, ‘바쁨’인 인물에게 건 전화는 그 사람의 음성사서함으로 갑니다(인사말은 처음 한 번 만들어 둡니다). 남기든 그냥 끊든 몇 분 뒤 문자나 전화로 연락이 오고, 그 전에 다시 걸면 받습니다.",
+        "상태 탭에서 ‘바쁨’인 인물에게 건 전화는 그 사람의 음성사서함으로 갑니다(인사말은 처음 한 번 만들어 둡니다). 남기든 그냥 끊든 몇 분 뒤 문자나 전화로 연락이 오고, 그 전에 다시 걸면 받습니다.",
       ].join("\n"),
       body: `<div class="sv-row">
           ${switchHtml({ id: "sv-phone-auto", label: "캐릭터가 먼저 전화하기", hint: "대화 흐름상 자연스러울 때 전화가 걸려 옵니다.", checked: config.phone?.auto_enabled })}
@@ -1189,12 +1190,7 @@ export const panel = {
     // The chat is looked at again only when what its line buttons depend on changed.
     if (this.isActive() && (redecorate || linesChanged || previous.active === false))
       this.scheduleScan();
-    if (
-      this.config.state_tracking?.enabled ||
-      this.autoCallOn() ||
-      this.autoTextOn()
-    )
-      this.scheduleStateTracking();
+    if (this.stateTrackingRuns()) this.scheduleStateTracking();
     // Smaller limits apply at once: what is now over them goes (영구 보관 stays).
     if (
       previous.cache?.max_size_mb !== this.config.cache?.max_size_mb ||

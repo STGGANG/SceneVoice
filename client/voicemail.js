@@ -1,4 +1,4 @@
-// 음성사서함 (내가 건 전화): with state tracking on, a call to someone busy goes to their voicemail:
+// 음성사서함 (내가 건 전화): a call to someone whose saved state says busy goes to their voicemail:
 // their greeting (written once by the helper model and kept), a beep, and what I leave, if
 // anything. A few minutes later they get back to me by text or call, unless I call again first
 // (then they pick up).
@@ -10,9 +10,13 @@ import { wavBlob } from "./wav.js";
 const ANSWER_AFTER_MS = [120000, 300000];
 
 export const voicemail = {
-  /** A call to this person goes to voicemail now: state tracking on, and their state says busy. */
+  /**
+   * A call to this person goes to voicemail now: their saved state says busy. The state counts
+   * however it was kept up (상태 추적 사용 off, its updates still run for 먼저 연락), as calls and
+   * texts use it.
+   */
   async callGoesToVoicemail(contact) {
-    if (!this.config.state_tracking?.enabled || !contact?.key) return false;
+    if (!contact?.key) return false;
     const entry = this.config.character_voices?.[contact.key];
     if (entry?.persona || entry?.no_state) return false;
     // Called again before they got back: this time they pick up.

@@ -225,6 +225,7 @@ export function stateSystem({
       "<people> lists everyone whose state is tracked, each with their previous_state: the last state recorded for them. A state sheet keeps each person's last confirmed state, what the story last showed about them, until the story clearly changes it. Read all of <recent_chat>, not only its newest message.",
       'Write a full new "state" for anyone <recent_chat> shows something new about. A change anywhere in <recent_chat> counts when nothing later in it undoes it, even if the newest message doesn\'t mention them. When previous_state is null, anyone <recent_chat> shows at all gets a state built from what it last showed about them. Leave "state" out when previous_state still holds.',
       "Work out who is in the scene now, at the end of <recent_chat>: they act, speak or are plainly present, whether they are named, called by a title or nickname, or referred to in a way the context makes clear. Someone only mentioned or talked about is not in the scene.",
+      "Someone who isn't in the scene can still be updated from what <recent_chat> lets you reasonably infer about them: what others say about them (she's at work, he went home early), plans or a schedule mentioned, the time of day, what they were last doing. Update as much as that supports (where they are, what they are doing, whether they could take a call) and keep the rest from previous_state. This counts as something new about them.",
       'Everyone in the scene now: return them with "present":true, with a new "state" when the rule above calls for one.',
       'Someone who leaves the scene in <recent_chat>, or whose situation the story changes while they are away: return them with "present":false. Give a new "state" when the story says where they are going or what they are doing (they went home to sleep, they are at work until evening). When it doesn\'t, return "unknown_whereabouts":true instead.',
       'Also return "present":false with "unknown_whereabouts":true for someone away whose previous_state can no longer be trusted, because enough time has passed (a time skip, the next day) that it surely no longer holds.',
@@ -232,7 +233,7 @@ export function stateSystem({
       "Leave out everyone <recent_chat> shows nothing new about: their state and marks stay as they are. Never mark someone unknown_whereabouts only because they weren't mentioned.",
       `Build a new state on the person's previous_state: carry forward plausible values when nothing changes. Never treat an old state as proof of a new event, and don't invent events.`,
       `A person marked unknown_whereabouts in <people>: ${UNKNOWN_WHEREABOUTS} previous_state is null when nothing was ever saved. If they are in the scene now, keep from previous_state only what still fits (lasting facts such as an injury or a relationship) and take where they are and what they are doing from <recent_chat>.`,
-      "When evidence is missing, keep the value uncertain or empty instead of making facts up.",
+      "When evidence is missing, keep the value uncertain or empty instead of making facts up. A reasonable inference from the context is not making facts up, but go only as far as it reaches: no events or details that nothing points to.",
       "Fill state.contact from the latest scene in every state you write: presence is whether the person is physically with the user's character right now (together, apart or unknown); availability is whether they could talk on the phone now (free, busy, asleep or unknown); note is a short phrase on where they are and what they are doing.",
       ...(contactEnabled
         ? [
@@ -276,7 +277,7 @@ export function stateSystem({
   );
 }
 export const stateFinal = () =>
-  "Update the state sheet of everyone <recent_chat> shows something new about (anywhere in it, not only in the newest message), mark who is in the scene now, and return only the JSON object.";
+  "Update the state sheet of everyone <recent_chat> shows or lets you reasonably infer something new about (anywhere in it, not only in the newest message), mark who is in the scene now, and return only the JSON object.";
 
 // The writer the user works with: a living story in a fictional world, moved to the phone.
 const WRITER =

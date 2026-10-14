@@ -1790,13 +1790,30 @@
 .sv-state-history .sv-group-title .sv-btn {
   font-weight: 500;
 }
-.sv-timeline li + li {
+.sv-timeline li:not([hidden]) ~ li:not([hidden]) {
   border-top: 1px solid var(--sv-line);
 }
 .sv-timeline time {
   color: var(--sv-muted);
   font-size: var(--sv-fs-xs);
   white-space: nowrap;
+}
+.sv-timeline li[hidden] {
+  display: none;
+}
+/* ‹ 1/4 › under 최근 변화 */
+.sv-timeline-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.sv-timeline-pager .sv-icon-btn:disabled {
+  opacity: 0.35;
 }
 .sv-timeline-empty {
   padding: 14px 18px;
