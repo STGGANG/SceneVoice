@@ -3,6 +3,7 @@ import { escapeHtml, mergeConfig, contentKey, LANGUAGE_CHOICES, OVERHEARD_LENGTH
 import { elevenModelTraits } from "../shared/settings.js";
 import { infoTip, groupHtml, fieldHtml, switchHtml, rangeHtml, badgeHtml, bindInfoTips, bindRanges, bindStateBadges, closeTips, choiceListHtml, emptyHtml } from "./ui.js";
 import { voicePickHtml } from "./voice-picker.js";
+import { CURRENT_CONNECTION } from "./connection.js";
 
 const LANGUAGES = [["auto", "자동 · 인물 설정 따름"], ...LANGUAGE_CHOICES];
 const ELEVEN_MODELS = [
@@ -70,8 +71,9 @@ export const panel = {
       profile.id,
       profile.name || profile.model || profile.id,
     ]);
+    // Empty (off, or the same as 보조모델 분석), 현재 연결 사용, then the connection profiles.
     const profileSelect = (id, selected, emptyLabel) =>
-      `<select id="${id}"><option value="">${emptyLabel}</option>${options(profiles, selected)}</select>`;
+      `<select id="${id}"><option value="">${emptyLabel}</option><option value="${CURRENT_CONNECTION}" ${selected === CURRENT_CONNECTION ? "selected" : ""}>현재 연결 사용</option>${options(profiles, selected)}</select>`;
     const number = (id, value, attrs) =>
       `<input type="number" id="${id}" ${attrs} value="${escapeHtml(value)}">`;
     const stMode = this.storageMode === "st";
@@ -229,10 +231,10 @@ export const panel = {
       tip: [
         "하나의 메시지에 있는 대사를 한 번에 분석합니다. 채팅 원문은 바꾸지 않습니다.",
         "음성 엔진에는 원래 대사와 연기 태그만 보냅니다.",
-        "실리태번의 지금 연결은 그대로 두고, 고른 연결 프로필로 따로 요청합니다(요청마다 비용).",
+        "분석 끔: 보조모델 없이 기본 연기로 읽습니다.\n현재 연결 사용: 실리태번에 지금 연결된 API·모델로 보냅니다(1.15 이상).\n연결 프로필: 실리태번의 지금 연결은 그대로 두고, 고른 프로필로 따로 보냅니다.\n요청마다 비용이 듭니다.",
       ].join("\n"),
       body: `<div class="sv-row">
-        ${fieldHtml({ id: "sv-connection-profile", label: "실리태번 연결 프로필", control: profileSelect("sv-connection-profile", config.connection_profile_id, "사용 안 함") })}
+        ${fieldHtml({ id: "sv-connection-profile", label: "실리태번 연결 프로필", control: profileSelect("sv-connection-profile", config.connection_profile_id, "분석 끔") })}
         ${fieldHtml({ id: "sv-context-messages", cls: "sv-chat-only", label: "참고할 직전 메시지 수", control: number("sv-context-messages", Number(config.context_messages ?? 4), 'min="0" max="12"') })}
       </div>
       <div class="sv-row">

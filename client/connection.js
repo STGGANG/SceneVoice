@@ -89,9 +89,29 @@ function findProfile(service, profileId) {
     return {};
   }
 }
-/** The connection profile's completion preset (chat or text completion), if it can be read. */
+/** Chat Completion ("openai"), Text Completion ("textgenerationwebui") or another kind. */
+function connectionKind(service, profileId) {
+  try {
+    const context = window.SillyTavern.getContext();
+    if (profileId === CURRENT_CONNECTION) return context.mainApi || "";
+    const profile = findProfile(service, profileId);
+    return context.CONNECT_API_MAP?.[profile.api]?.selected || service.validateProfile?.(profile)?.selected || "";
+  } catch {
+    return "";
+  }
+}
+/**
+ * The connection profile's completion preset (chat or text completion), if it can be read. For
+ * the current connection, 실리태번's own settings stand in for it (they hold the same values).
+ */
 function profilePreset(service, profileId) {
   try {
+    if (profileId === CURRENT_CONNECTION) {
+      const context = window.SillyTavern.getContext();
+      return context.mainApi === "openai"
+        ? context.chatCompletionSettings || null
+        : { max_length: context.maxContext };
+    }
     const profile = findProfile(service, profileId);
     if (!profile.preset) return null;
     const context = window.SillyTavern.getContext();
@@ -111,6 +131,12 @@ function profilePreset(service, profileId) {
 function geminiOverrides(service, profileId) {
   try {
     const context = window.SillyTavern.getContext();
+    // The current connection carries its own Vertex settings: only the JSON reply is asked for.
+    if (profileId === CURRENT_CONNECTION)
+      return context.mainApi === "openai" &&
+        ["vertexai", "makersuite"].includes(context.chatCompletionSettings?.chat_completion_source)
+        ? { responseMimeType: "application/json" }
+        : {};
     const profile = findProfile(service, profileId);
     const source = context.CONNECT_API_MAP?.[profile.api]?.source || profile.api;
     if (!["vertexai", "makersuite"].includes(source)) return {};
@@ -131,6 +157,23 @@ function geminiOverrides(service, profileId) {
 // A helper-model reply may take long (a thinking model, a long message): it is waited for up to
 // this long. Only a connection that hangs reaches it; the user can stop sooner (a message's 정지).
 const HELPER_TIMEOUT_MS = 10 * 60 * 1000;
+/** The 연결 choice that sends through whatever 실리태번 is connected to now (its API and model). */
+export const CURRENT_CONNECTION = "__current__";
+// Chat Completion settings made for chat replies that cut or break a task's JSON reply: the
+// user's stop strings, web search or pictures, names put before messages. A prefill stays (it
+// often keeps a model from refusing; the JSON is found after it).
+const CHAT_ONLY_OFF = {
+  stop: [],
+  enable_web_search: false,
+  request_images: false,
+  user_name: "",
+  char_name: "",
+  group_names: [],
+};
+// 실리태번's word for a Gemini reply with no text in it (all thinking, or held back by a filter).
+const EMPTY_REPLY = /candidate text empty/i;
+const replyText = (value) => (typeof value === "string" ? value : value?.content);
+const isEmptyReply = (value) => !String(replyText(value) ?? "").trim();
 const positive = (...values) =>
   values.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
 async function countTokens(text) {
@@ -141,6 +184,54 @@ async function countTokens(text) {
     /* fall back to an estimate */
   }
   return Math.ceil(text.length / 2);
+}
+/**
+ * 현재 연결 사용: the request built from 실리태번's current connection settings (as its own chat
+ * would send, minus the chat-only settings), then sent. 실리태번 1.15 and later; before that the
+ * request builder dropped the messages, so a profile has to be picked.
+ */
+async function sendCurrent(messages, maxTokens, payload, signal) {
+  const context = window.SillyTavern.getContext();
+  const later = "‘현재 연결 사용’은 실리태번 1.15 이상에서 됩니다. 연결 프로필을 골라 주십시오.";
+  if (context.mainApi === "openai") {
+    const service = context.ChatCompletionService;
+    if (typeof service?.presetToGeneratePayload !== "function") throw new Error(later);
+    const settings = context.chatCompletionSettings || {};
+    const base = { messages: structuredClone(messages), chat_completion_source: settings.chat_completion_source, stream: false, max_tokens: maxTokens };
+    const model = context.getChatCompletionModel?.(settings);
+    if (model) base.model = model;
+    const request = await service.presetToGeneratePayload({}, {}, base);
+    if (!Array.isArray(request?.messages)) throw new Error(later);
+    return service.sendRequest({ ...request, ...payload, stream: false }, true, signal);
+  }
+  if (context.mainApi === "textgenerationwebui") {
+    const service = context.TextCompletionService;
+    if (typeof service?.presetToGeneratePayload !== "function") throw new Error(later);
+    const settings = context.textCompletionSettings || {};
+    const instruct = context.powerUserSettings?.instruct;
+    const formatted = Boolean(instruct?.enabled) && typeof service.constructPrompt === "function";
+    const prompt = formatted
+      ? service.constructPrompt(structuredClone(messages), instruct)
+      : `${messages.map((message) => message.content).join("\n\n")}\n\n`;
+    const base = { prompt, stream: false, max_tokens: maxTokens, api_type: settings.type };
+    const server = context.getTextGenServer?.(settings.type);
+    if (server) base.api_server = server;
+    const request = await service.presetToGeneratePayload({}, {}, base);
+    if (request?.prompt == null) throw new Error(later);
+    // Only the instruct template's own end marks stop it (chat stop strings would cut the JSON).
+    let stops = [];
+    if (formatted)
+      try {
+        const instructMode = await import("/scripts/instruct-mode.js");
+        stops = instructMode.getInstructStoppingSequences?.({ customInstruct: instruct, useStopStrings: false }) || [];
+      } catch {
+        /* no stops then */
+      }
+    return service.sendRequest({ ...request, ...payload, stream: false, stop: stops, stopping_strings: stops }, true, signal);
+  }
+  throw new Error(
+    `‘현재 연결 사용’은 Chat Completion·Text Completion 연결에서만 됩니다(지금 연결: ${context.mainApi || "알 수 없음"}). 연결 프로필을 골라 주십시오.`,
+  );
 }
 export function createConnectionBridge(service, app) {
   return {
@@ -153,6 +244,18 @@ export function createConnectionBridge(service, app) {
     },
     fingerprint(profileId) {
       if (!profileId) return "";
+      if (profileId === CURRENT_CONNECTION)
+        try {
+          const context = window.SillyTavern.getContext();
+          const settings = context.chatCompletionSettings || {};
+          return contentKey({
+            current: context.mainApi,
+            source: settings.chat_completion_source || "",
+            model: context.mainApi === "openai" ? context.getChatCompletionModel?.(settings) || "" : context.textCompletionSettings?.type || "",
+          });
+        } catch {
+          return CURRENT_CONNECTION;
+        }
       try {
         const profile = findProfile(service, profileId);
         const safe = { ...profile };
@@ -203,7 +306,12 @@ export function createConnectionBridge(service, app) {
           ),
         HELPER_TIMEOUT_MS,
       );
-      const payload = { ...geminiOverrides(service, profileId), ...overrides };
+      const kind = connectionKind(service, profileId);
+      const payload = {
+        ...(kind === "openai" ? CHAT_ONLY_OFF : {}),
+        ...geminiOverrides(service, profileId),
+        ...overrides,
+      };
       if (app.config.llm?.task_temperature === false)
         delete payload.temperature;
       try {
@@ -237,20 +345,34 @@ export function createConnectionBridge(service, app) {
             );
         }
         app.assertChat(operation);
-        const response = await service.sendRequest(
-          profileId,
-          prompt,
-          outputTokens,
-          {
-            ...options,
-            stream: false,
-            extractData: true,
-            includePreset: app.config.llm?.include_preset !== false,
-            includeInstruct: true,
-            signal: controller.signal,
-          },
-          payload,
-        );
+        const send = (extra = {}) =>
+          profileId === CURRENT_CONNECTION
+            ? sendCurrent(prompt, outputTokens, { ...payload, ...extra }, controller.signal)
+            : service.sendRequest(
+                profileId,
+                prompt,
+                outputTokens,
+                {
+                  ...options,
+                  stream: false,
+                  extractData: true,
+                  includePreset: app.config.llm?.include_preset !== false,
+                  includeInstruct: true,
+                  signal: controller.signal,
+                },
+                { ...payload, ...extra },
+              );
+        // A reply with no text: a filter held it back, or the thinking took the whole output
+        // limit. Said so (not asked again by itself: the user retries if they want).
+        const empty = new Error("보조모델이 빈 답을 돌려줬습니다. 검열에 걸렸거나, 생각하느라 출력 한도를 다 썼을 수 있습니다.");
+        let response;
+        try {
+          response = await send();
+        } catch (error) {
+          if (!controller.signal.aborted && EMPTY_REPLY.test(String(error?.message))) throw empty;
+          throw error;
+        }
+        if (kind === "openai" && isEmptyReply(response)) throw empty;
         app.assertChat(operation);
         return response;
       } catch (error) {

@@ -238,12 +238,19 @@ export const analysis = {
     return this.normalizeMessageAnalyses(data.utterances, utterances);
   },
 
+  /** Why a helper request failed, in a few words for a notice. */
+  failureReason(error) {
+    if (error?.name === "TimeoutError") return "10분 안에 답이 오지 않음";
+    const text = String(error?.message || error || "").trim();
+    return text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : "이유를 알 수 없음";
+  },
+
   /**
    * The message's analysis for this line: from memory, from the records, or one new request.
    * `force` asks again and replaces the saved one (분석 다시), and lets a failure through.
+   * `storedOnly`: only an analysis already made (null without one); no request is sent.
+   * `signal`: stops the analysis request (a message's 정지).
    */
-  /** `storedOnly`: only an analysis already made (null without one); no request is sent. */
-  /** `signal`: stops the analysis request (a message's 정지). */
   async analyzeUtterance(button, { force = false, storedOnly = false, signal } = {}) {
     const operation = this.captureChat();
     const batch = this.collectMessageBatch(button);
@@ -370,7 +377,7 @@ export const analysis = {
         "[SceneVoice] 메시지 일괄 감정 분석 실패, 기본값으로 진행합니다.",
         error,
       );
-      this.notify("메시지 분석에 실패해 기본 연기로 생성합니다.", "info");
+      this.notify(`메시지 분석에 실패해 기본 연기로 생성합니다. (${this.failureReason(error)})`, "info");
       // Transient failures must remain retryable; do not cache the fallback.
       this.applyMessageAnalyses(batch.buttons, fallbackBatch);
       return fallbackBatch[selectedIndex] || fallbackBatch[0];

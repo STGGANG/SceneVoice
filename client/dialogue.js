@@ -601,6 +601,16 @@ export const dialogue = {
     const play = group.querySelector(".sv-play-btn");
     if (open && play && !group.querySelector(".sv-speaker-select"))
       group.append(this.createSpeakerControl(play));
+    // A line drawn again (a reload, another chat and back) has lost what its message's analysis
+    // said: the saved analysis is put back on the message's lines, with no new request.
+    if (
+      open &&
+      play &&
+      !play.dataset.speakerLabel &&
+      this.config.connection_profile_id &&
+      (this.config.analysis_enabled || this.config.casting?.auto_enabled)
+    )
+      this.analyzeUtterance(play, { storedOnly: true }).catch(() => undefined);
     group.classList.toggle("sv-open", open);
     const more = group.querySelector(".sv-more-btn");
     more?.setAttribute("aria-expanded", String(open));
