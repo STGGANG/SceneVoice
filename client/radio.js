@@ -447,7 +447,7 @@ export const radio = {
         ${editor.hosts
           .map(
             (key, index) =>
-              `<div class="sv-call-person"><label class="sv-room-name"><span>${index ? "함께 진행" : story ? "DJ" : "진행"}</span><select data-radio-host="${index}" ${off}>${options(key)}</select></label>${
+              `<div class="sv-call-person"><label class="sv-room-name"><span>${index ? "함께 진행" : "DJ"}</span><select data-radio-host="${index}" ${off}>${options(key)}</select></label>${
                 index ? `<button type="button" class="sv-call-person-remove" data-radio-host-remove="${index}" aria-label="빼기" title="빼기" ${off}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>` : ""
               }</div>`,
           )

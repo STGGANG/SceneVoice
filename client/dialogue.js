@@ -277,6 +277,9 @@ export const dialogue = {
           continue;
         const message = target?.closest(".mes");
         if (message) {
+          // A reply streaming in is rewritten on every token: it is looked at once it is done
+          // (its end brings a scan), not on each change.
+          if (this.isStreamingMessage(message.getAttribute("mesid"))) continue;
           this.scheduleScan(message, 30);
           continue;
         }
@@ -697,7 +700,7 @@ export const dialogue = {
   /** Returns true when audio is ready, "skipped" for a line left for the user to assign (skipUncertain). */
   async generateForButton(
     button,
-    { regenerate = false, autoplay = true, skipUncertain = false, skipUnvoiced = false } = {},
+    { regenerate = false, autoplay = true, skipUncertain = false, skipUnvoiced = false, signal } = {},
   ) {
     const operation = this.captureChat();
     button.dataset.status = "generating";
@@ -721,7 +724,7 @@ export const dialogue = {
             speaker_key: edit.speaker_key,
             needs_confirmation: false,
           }
-        : await this.analyzeUtterance(button);
+        : await this.analyzeUtterance(button, { signal });
       this.assertChat(operation);
       // In 음성 준비, a line of unclear speaker may be read with the default voice instead.
       const asDefault =
@@ -842,6 +845,13 @@ export const dialogue = {
       return true;
     } catch (error) {
       if (operation.signal.aborted) return false;
+      // Stopped by the user (a message's 정지): the line just waits to be made, no error.
+      if (signal?.aborted) {
+        button.dataset.status = "waiting";
+        button.classList.remove("sv-loading", "sv-queued");
+        this.setPlayButtonIcon(button, "waiting");
+        throw error;
+      }
       console.error("[SceneVoice] 생성 실패", error);
       button.dataset.status = "error";
       button.classList.remove("sv-loading", "sv-queued");

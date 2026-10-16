@@ -243,7 +243,8 @@ export const analysis = {
    * `force` asks again and replaces the saved one (분석 다시), and lets a failure through.
    */
   /** `storedOnly`: only an analysis already made (null without one); no request is sent. */
-  async analyzeUtterance(button, { force = false, storedOnly = false } = {}) {
+  /** `signal`: stops the analysis request (a message's 정지). */
+  async analyzeUtterance(button, { force = false, storedOnly = false, signal } = {}) {
     const operation = this.captureChat();
     const batch = this.collectMessageBatch(button);
     const previousContext = this.buildPreviousContext(button);
@@ -354,6 +355,7 @@ export const analysis = {
           extractData: true,
           includePreset: false,
           includeInstruct: true,
+          signal,
         },
         { temperature: 0.2 },
       );

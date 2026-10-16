@@ -232,6 +232,8 @@ export const messageGeneration = {
     const current = this.messageJobs.get(control);
     if (current) {
       current.cancelled = true;
+      // A request on its way (the analysis can take minutes) is let go of at once.
+      current.stop.abort(new DOMException("멈춤", "AbortError"));
       if (current.playback) {
         current.playback.stopped = true;
         this.stopPlayback();
@@ -239,8 +241,7 @@ export const messageGeneration = {
       this.setGenerateLabel(control, "재생");
       control.classList.remove("sv-queued");
       control.disabled = true;
-      control.title =
-        "현재 요청이 끝나면 중지합니다. 이미 만든 음성은 남습니다.";
+      control.title = "멈추는 중입니다. 이미 만든 음성은 남습니다.";
       return;
     }
     const operation = this.captureChat();
@@ -252,6 +253,7 @@ export const messageGeneration = {
     playback.haltAt = -1;
     this.messagePlayback.set(control, playback);
     const job = {
+      stop: new AbortController(),
       cancelled: false,
       playback: null,
       keys: buttons.map((button) => this.lineIdentity(button)),
@@ -307,6 +309,7 @@ export const messageGeneration = {
               autoplay: false,
               skipUncertain: true,
               skipUnvoiced: true,
+              signal: job.stop.signal,
             });
             if (result === "unvoiced") unvoiced++;
             else if (result === "skipped") skipped++;

@@ -111,6 +111,9 @@ function geminiOverrides(service, profileId) {
     return {};
   }
 }
+// A helper-model reply may take long (a thinking model, a long message): it is waited for up to
+// this long. Only a connection that hangs reaches it; the user can stop sooner (a message's 정지).
+const HELPER_TIMEOUT_MS = 10 * 60 * 1000;
 const positive = (...values) =>
   values.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
 async function countTokens(text) {
@@ -172,12 +175,16 @@ export function createConnectionBridge(service, app) {
       const controller = new AbortController();
       const abort = () => controller.abort(operation.signal.reason);
       operation.signal.addEventListener("abort", abort, { once: true });
+      // The caller's own stop (options.signal) ends the request too.
+      const stop = () => controller.abort(options.signal.reason);
+      if (options.signal?.aborted) stop();
+      else options.signal?.addEventListener("abort", stop, { once: true });
       const timer = setTimeout(
         () =>
           controller.abort(
-            new DOMException("분석 응답 시간 초과", "TimeoutError"),
+            new DOMException("보조모델 응답이 10분 넘게 오지 않았습니다.", "TimeoutError"),
           ),
-        120000,
+        HELPER_TIMEOUT_MS,
       );
       const payload = { ...geminiOverrides(service, profileId), ...overrides };
       if (app.config.llm?.task_temperature === false)
@@ -238,6 +245,7 @@ export function createConnectionBridge(service, app) {
       } finally {
         clearTimeout(timer);
         operation.signal.removeEventListener("abort", abort);
+        options.signal?.removeEventListener("abort", stop);
       }
     },
   };

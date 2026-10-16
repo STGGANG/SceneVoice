@@ -9,12 +9,33 @@ export function bindCastOrder(list, onChange) {
   let hold = null;
   let frame = 0;
   let suppressClickUntil = 0;
+  const onTouchMove = (event) => {
+    if (!hold?.touch) return;
+    if (event.touches.length !== 1) return finish();
+    const touch = [...event.touches].find((item) => item.identifier === hold.id);
+    if (touch) move(event, touch.clientX, touch.clientY);
+  };
+  const onTouchEnd = (event) => {
+    if (hold?.touch && [...event.changedTouches].some((touch) => touch.identifier === hold.id)) {
+      if (hold.active && event.cancelable) event.preventDefault();
+      finish(event.type === "touchend");
+    }
+  };
+  let watching = false;
+  function watchTouch(on) {
+    if (on === watching) return;
+    watching = on;
+    for (const [type, listener] of [["touchmove", onTouchMove], ["touchend", onTouchEnd], ["touchcancel", onTouchEnd]])
+      if (on) document.addEventListener(type, listener, { passive: false });
+      else document.removeEventListener(type, listener, { passive: false });
+  }
   const summaryFor = (target) => {
     if (target.closest("input, button, select, textarea, label, a")) return null;
     const summary = target.closest("summary");
     return summary?.parentElement.parentElement === list ? summary : null;
   };
   const finish = (commit = false) => {
+    watchTouch(false);
     if (!hold) return;
     const current = hold;
     hold = null;
@@ -93,25 +114,15 @@ export function bindCastOrder(list, onChange) {
     document.addEventListener(type, (event) => {
       if (hold && !hold.touch && event.pointerId === hold.id) finish(type === "pointerup");
     }, { signal });
-  // A non-passive touchmove lets a held row move on iOS without blocking ordinary swipes.
+  // A non-passive touchmove lets a held row move on iOS. It is listened for only while a finger
+  // is down on a row: one left on the page would make every scroll wait for it.
   list.addEventListener("touchstart", (event) => {
     if (event.touches.length !== 1) return finish();
     const touch = event.touches[0];
     start(event.target, touch.identifier, touch.clientX, touch.clientY, true);
+    if (hold?.touch) watchTouch(true);
   }, { passive: true, signal });
-  document.addEventListener("touchmove", (event) => {
-    if (!hold?.touch) return;
-    if (event.touches.length !== 1) return finish();
-    const touch = [...event.touches].find((item) => item.identifier === hold.id);
-    if (touch) move(event, touch.clientX, touch.clientY);
-  }, { passive: false, signal });
-  for (const type of ["touchend", "touchcancel"])
-    document.addEventListener(type, (event) => {
-      if (hold?.touch && [...event.changedTouches].some((touch) => touch.identifier === hold.id)) {
-        if (hold.active && event.cancelable) event.preventDefault();
-        finish(type === "touchend");
-      }
-    }, { passive: false, signal });
+  signal.addEventListener("abort", () => watchTouch(false));
   list.addEventListener("click", (event) => {
     if (Date.now() < suppressClickUntil) {
       event.preventDefault();

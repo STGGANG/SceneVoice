@@ -599,8 +599,17 @@ export const playback = {
     const edge = Math.max(visibleTop + bar.offsetHeight + 20, Math.min(inputTop - 14, visibleBottom - 20));
     bar.style.setProperty("--sv-now-top", `${Math.round(edge)}px`);
     if (this.nowReadingWatch) return;
+    // Scrolling fires often: the strip, while shown at the bottom, is placed again at most once a
+    // frame (each placing measures the page).
+    let queued = false;
     const follow = () => {
-      if (document.getElementById("sv-now-reading")?.classList.contains("sv-at-bottom")) this.placeNowReading();
+      const shown = document.getElementById("sv-now-reading");
+      if (queued || !shown?.classList.contains("sv-at-bottom") || !shown.classList.contains("sv-shown")) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        this.placeNowReading();
+      });
     };
     const watch = typeof ResizeObserver === "function" ? new ResizeObserver(follow) : null;
     if (form) watch?.observe(form);

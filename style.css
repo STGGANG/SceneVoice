@@ -2453,13 +2453,15 @@
   background: var(--sv-ok);
 }
 .sv-play-btn.sv-playing {
+  --sv-pulse-ring: color-mix(in srgb, var(--sv-brand) 25%, transparent);
   background: var(--sv-brand) !important;
   color: #fff !important;
-  animation: sv-play-pulse 1.2s ease-in-out infinite;
 }
 .sv-play-btn.sv-playing.sv-paused {
-  animation: none;
   opacity: 0.7;
+}
+.sv-play-btn.sv-playing.sv-paused::before {
+  animation: none;
 }
 .sv-play-btn.sv-loading i {
   animation: sv-spin 1s linear infinite;
@@ -2475,9 +2477,29 @@
     transform: rotate(360deg);
   }
 }
-@keyframes sv-play-pulse {
+/* A playing button pulses with a ring that fades in and out. Only its opacity changes, so
+   nothing is painted again on each frame (a moving shadow would be). */
+:is(.sv-play-btn, .sv-call-replay, .sv-msg-play, .sv-msg-aloud, .sv-msg-forward-play, .sv-memo-play).sv-playing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px var(--sv-pulse-ring, color-mix(in srgb, var(--ph-blue, #0a84ff) 22%, transparent));
+  opacity: 0;
+  pointer-events: none;
+  animation: sv-ring-pulse 1.2s ease-in-out infinite;
+}
+:is(.sv-msg-play, .sv-msg-aloud, .sv-memo-play).sv-playing {
+  position: relative;
+}
+@keyframes sv-ring-pulse {
   50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--sv-brand) 25%, transparent);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.sv-play-btn, .sv-call-replay, .sv-msg-play, .sv-msg-aloud, .sv-msg-forward-play, .sv-memo-play).sv-playing::before {
+    animation: none;
   }
 }
 .sv-inline-actions > select.sv-speaker-select {
@@ -4044,12 +4066,6 @@
 .sv-call-replay.sv-playing {
   background: #fff;
   color: var(--ph-blue);
-  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .sv-call-replay.sv-playing {
-    animation: none;
-  }
 }
 /* 음성 재생성 · 고치기 under a past call's line */
 .sv-call-line-tools {
@@ -5785,6 +5801,30 @@
 }
 
 /* ----- 23. 좁은 화면 · 터치 ----- */
+/* A phone: the window fills the screen (as 캐릭터 대장간's does), opaque, with no blur behind it
+   to work out on every frame. Room is kept for the notch and the home bar. */
+@media (max-width: 700px) {
+  #sv-overlay #sv-panel {
+    height: 100%;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border: 0;
+    border-radius: 0;
+    background: var(--sv-surface-solid, var(--sv-surface));
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* The floating phone button sits over the chat as it scrolls: on touch screens it is opaque
+   rather than blurring what passes under it. */
+@media (pointer: coarse) {
+  #sv-phone-launcher {
+    background: var(--sv-surface-solid, var(--sv-surface));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 @media (max-width: 700px), (pointer: coarse) {
   #sv-overlay {
     align-items: flex-end;
@@ -6621,18 +6661,6 @@
 #sv-smartphone .sv-msg-aloud.sv-playing {
   background: color-mix(in srgb, var(--ph-blue) 24%, transparent);
   color: var(--ph-blue);
-  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
-}
-@keyframes sv-msg-play-pulse {
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ph-blue) 22%, transparent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  #sv-smartphone .sv-msg-meta .sv-msg-play.sv-playing,
-  #sv-smartphone .sv-msg-aloud.sv-playing {
-    animation: none;
-  }
 }
 
 /* 스마트폰 사용 off: the phone settings and the 전화 tab fold away. */
@@ -7238,7 +7266,6 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 #sv-smartphone .sv-msg-forward-play.sv-playing {
   background: #fff;
   color: var(--ph-blue);
-  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
 }
 #sv-smartphone .sv-share-sheet .sv-share-what {
   display: flex;
@@ -7304,18 +7331,12 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 #sv-smartphone .sv-memo-play.sv-playing {
   background: color-mix(in srgb, var(--ph-blue) 24%, transparent);
-  animation: sv-msg-play-pulse 1.2s ease-in-out infinite;
 }
 #sv-smartphone .sv-memo.sv-msg-reading {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ph-blue) 50%, transparent);
 }
 #sv-smartphone .sv-memo .sv-call-line-tools button {
   background: color-mix(in srgb, var(--ph-fg) 8%, transparent);
-}
-@media (prefers-reduced-motion: reduce) {
-  #sv-smartphone .sv-memo-play.sv-playing {
-    animation: none;
-  }
 }
 
 /* 라디오: the list of shows, a show's page, and ON AIR while one plays. */
