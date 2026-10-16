@@ -13,9 +13,9 @@ const root = path.resolve(args[0]),
   pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
 if (pkg.name?.toLowerCase() !== "sillytavern")
   throw new Error("SillyTavern의 package.json이 있는 폴더를 지정해 주세요.");
-const [major, minor] = String(pkg.version).split(".").map(Number);
-if (major < 1 || (major === 1 && minor < 19))
-  throw new Error("ST 1.19.0 이상이 필요합니다.");
+const [major, minor, patch] = String(pkg.version).split(".").map((part) => Number.parseInt(part, 10) || 0);
+if (major < 1 || (major === 1 && (minor < 12 || (minor === 12 && patch < 14))))
+  throw new Error("ST 1.12.14 이상이 필요합니다.");
 const destination = path.join(
   root,
   "public/scripts/extensions/third-party/SceneVoice",

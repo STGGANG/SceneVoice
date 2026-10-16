@@ -72,10 +72,27 @@ export function limitPrompt(messages, budget) {
       .join("\n\n"),
   }));
 }
+/**
+ * A connection profile by id. 실리태번 1.15 and later look it up themselves; before that it is read
+ * from the profile list the Connection Manager keeps (as 1.12.14 did inside its own request).
+ */
+function findProfile(service, profileId) {
+  try {
+    return (
+      service.getProfile?.(profileId) ||
+      window.SillyTavern?.getContext?.()?.extensionSettings?.connectionManager?.profiles?.find(
+        (profile) => profile.id === profileId,
+      ) ||
+      {}
+    );
+  } catch {
+    return {};
+  }
+}
 /** The connection profile's completion preset (chat or text completion), if it can be read. */
 function profilePreset(service, profileId) {
   try {
-    const profile = service.getProfile?.(profileId) || {};
+    const profile = findProfile(service, profileId);
     if (!profile.preset) return null;
     const context = window.SillyTavern.getContext();
     const manager = context.getPresetManager?.(
@@ -94,7 +111,7 @@ function profilePreset(service, profileId) {
 function geminiOverrides(service, profileId) {
   try {
     const context = window.SillyTavern.getContext();
-    const profile = service.getProfile?.(profileId) || {};
+    const profile = findProfile(service, profileId);
     const source = context.CONNECT_API_MAP?.[profile.api]?.source || profile.api;
     if (!["vertexai", "makersuite"].includes(source)) return {};
     if (source === "makersuite") return { responseMimeType: "application/json" };
@@ -137,7 +154,7 @@ export function createConnectionBridge(service, app) {
     fingerprint(profileId) {
       if (!profileId) return "";
       try {
-        const profile = service.getProfile?.(profileId) || {};
+        const profile = findProfile(service, profileId);
         const safe = { ...profile };
         delete safe["secret-id"];
         delete safe.password;

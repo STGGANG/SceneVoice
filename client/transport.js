@@ -5,6 +5,9 @@ import { STFileStore } from "./st-store.js";
 import { UserError } from "../shared/settings.js";
 import { throwIfAborted } from "../shared/queue.js";
 
+/** The ElevenLabs key an older 실리태번 (before 1.15) keeps in its TTS settings, in the page. */
+const legacyElevenLabsKey = () =>
+  window.SillyTavern?.getContext?.()?.extensionSettings?.tts?.ElevenLabs?.apiKey || "";
 // `Response.json(value)`, which Safari before 17 lacks.
 const jsonResponse = (value, init = {}) =>
   new Response(JSON.stringify(value), {
@@ -16,7 +19,36 @@ export class Transport {
   constructor(getHeaders) {
     this.getHeaders = getHeaders;
   }
-  async network(url, options = {}, timeout = 180000) {
+  /**
+   * ElevenLabs (`kind`: "voices" or "synthesize"). 실리태번 1.15 and later send it from their server
+   * with the key kept there; an older one is asked nothing: the page calls ElevenLabs itself with
+   * the key in its TTS settings, as that 실리태번 did.
+   */
+  elevenLabs(kind, { voiceId = "", body = null, signal } = {}, timeout = 180000) {
+    if (this.elevenLabsServer)
+      return this.network(
+        `/api/speech/elevenlabs/${kind}`,
+        {
+          method: "POST",
+          ...(kind === "synthesize" ? { body: JSON.stringify({ voiceId, request: body }) } : {}),
+          signal,
+        },
+        timeout,
+      );
+    const key = legacyElevenLabsKey();
+    if (!key) return Promise.resolve(new Response("", { status: 401 }));
+    const headers = { "xi-api-key": key };
+    return kind === "synthesize"
+      ? this.network(
+          `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+          { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body), signal },
+          timeout,
+          true,
+        )
+      : this.network("https://api.elevenlabs.io/v1/voices", { headers, signal }, timeout, true);
+  }
+  /** `external`: another site, sent nothing of 실리태번's (no cookies, no request headers). */
+  async network(url, options = {}, timeout = 180000, external = false) {
     const controller = new AbortController();
     const abort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener("abort", abort, { once: true });
@@ -29,12 +61,17 @@ export class Transport {
     );
     try {
       throwIfAborted(options.signal);
-      return await fetch(url, {
-        ...options,
-        credentials: "same-origin",
-        headers: { ...this.getHeaders(), ...options.headers },
-        signal: controller.signal,
-      });
+      return await fetch(
+        url,
+        external
+          ? { ...options, signal: controller.signal }
+          : {
+              ...options,
+              credentials: "same-origin",
+              headers: { ...this.getHeaders(), ...options.headers },
+              signal: controller.signal,
+            },
+      );
     } finally {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", abort);
@@ -46,6 +83,8 @@ export class Transport {
     const { handle } = await account.json();
     if (!handle) throw new Error("실리태번 계정 식별자가 없습니다.");
     const secrets = await import("/scripts/secrets.js");
+    // 1.15 and later know the ElevenLabs key as a secret (and send it from the server).
+    this.elevenLabsServer = Boolean(secrets.SECRET_KEYS?.ELEVENLABS);
     const store = new STFileStore(
       `scenevoice-v1-${handle}`,
       this.network.bind(this),
@@ -60,9 +99,9 @@ export class Transport {
         settings.fish.has_api_key = Boolean(
           (await store.local.read()).settings.fish.api_key,
         );
-        settings.elevenlabs.has_api_key = Boolean(
-          secrets.secret_state[secrets.SECRET_KEYS.ELEVENLABS],
-        );
+        settings.elevenlabs.has_api_key = this.elevenLabsServer
+          ? Boolean(secrets.secret_state[secrets.SECRET_KEYS.ELEVENLABS])
+          : Boolean(legacyElevenLabsKey());
       },
       prepareSettings: async (patch) => {
         if (patch.elevenlabs?.api_key || patch.elevenlabs?.clear_api_key)
@@ -98,12 +137,9 @@ export class Transport {
               );
           }
         } else
-          response = await this.network("/api/speech/elevenlabs/synthesize", {
-            method: "POST",
-            body: JSON.stringify({
-              voiceId: request.voice,
-              request: request.body,
-            }),
+          response = await this.elevenLabs("synthesize", {
+            voiceId: request.voice,
+            body: request.body,
             signal,
           });
         if (!response.ok) {
@@ -176,11 +212,7 @@ export class Transport {
           } else result.voice = "기본 Reference ID가 비어 있습니다.";
           return result;
         }
-        const response = await this.network(
-          "/api/speech/elevenlabs/voices",
-          { method: "POST", signal },
-          20000,
-        );
+        const response = await this.elevenLabs("voices", { signal }, 20000);
         if (!response.ok)
           return {
             ok: false,
@@ -204,10 +236,7 @@ export class Transport {
       },
       voices: async (engine, settings, signal) => {
         if (engine !== "elevenlabs") return { items: [] };
-        const response = await this.network("/api/speech/elevenlabs/voices", {
-          method: "POST",
-          signal,
-        });
+        const response = await this.elevenLabs("voices", { signal });
         if (!response.ok)
           throw new UserError("실리태번 기본 TTS의 ElevenLabs 키를 확인해 주십시오.");
         return {
