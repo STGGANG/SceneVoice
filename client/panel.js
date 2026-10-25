@@ -1330,7 +1330,6 @@ export const panel = {
     if (!group) return;
     this.showSettingsPane(group.closest(".sv-pane")?.dataset.pane || "common");
     if (group.tagName === "DETAILS") group.open = true;
-    group.scrollIntoView({ block: "start" });
   },
 
   /** The rows of the 전화 tab, and how many AI replies 자동 전화 still waits for. */

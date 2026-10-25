@@ -11,6 +11,69 @@ import {
   withoutVoiceTags,
 } from "./common.js";
 
+const memoryChatKey = (context) => simpleHash(JSON.stringify([
+  context.chatId ?? null, context.characterId ?? null, context.groupId ?? null,
+]));
+
+function memoryScrollPosition(container) {
+  if (!container) return null;
+  const top = container.getBoundingClientRect().top;
+  const anchor = [...container.querySelectorAll(":scope > .mes[mesid]")]
+    .find((node) => node.getBoundingClientRect().bottom > top);
+  return {
+    container,
+    bottom: container.scrollHeight - container.clientHeight - container.scrollTop <= 2,
+    anchor,
+    top: anchor?.getBoundingClientRect().top,
+  };
+}
+
+function restoreMemoryScroll(position) {
+  if (!position?.container.isConnected) return;
+  const { container, anchor } = position;
+  if (position.bottom) container.scrollTop = container.scrollHeight;
+  else if (anchor?.isConnected)
+    container.scrollTop += anchor.getBoundingClientRect().top - position.top;
+}
+
+function placeMemoryAfterText(details, text) {
+  if (text.nextElementSibling !== details) text.after(details);
+  const textStyle = getComputedStyle(text);
+  details.style.order = textStyle.order === "0" ? "" : textStyle.order;
+  let host = text.parentElement;
+  while (host && getComputedStyle(host).display === "contents") host = host.parentElement;
+  details.style.gridRow = "";
+  details.style.gridColumn = "";
+  if (!host || !/grid/.test(getComputedStyle(host).display)) return;
+
+  // A theme can flatten message wrappers into a grid. Use the rendered row boundaries so
+  // named areas, numeric rows, and other records below the text all keep their own space.
+  details.style.gridColumn = textStyle.gridColumn === "auto / auto" ? "1 / -1" : textStyle.gridColumn;
+  const items = [];
+  const collect = (parent) => {
+    for (const child of parent.children) {
+      const style = getComputedStyle(child);
+      if (style.display === "contents") collect(child);
+      else if (child !== details && style.display !== "none" && !["absolute", "fixed"].includes(style.position))
+        items.push(child);
+    }
+  };
+  collect(host);
+  const hostStyle = getComputedStyle(host);
+  const tracks = hostStyle.gridTemplateRows.match(/\d+(?:\.\d+)?px/g);
+  if (!tracks?.length) return;
+  const bottom = Math.max(text.getBoundingClientRect().bottom, ...items.map((node) => node.getBoundingClientRect().bottom));
+  let edge = host.getBoundingClientRect().top + (parseFloat(hostStyle.borderTopWidth) || 0) + (parseFloat(hostStyle.paddingTop) || 0);
+  const gap = parseFloat(hostStyle.rowGap) || 0;
+  let row = 1;
+  for (const track of tracks) {
+    if (edge >= bottom - 1) break;
+    edge += parseFloat(track) + gap;
+    row++;
+  }
+  details.style.gridRow = String(row);
+}
+
 export const memory = {
   memoryAttribute(value) {
     return String(value ?? "")
@@ -213,6 +276,12 @@ export const memory = {
   async persistTextThreadMemory(key, anchorIndex, { left = false, swipe = null } = {}) {
     const anchor = String(anchorIndex ?? "");
     const away = swipe !== null;
+    const chatId = this.currentChatId();
+    const sourceMessage = window.SillyTavern?.getContext?.()?.chat?.[Number(anchor)];
+    const sourceSwipe = sourceMessage?.swipe_id;
+    const stillCurrent = () => chatId === this.currentChatId() &&
+      window.SillyTavern?.getContext?.()?.chat?.[Number(anchor)] === sourceMessage &&
+      (away || sourceMessage?.swipe_id === sourceSwipe);
     // A group keeps every message of its room; a one-to-one thread its texts and replies.
     const items = (await this.loadMessages({ all: away })).filter(
       (item) =>
@@ -221,6 +290,7 @@ export const memory = {
         (!away || (item.anchor_swipe === swipe && this.anchorPlace(item) === "swipe")) &&
         (this.isGroupThread(key) || (item.kind || "voice") === "text" || item.origin === "reply"),
     );
+    if (!stillCurrent()) return false;
     const idOf = (thread) => `texts-${simpleHash(thread).slice(0, 12)}-${anchor}`;
     const id = idOf(key);
     if (!items.length)
@@ -232,6 +302,7 @@ export const memory = {
     ].map(idOf);
     if (this.isGroupThread(key) && !this.messageGroup(key))
       await this.loadMessageGroups().catch(() => []);
+    if (!stillCurrent()) return false;
     const contact = this.threadContact(key);
     const text = this.formatTextThreadMemoryText(
       contact.name,
@@ -246,7 +317,7 @@ export const memory = {
     return this.persistChatMemoryEvent(anchor, {
       id,
       replaces: former,
-      chat_id: this.currentChatId(),
+      chat_id: chatId,
       ...this.anchorStamp(anchor),
       type: "texts",
       character_name: contact.name,
@@ -385,32 +456,54 @@ export const memory = {
 
   /** The record boxes under chat messages: `messages` (elements) or, by default, all of them. */
   renderChatMemoryDecorations(messages = null) {
+    const scroll = memoryScrollPosition(document.getElementById?.("chat"));
     if (!this.chatMemoryOn()) {
       document
         .querySelectorAll(".sv-chat-memory")
         .forEach((item) => item.remove());
+      restoreMemoryScroll(scroll);
       return;
+    }
+    if (!this.chatMemoryLayoutBound && window.addEventListener) {
+      const signal = this.lifetimeController?.signal;
+      window.addEventListener("resize", () => this.scheduleChatMemoryRefresh(), { signal });
+      signal?.addEventListener("abort", () => { this.chatMemoryLayoutBound = false; }, { once: true });
+      this.chatMemoryLayoutBound = true;
     }
     const context = window.SillyTavern?.getContext?.() || {};
     const chat = Array.isArray(context.chat) ? context.chat : [];
+    const chatKey = memoryChatKey(context);
+    if (this.chatMemoryRenderedChat !== chat || this.chatMemoryRenderedKey !== chatKey) {
+      document.querySelectorAll(".sv-chat-memory").forEach((item) => item.remove());
+      this.chatMemoryRenderedChat = chat;
+      this.chatMemoryRenderedKey = chatKey;
+      messages = null;
+    }
     (messages || document.querySelectorAll("#chat .mes[mesid]")).forEach((messageElement) => {
       if (!messageElement.matches?.("#chat .mes[mesid]")) return;
-      const index = Number(messageElement.getAttribute("mesid"));
+      const messageId = messageElement.getAttribute("mesid");
+      const index = /^\d+$/.test(messageId || "") ? Number(messageId) : -1;
       const events = this.chatMemoryEventsOf(chat[index]);
-      const existing = messageElement.querySelector(
-        ":scope > .mes_block > .sv-chat-memory",
-      );
-      if (!events.length) {
+      const text = messageElement.querySelector(":scope > .mes_block > .mes_text");
+      const boxes = [...messageElement.querySelectorAll(":scope > .mes_block > .sv-chat-memory")];
+      const existing = boxes.shift();
+      boxes.forEach((item) => item.remove());
+      if (!events.length || !text) {
         existing?.remove();
         return;
       }
       const signature = simpleHash(JSON.stringify(events));
-      if (existing?.dataset.signature === signature) return;
+      if (existing?.dataset.signature === signature && existing.dataset.chatKey === chatKey) {
+        existing.dataset.messageId = String(index);
+        placeMemoryAfterText(existing, text);
+        return;
+      }
       const wasOpen = Boolean(existing?.open);
       const details = document.createElement("details");
       details.className = "sv-chat-memory";
       details.dataset.messageId = String(index);
       details.dataset.signature = signature;
+      details.dataset.chatKey = chatKey;
       details.open = wasOpen;
       const hasCall = events.some((item) => item.type === "call");
       const hasVoice = events.some((item) => item.type === "voice_message");
@@ -445,11 +538,9 @@ export const memory = {
                       .join("")}
                 </div>`;
       existing?.replaceWith(details);
-      if (!existing)
-        messageElement
-          .querySelector(":scope > .mes_block")
-          ?.appendChild(details);
+      placeMemoryAfterText(details, text);
     });
+    restoreMemoryScroll(scroll);
   },
 
   async refreshChatMemory() {
@@ -470,11 +561,12 @@ export const memory = {
     const record = button?.closest(".sv-memory-record");
     const details = button?.closest(".sv-chat-memory");
     const context = window.SillyTavern?.getContext?.() || {};
-    const messageIndex = Number(details?.dataset?.messageId);
+    const messageId = details?.closest("#chat .mes[mesid]")?.getAttribute("mesid");
+    if (!/^\d+$/.test(messageId || "") || details.dataset.chatKey !== memoryChatKey(context)) return;
+    const messageIndex = Number(messageId);
     const events = context.chat?.[messageIndex]?.extra?.[CHAT_MEMORY_KEY];
-    const event = Array.isArray(events)
-      ? events.find((item) => item?.id === record?.dataset?.eventId)
-      : null;
+    const event = this.chatMemoryEventsOf(context.chat?.[messageIndex])
+      .find((item) => item?.id === record?.dataset?.eventId);
     if (!event || !record) return;
     const pre = record.querySelector("pre");
     const editor = record.querySelector(".sv-memory-editor");
