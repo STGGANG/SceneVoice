@@ -230,16 +230,17 @@ export const playback = {
     const lowpass = context.createBiquadFilter();
     const presence = context.createBiquadFilter();
     const compressor = context.createDynamicsCompressor();
+    // Kept light: a phone's narrower band, not a tinny line (it tired the ear at 300–4500 Hz).
     highpass.type = "highpass";
-    highpass.frequency.value = 300;
+    highpass.frequency.value = 200;
     lowpass.type = "lowpass";
-    lowpass.frequency.value = 4500;
+    lowpass.frequency.value = 6000;
     presence.type = "peaking";
     presence.frequency.value = 1800;
     presence.Q.value = 0.9;
-    presence.gain.value = 3;
-    compressor.threshold.value = -20;
-    compressor.ratio.value = 3;
+    presence.gain.value = 1.5;
+    compressor.threshold.value = -18;
+    compressor.ratio.value = 2;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.12;
     highpass.connect(lowpass).connect(presence).connect(compressor);
