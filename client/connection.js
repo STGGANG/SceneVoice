@@ -221,6 +221,44 @@ function geminiOverrides(service, profileId) {
     return {};
   }
 }
+/**
+ * Vertex: 실리태번 (1.19 and its staging too) signs a Vertex request in with the key active now and
+ * ignores the profile's own key. With Express the request would then quietly bill the active key,
+ * so it is not sent and the user is told to match the keys. With a service account the request
+ * either works (the active account may use the profile's project, or 실리태번 was fixed) or is
+ * refused with a permission error, which is then explained the same way. Returns that message
+ * when the profile's key isn't the active one, else "". Profiles without a key are not checked.
+ */
+async function vertexKeyMismatch(service, profileId, payload) {
+  if (profileId === CURRENT_CONNECTION || !payload.vertexai_auth_mode)
+    return "";
+  try {
+    const profile = findProfile(service, profileId);
+    const wanted = profile["secret-id"];
+    // A reverse proxy signs in with its own password. 실리태번 names "no proxy" "None".
+    if (!wanted || (profile.proxy && profile.proxy !== "None")) return "";
+    const context = window.SillyTavern.getContext();
+    const response = await fetch("/api/secrets/read", {
+      method: "POST",
+      headers: context.getRequestHeaders?.() || {
+        "Content-Type": "application/json",
+      },
+    });
+    if (!response.ok) return "";
+    const keys = (await response.json())?.[
+      payload.vertexai_auth_mode === "full"
+        ? "vertexai_service_account_json"
+        : "api_key_vertexai"
+    ];
+    const active = Array.isArray(keys) ? keys.find((key) => key?.active) : null;
+    if (!active?.id || active.id === wanted) return "";
+    const wantedKey = keys.find((key) => key?.id === wanted);
+    return `지금 연결과 연결 프로필 '${profile.name || "선택한 프로필"}'의 버텍스 키가 같아야 합니다. (지금 연결: ${active.label || "현재 키"} / 프로필: ${wantedKey?.label || "프로필 키"}) 실리태번은 버텍스 요청을 지금 연결의 키로 보내므로, 키가 다르면 요청이 거절되거나 사용량이 다른 키로 잡힙니다.`;
+  } catch {
+    return "";
+  }
+}
+const VERTEX_DENIED = /aiplatform\.endpoints\.predict|PERMISSION_DENIED/i;
 // A helper-model reply may take long (a thinking model, a long message): it is waited for up to
 // this long. Only a connection that hangs reaches it; the user can stop sooner (a message's 정지).
 const HELPER_TIMEOUT_MS = 10 * 60 * 1000;
@@ -428,6 +466,10 @@ export function createConnectionBridge(service, app) {
       if (app.config.llm?.task_temperature === false)
         delete payload.temperature;
       try {
+        if (payload.vertexai_auth_mode === "express") {
+          const mismatch = await vertexKeyMismatch(service, profileId, payload);
+          if (mismatch) throw new Error(mismatch);
+        }
         app.assertChat(operation);
         const preset = profilePreset(service, profileId);
         // A preset sized for chat replies must not cut a JSON reply short, so the preset's value
@@ -520,6 +562,17 @@ export function createConnectionBridge(service, app) {
             EMPTY_REPLY.test(String(error?.message))
           )
             throw empty;
+          if (
+            payload.vertexai_auth_mode === "full" &&
+            VERTEX_DENIED.test(`${error?.message} ${error?.cause?.message}`)
+          ) {
+            const mismatch = await vertexKeyMismatch(
+              service,
+              profileId,
+              payload,
+            );
+            if (mismatch) throw new Error(mismatch);
+          }
           throw error;
         }
         if (kind === "openai" && isEmptyReply(response)) throw empty;

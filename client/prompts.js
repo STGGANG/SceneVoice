@@ -1,7 +1,7 @@
 // Prompts of every helper-model task. PROMPT_VERSION is part of the analysis cache key.
 import { SOUND_TAGS, tagSuggestions } from "../shared/providers.js";
 
-export const PROMPT_VERSION = "scenevoice-2026-11-18.8";
+export const PROMPT_VERSION = "scenevoice-2026-11-19.1";
 
 // Chat tasks (대사 분석, 상태 추적): [system] role → rule sections; [user] DATA_NOTE → data → final line.
 // Phone tasks: see phoneMessages.
@@ -200,9 +200,9 @@ const PLACEMENT_RULES = [
 
 // 발음 사전: names in the lines whose reading the sources settle, found along with the analysis.
 const READING_RULES = [
-  "- The engine guesses how a word is said from its writing alone, and misreads some names. Besides directing the lines, list in readings the names (people, places, groups) and invented terms written in <dialogues> that it could misread: above all Japanese names written in kanji, and likewise any word whose writing doesn't settle how it is said.",
+  "- The engine guesses how a word is said from its writing alone and misreads some names. Besides directing the lines, list in readings only proper nouns written in <dialogues> that it could misread: names of people, places, groups and titles, and terms invented for this story. Above all Japanese names written in kanji, whose reading the kanji alone don't settle.",
   "- List a word only when the sources settle its reading: the same name written in kana, hangul or Latin letters in <speakers>, <speaker_background>, <profile> or the chat, or a reading given beside it. Never guess: a wrong reading is worse than none.",
-  "- Leave out words anyone would read only one way (kana, hangul, ordinary vocabulary) and every word in <known_readings>. Most messages need none.",
+  "- Never list ordinary vocabulary, even when it is written in kanji or looks hard to read (麦茶, 紅茶, 学校, 薔薇): the engine reads dictionary words correctly. Leave out words anyone would read only one way (kana, hangul) and every word in <known_readings>. Most messages need none.",
 ];
 
 export function analysisSystem({
