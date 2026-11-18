@@ -1,16 +1,45 @@
-import { escapeHtml, stripMarkup, clamp, simpleHash } from "./common.js";
+import { escapeHtml, stripMarkup, clamp, simpleHash, stOf } from "./common.js";
 import { infoTip, emptyHtml } from "./ui.js";
-import { URGENCY_WEIGHT, BUSY_WEIGHT, CHANCE_CAP, RECENT_WEIGHT } from "./outreach.js";
+import {
+  URGENCY_WEIGHT,
+  BUSY_WEIGHT,
+  CHANCE_CAP,
+  RECENT_WEIGHT,
+} from "./outreach.js";
 
 // 상태 탭: the people's saved states, a picker between them, and the hand editor.
 // The tracking itself (asking the helper model, saving rounds) is in character.js.
 
 // Fields of each state section, in display order, and their Korean labels.
 const STATE_FIELDS = [
-  ["physical", "신체", "person", "body", ["condition", "injuries", "energy", "location", "summary"]],
-  ["emotional", "감정", "heart", "emotional", ["primary", "secondary", "intensity", "summary"]],
-  ["cognitive", "생각", "lightbulb", "mind", ["focus", "intention", "concern", "summary"]],
-  ["social", "관계", "people-arrows", "social", ["relationship", "attitude", "interaction", "summary"]],
+  [
+    "physical",
+    "신체",
+    "person",
+    "body",
+    ["condition", "injuries", "energy", "location", "summary"],
+  ],
+  [
+    "emotional",
+    "감정",
+    "heart",
+    "emotional",
+    ["primary", "secondary", "intensity", "summary"],
+  ],
+  [
+    "cognitive",
+    "생각",
+    "lightbulb",
+    "mind",
+    ["focus", "intention", "concern", "summary"],
+  ],
+  [
+    "social",
+    "관계",
+    "people-arrows",
+    "social",
+    ["relationship", "attitude", "interaction", "summary"],
+  ],
 ];
 const STATE_LABELS = {
   condition: "상태",
@@ -50,26 +79,51 @@ export const stateTab = {
    * cap and the hold-back for someone who reached out lately.
    */
   contactChanceWhy(decision) {
-    if (decision.presence === "together") return " (함께 있어서)";
     if (decision.availability === "asleep") return " (자는 중이라)";
     if (!Number.isFinite(decision.rate)) return "";
-    const parts = [`빈도 ${decision.rate}%`, `긴급 ×${URGENCY_WEIGHT[decision.urgency] ?? 0}`];
+    const parts = [
+      `빈도 ${decision.rate}%`,
+      `긴급 ×${URGENCY_WEIGHT[decision.urgency] ?? 0}`,
+    ];
     if (decision.availability === "busy") parts.push(`바쁨 ×${BUSY_WEIGHT}`);
     const busy = decision.availability === "busy" ? BUSY_WEIGHT : 1;
-    const capped = (decision.rate / 100) * (URGENCY_WEIGHT[decision.urgency] ?? 0) * busy > CHANCE_CAP;
+    const capped =
+      (decision.rate / 100) * (URGENCY_WEIGHT[decision.urgency] ?? 0) * busy >
+      CHANCE_CAP;
     return ` (${parts.join(" × ")}${capped ? `, 최대 ${CHANCE_CAP * 100}%` : ""}${decision.lately ? `, 최근에 연락해서 ×${RECENT_WEIGHT}` : ""})`;
   },
 
   /** `key`: the person shown; the last 연락 판단 about them, if they were among the candidates. */
   contactStripHtml(contact = {}, key = "") {
-    const presence = { together: "함께 있음", apart: "떨어져 있음" }[contact.presence] || "같이 있는지 모름";
-    const availability = { free: "통화 가능", busy: "바쁨", asleep: "자는 중" }[contact.availability] || "통화 가능 여부 모름";
-    const blocked = contact.presence === "together" || contact.availability === "asleep";
-    const decision = (this.lastContactDecisions || []).find((item) => item.callerKey === key);
-    const outcome = !decision?.reached ? "이번엔 안 함" : decision.held ? "걸렸지만 이번엔 다른 사람 차례" : "연락함";
-    const decisionText = decision
-      ? `최근 연락 판단: ${{ incoming_call: "전화", voice_message: "음성 메시지", text_message: "문자" }[decision.type] || decision.type} · 긴급도 ${{ low: "낮음", medium: "보통", high: "높음" }[decision.urgency] || decision.urgency} · 확률 ${Math.round(decision.chance * 100)}%${this.contactChanceWhy(decision)} → ${outcome}`
-      : "";
+    const presence =
+      { together: "함께 있음", apart: "떨어져 있음" }[contact.presence] ||
+      "같이 있는지 모름";
+    const availability =
+      { free: "통화 가능", busy: "바쁨", asleep: "자는 중" }[
+        contact.availability
+      ] || "통화 가능 여부 모름";
+    // Shown quiet: with the user (rarely named to reach out) or asleep (never reaches out).
+    const blocked =
+      contact.presence === "together" || contact.availability === "asleep";
+    const decision = (this.lastContactDecisions || []).find(
+      (item) => item.callerKey === key,
+    );
+    const outcome = !decision?.reached
+      ? "이번엔 안 함"
+      : decision.held
+        ? "걸렸지만 이번엔 다른 사람 차례"
+        : "연락함";
+    const kind =
+      {
+        incoming_call: "전화",
+        voice_message: "음성 메시지",
+        text_message: "문자",
+      }[decision?.type] || decision?.type;
+    const decisionText = decision?.random
+      ? `최근 랜덤 연락: ${kind} · 확률 ${Math.round(decision.chance * 100)}% → ${decision.passed ? "걸렸지만 상황에 안 맞아 넘김" : "연락함"}`
+      : decision
+        ? `최근 연락 판단: ${{ incoming_call: "전화", voice_message: "음성 메시지", text_message: "문자" }[decision.type] || decision.type} · 긴급도 ${{ low: "낮음", medium: "보통", high: "높음" }[decision.urgency] || decision.urgency} · 확률 ${Math.round(decision.chance * 100)}%${this.contactChanceWhy(decision)} → ${outcome}`
+        : "";
     return `<div class="sv-contact-strip">
         <span class="sv-badge ${blocked ? "" : "sv-badge-on"}"><i class="fa-solid fa-location-dot" aria-hidden="true"></i>${presence}</span>
         <span class="sv-badge ${contact.availability === "free" ? "sv-badge-on" : ""}"><i class="fa-solid fa-phone" aria-hidden="true"></i>${availability}</span>
@@ -95,7 +149,9 @@ export const stateTab = {
 
   stateEditorHtml(state = {}) {
     const value = (item) =>
-      typeof item === "number" ? `${Math.round(item * 100)}%` : String(item ?? "");
+      typeof item === "number"
+        ? `${Math.round(item * 100)}%`
+        : String(item ?? "");
     const choices = (items, selected) =>
       items
         .map(
@@ -105,7 +161,13 @@ export const stateTab = {
         .join("");
     const contact = state.contact || {};
     const cards = STATE_FIELDS.map(
-      ([section, title, icon, tone, keys]) => `<fieldset class="sv-state-card sv-state-${tone}">
+      ([
+        section,
+        title,
+        icon,
+        tone,
+        keys,
+      ]) => `<fieldset class="sv-state-card sv-state-${tone}">
         <legend><i class="fa-solid fa-${icon}" aria-hidden="true"></i>${title}</legend>
         ${keys
           .map((key) => {
@@ -138,7 +200,9 @@ export const stateTab = {
    */
   async saveEditedState(form, person) {
     if (this.stateTrackingBusy)
-      throw new Error("상태를 분석하는 중입니다. 끝난 뒤 다시 저장해 주십시오.");
+      throw new Error(
+        "상태를 분석하는 중입니다. 끝난 뒤 다시 저장해 주십시오.",
+      );
     const data = new FormData(form);
     const field = (name) => String(data.get(name) ?? "").trim();
     const raw = {
@@ -166,10 +230,12 @@ export const stateTab = {
       !Object.values(state.contact).some(Boolean)
     )
       throw new Error("저장할 상태 내용이 없습니다.");
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     const latest = this.latestReplyIndex();
     const sourceMessageId =
-      latest < 0 ? "manual" : `${latest}-${simpleHash(stripMarkup(chat[latest].mes))}-manual`;
+      latest < 0
+        ? "manual"
+        : `${latest}-${simpleHash(stripMarkup(chat[latest].mes))}-manual`;
     await this.saveStateRecord(person.stateKey, person, sourceMessageId, state);
     this.notify(`${person.name}의 상태를 저장했습니다.`, "success");
   },
@@ -202,7 +268,8 @@ export const stateTab = {
       openForm.querySelector(".sv-state-stale")?.removeAttribute("hidden");
       return;
     }
-    container.innerHTML = '<div class="sv-loading-line">상태를 불러오는 중…</div>';
+    container.innerHTML =
+      '<div class="sv-loading-line">상태를 불러오는 중…</div>';
     if (!this.hasCharacterChat()) {
       container.innerHTML = emptyHtml(
         "heart-pulse",
@@ -216,7 +283,7 @@ export const stateTab = {
       container.innerHTML = emptyHtml(
         "heart-pulse",
         "상태를 추적할 인물이 없습니다",
-        "이 채팅의 연락처 인물(봇카드 인물과 공용 인물)을 추적합니다. 페르소나(내 캐릭터)로 표시한 인물은 빠집니다.",
+        "이 채팅의 연락처 인물(봇카드 인물과 글로벌 인물)을 추적합니다. 페르소나(내 캐릭터)로 표시한 인물은 빠집니다.",
       );
       return;
     }
@@ -232,7 +299,9 @@ export const stateTab = {
     });
     // Who is in the scene first, then who left it, then whose whereabouts are unknown.
     const rank = ({ unknown, away }) => (unknown ? 2 : away ? 1 : 0);
-    people.sort((a, b) => rank(statuses.get(a.key)) - rank(statuses.get(b.key)));
+    people.sort(
+      (a, b) => rank(statuses.get(a.key)) - rank(statuses.get(b.key)),
+    );
     const person =
       people.find((item) => item.key === this.statePersonKey) || people[0];
     this.statePersonKey = person.key;
@@ -250,14 +319,21 @@ export const stateTab = {
     }
     const gone = history.filter((item) => !item.live);
     const pages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE));
-    let page = Math.min(this.stateHistoryPage?.key === person.key ? this.stateHistoryPage.at : 0, pages - 1);
+    let page = Math.min(
+      this.stateHistoryPage?.key === person.key ? this.stateHistoryPage.at : 0,
+      pages - 1,
+    );
     const warn = (text) =>
       `<p class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>${text}</span></p>`;
     const notices = [
       current?.replaced
-        ? warn("가장 최근 상태는 지금 채팅에 없는 메시지(삭제·수정했거나 다른 스와이프)에서 나와 쓰지 않습니다. 그 전 상태를 씁니다.")
+        ? warn(
+            "가장 최근 상태는 지금 채팅에 없는 메시지(삭제·수정했거나 다른 스와이프)에서 나와 쓰지 않습니다. 그 전 상태를 씁니다.",
+          )
         : !current && gone.length
-          ? warn("저장된 상태가 모두 지금 채팅에 없는 메시지에서 나와 쓰지 않습니다.")
+          ? warn(
+              "저장된 상태가 모두 지금 채팅에 없는 메시지에서 나와 쓰지 않습니다.",
+            )
           : "",
       status.unknown
         ? warn(
@@ -282,7 +358,7 @@ export const stateTab = {
                     <strong>${escapeHtml(person.name)}</strong>
                     <small>${current?.updated_at ? `마지막 갱신 ${escapeHtml(this.formatDate(current.updated_at))}` : gone.length ? "쓸 수 있는 상태 없음" : "저장된 상태 없음"}</small>
                 </div>
-                ${infoTip(["연락처 인물마다(페르소나 제외) 신체·감정·생각·관계 상태를 따로 저장합니다.", "마지막으로 확인된 상태를 간직하다가, 최근 채팅 어디서든 새로 드러난 게 있는 인물만 갱신합니다. 바뀐 게 없으면 그대로 둡니다.", "어디 있는지 알 수 없는 인물은 ‘행방 모름’으로 표시하고, 자기가 없던 장면은 모르는 채 연락합니다.", "대사 분석과 전화·문자가 이 상태를 참고합니다.", "자동 갱신은 설정 → 캐릭터 상태 추적에서 켭니다."].join("\n"), "상태 추적 설명")}
+                ${infoTip(["연락처 인물마다(페르소나 제외) 신체·감정·생각·관계 상태를 따로 저장합니다.", "마지막으로 확인된 상태를 간직하다가, 최근 채팅 어디서든 새로 드러난 게 있는 인물만 갱신합니다. 바뀐 게 없으면 그대로 둡니다.", "어디 있는지 알 수 없는 인물은 ‘행방 모름’으로 표시하고, 자기가 없던 장면은 모르는 채 연락합니다.", "대사 분석과 전화·문자가 이 상태를 참고합니다.", "자동 갱신은 설정 → 스마트폰 → 선연락·인물별 상태 추적에서 켭니다."].join("\n"), "상태 추적 설명")}
                 <div class="sv-actions">
                     <button type="button" id="sv-state-refresh" class="sv-btn sv-btn-accent" ${edit ? "disabled" : ""}><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>지금 분석</span></button>
                     <button type="button" id="sv-state-edit" class="sv-btn" ${edit ? "disabled" : ""}><i class="fa-solid fa-pen" aria-hidden="true"></i><span>직접 수정</span></button>
@@ -294,20 +370,22 @@ export const stateTab = {
               edit
                 ? this.stateEditorHtml(state)
                 : current
-                ? `
+                  ? `
                 <div class="sv-state-view${status.unknown ? " sv-state-uncertain" : ""}">
                 <p class="sv-state-summary"><i class="fa-solid fa-quote-left" aria-hidden="true"></i><span>${escapeHtml(state.summary || "상태 요약이 없습니다.")}</span></p>
                 ${this.contactStripHtml(state.contact, person.key)}
                 <div class="sv-state-grid">${cards}</div>
                 </div>`
-                : emptyHtml(
-                    "heart-pulse",
-                    gone.length ? "지금 채팅에 맞는 상태가 없습니다" : "아직 분석한 상태가 없습니다",
-                    "‘지금 분석’을 누르거나, ‘직접 수정’으로 지금 상태를 적어 두거나, 설정 → 캐릭터 상태 추적을 켜 보십시오. 분석은 최근 채팅에서 새로 드러난 게 있는 인물만 갱신합니다.",
-                  )
+                  : emptyHtml(
+                      "heart-pulse",
+                      gone.length
+                        ? "지금 채팅에 맞는 상태가 없습니다"
+                        : "아직 분석한 상태가 없습니다",
+                      "‘지금 분석’을 누르거나, ‘직접 수정’으로 지금 상태를 적어 두거나, 설정 → 스마트폰 → 선연락·인물별 상태 추적에서 선연락을 켜 보십시오. 분석은 최근 채팅에서 새로 드러난 게 있는 인물만 갱신합니다.",
+                    )
             }
             <section class="sv-group sv-state-history">
-                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("채팅 분기, 스와이프 등의 대응을 위해 지난 상태도 인물마다 최근 20개까지 저장합니다(넘으면 오래된 것부터 지워집니다).\n상태는 그 상태를 만든 메시지에 연동됩니다. 그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 그때는 아직 채팅에 있는 메시지에서 나온 지난 상태를 대신 씁니다.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
+                <h3 class="sv-group-title"><i class="fa-solid fa-timeline sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">최근 변화</span>${infoTip("채팅 분기, 스와이프 등의 대응을 위해 지난 상태도 인물마다 최근 20개까지 저장합니다(넘으면 오래된 것부터 지워집니다).\n상태는 그 상태를 만든 메시지에 연동됩니다.\n그 메시지를 지우거나 고쳤거나 바꾸면 ‘채팅에 없음’으로 표시하고 AI에게 보내지 않습니다. 그때는 아직 채팅에 있는 메시지에서 나온 지난 상태를 대신 씁니다.", "최근 변화 설명")}<span class="sv-spacer"></span>${gone.length ? `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger" id="sv-state-prune"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>채팅에 없는 기록 지우기 ${gone.length}</span></button>` : ""}</h3>
                 ${
                   history.length
                     ? `<ol class="sv-timeline">${history
@@ -347,21 +425,21 @@ export const stateTab = {
       this.lastStateTrackingSource = "";
       await this.renderState({ force: true });
     };
-    document
-      .getElementById("sv-state-prune")
-      ?.addEventListener("click", () =>
-        this.run(() =>
-          removeHistory(
-            gone.map((item) => item.id),
-            `지금 채팅에 없는 메시지에서 나온 ${person.name}의 상태 기록 ${gone.length}개를 지우시겠습니까?`,
-          ),
+    document.getElementById("sv-state-prune")?.addEventListener("click", () =>
+      this.run(() =>
+        removeHistory(
+          gone.map((item) => item.id),
+          `지금 채팅에 없는 메시지에서 나온 ${person.name}의 상태 기록 ${gone.length}개를 지우시겠습니까?`,
         ),
-      );
+      ),
+    );
     // ‹ › turn the pages of 최근 변화 in place (kept for this person when the tab is drawn again).
     const showPage = () => {
-      container.querySelectorAll(".sv-timeline li[data-page]").forEach((item) => {
-        item.hidden = Number(item.dataset.page) !== page;
-      });
+      container
+        .querySelectorAll(".sv-timeline li[data-page]")
+        .forEach((item) => {
+          item.hidden = Number(item.dataset.page) !== page;
+        });
       const at = container.querySelector("[data-history-at]");
       if (at) at.textContent = `${page + 1}/${pages}`;
       container.querySelectorAll("[data-history-step]").forEach((button) => {
@@ -372,16 +450,26 @@ export const stateTab = {
     };
     container.querySelectorAll("[data-history-step]").forEach((button) =>
       button.addEventListener("click", () => {
-        page = Math.min(pages - 1, Math.max(0, page + Number(button.dataset.historyStep)));
+        page = Math.min(
+          pages - 1,
+          Math.max(0, page + Number(button.dataset.historyStep)),
+        );
         showPage();
       }),
     );
     if (pages > 1) showPage();
-    container.querySelectorAll(".sv-state-history-delete").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => removeHistory([button.dataset.id], "이 상태 기록을 지우시겠습니까?")),
-      ),
-    );
+    container
+      .querySelectorAll(".sv-state-history-delete")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            removeHistory(
+              [button.dataset.id],
+              "이 상태 기록을 지우시겠습니까?",
+            ),
+          ),
+        ),
+      );
 
     document
       .getElementById("sv-state-refresh")
@@ -416,24 +504,25 @@ export const stateTab = {
           button.disabled = false;
         }
       });
-    document
-      .getElementById("sv-state-clear")
-      ?.addEventListener("click", () =>
-        this.run(async () => {
-          if (!confirm(`${person.name}의 저장된 상태 기록을 모두 지우시겠습니까?`)) return;
-          const response = await this.fetch(
-            this.apiUrl(
-              `/api/plugins/scenevoice/state?state_key=${encodeURIComponent(person.stateKey)}`,
-            ),
-            { method: "DELETE" },
-          );
-          if (!response.ok) {
-            this.notify("상태 기록을 지우지 못했습니다.", "error");
-            return;
-          }
-          this.lastStateTrackingSource = "";
-          await this.renderState({ force: true });
-        }),
-      );
+    document.getElementById("sv-state-clear")?.addEventListener("click", () =>
+      this.run(async () => {
+        if (
+          !confirm(`${person.name}의 저장된 상태 기록을 모두 지우시겠습니까?`)
+        )
+          return;
+        const response = await this.fetch(
+          this.apiUrl(
+            `/api/plugins/scenevoice/state?state_key=${encodeURIComponent(person.stateKey)}`,
+          ),
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          this.notify("상태 기록을 지우지 못했습니다.", "error");
+          return;
+        }
+        this.lastStateTrackingSource = "";
+        await this.renderState({ force: true });
+      }),
+    );
   },
 };

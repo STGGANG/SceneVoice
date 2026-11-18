@@ -643,6 +643,13 @@
   margin-top: 0.22em;
   color: var(--sv-brand-text);
 }
+/* With a badge at its end the box is one line: its text sits level with the badge. */
+.sv-notice:has(> .sv-badge) {
+  align-items: center;
+}
+.sv-notice:has(> .sv-badge) > i {
+  margin-top: 0;
+}
 .sv-notice b {
   color: var(--sv-fg);
   font-weight: 600;
@@ -879,13 +886,13 @@
   resize: vertical;
 }
 :is(#sv-overlay, .sv-dialog) select {
-  -webkit-appearance: none;
-  appearance: none;
+  -webkit-appearance: none !important;
+  appearance: none !important;
   padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-position: right 11px center;
-  background-repeat: no-repeat;
-  background-size: 10px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-position: right 11px center !important;
+  background-repeat: no-repeat !important;
+  background-size: 10px 6px !important;
   text-overflow: ellipsis;
   cursor: pointer;
 }
@@ -1219,6 +1226,20 @@
     color var(--sv-ease),
     background var(--sv-ease);
 }
+/* The ⓘ is a drawn shape, not a font glyph: where a glyph sits in its box differs from browser to
+   browser (a pixel high on an iPhone), and a shape lands in the middle of the round button. */
+.sv-info > i {
+  display: block;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: var(--sv-info-mask) center / contain no-repeat;
+  mask: var(--sv-info-mask) center / contain no-repeat;
+  --sv-info-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM8 3.4a1.2 1.2 0 1 0 0 2.4a1.2 1.2 0 1 0 0-2.4zM7 7.6a1 1 0 0 1 2 0v3.7a1 1 0 0 1-2 0z'/%3E%3C/svg%3E");
+}
+.sv-info > i::before {
+  content: none !important;
+}
 .sv-info:hover,
 .sv-info[aria-expanded="true"] {
   background: var(--sv-brand-soft) !important;
@@ -1372,6 +1393,11 @@
 .sv-row > :only-child {
   grid-column: 1 / -1;
 }
+/* A setting and what hangs on it share one column of a row. */
+.sv-stack {
+  display: grid;
+  gap: 14px;
+}
 /* A light line between settings of a different kind inside one section. */
 .sv-divider {
   height: 0;
@@ -1415,6 +1441,10 @@
   justify-content: center;
   align-self: center;
   align-items: flex-start;
+}
+/* An action that closes its row sits at the row's right edge. */
+.sv-field-action.sv-field-action-end {
+  align-items: flex-end;
 }
 .sv-row.sv-engine-section > .sv-field-action {
   align-self: end;
@@ -1507,9 +1537,13 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--sv-line);
+}
+/* What it found on the left, the button at the right end. */
+.sv-engine-check > .sv-btn {
+  order: 2;
+  flex: none;
 }
 /* QR 버튼으로도 멈춤·이어 듣기: the command, and a button that puts it on the QR bar. */
 .sv-pause-command {
@@ -1896,7 +1930,7 @@
 .sv-phone-hero-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 7px;
   min-width: 0;
 }
 .sv-phone-hero-text > small {
@@ -2151,6 +2185,10 @@
   width: auto;
   min-width: 160px;
 }
+/* Lines of text between a group's settings keep the group's own spacing (a theme's paragraph margin aside). */
+.sv-group-body > p.sv-hint {
+  margin: 0 !important;
+}
 .sv-path-note {
   display: inline-flex;
   align-items: center;
@@ -2182,6 +2220,9 @@
 #sv-reset-dialog.sv-dialog,
 #sv-relink-dialog.sv-dialog,
 #sv-update-dialog.sv-dialog,
+#sv-compare-dialog.sv-dialog,
+#sv-analysis-dialog.sv-dialog,
+#sv-folder-dialog.sv-dialog,
 #sv-video-dialog.sv-dialog {
   z-index: 2147483620;
   width: min(560px, calc(100vw - 32px));
@@ -2528,7 +2569,7 @@
   cursor: pointer;
 }
 /* Collapsed: only play and ⋯. */
-.sv-inline-actions:not(.sv-open) > :is(.sv-reroll-btn, .sv-edit-btn) {
+.sv-inline-actions:not(.sv-open) > :is(.sv-reroll-btn, .sv-edit-btn, .sv-download-btn) {
   display: none;
 }
 .sv-inline-actions:not(.sv-open) > select.sv-speaker-select {
@@ -2537,54 +2578,38 @@
 .sv-inline-actions > .sv-more-btn {
   font-size: 11px;
 }
-.sv-inline-actions > .sv-more-btn[aria-expanded="true"] {
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  color: currentColor;
+/* Opened, ⋯ steps aside for the buttons it brought (a click elsewhere or Esc brings it back). */
+.sv-inline-actions.sv-open > .sv-more-btn,
+.sv-msg-meta .sv-msg-more[aria-expanded="true"] {
+  display: none;
 }
 .sv-inline-actions > select.sv-speaker-select option {
   background: var(--SmartThemeBlurTintColor, #222);
   color: var(--SmartThemeBodyColor, #eee);
 }
 
-.mes_button.sv-message-tool[hidden] {
+/* Message buttons: 실리태번's own icon buttons, so the theme draws them like the pencil. Only what
+   a theme can't know is set here, weighted to hold against a theme's own !important. */
+:is(#chat#chat#chat, body) .mes_button.sv-message-tool[hidden] {
   display: none !important;
 }
-.mes_button:is(.sv-message-generate, .sv-message-tool) {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 5px;
-  width: auto !important;
-  height: auto !important;
-  min-width: 0 !important;
-  margin: 0 !important;
-  padding: 3px 5px !important;
-  flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  font-family: var(--sv-font);
-  font-size: 12px !important;
-  font-weight: 600;
-  line-height: 1.3;
-  white-space: nowrap;
-  opacity: 0.85 !important;
-}
-.mes_button:is(.sv-message-generate, .sv-message-tool):hover {
+/* Making or playing: the one button of the row in the extension's colour. */
+:is(#chat#chat#chat, body)
+  .mes_button.sv-message-generate:is([data-state="waiting"], [data-state="stop"]) {
+  color: var(--sv-brand-text) !important;
   opacity: 1 !important;
 }
-.mes_button.sv-message-tool:disabled {
+.mes_button.sv-message-generate[data-state="waiting"]::before {
+  animation: sv-status-pulse 1.4s ease-in-out infinite;
+}
+:is(#chat#chat#chat, body) .mes_button:is(.sv-message-generate, .sv-message-tool).disabled {
   opacity: 0.4 !important;
   pointer-events: none;
 }
-.mes_button:is(.sv-message-generate, .sv-message-tool) > i {
-  font-size: 0.95em;
-}
-.mes_button.sv-message-generate.sv-queued {
-  border-color: var(--sv-brand-line);
-  background: var(--sv-brand-soft);
-  color: var(--sv-brand-text);
-  opacity: 1 !important;
+@media (prefers-reduced-motion: reduce) {
+  .mes_button.sv-message-generate[data-state="waiting"]::before {
+    animation: none;
+  }
 }
 
 /* Saved call/voice memory under a message */
@@ -2665,6 +2690,77 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* 말풍선 보기: the same memory as chat bubbles; mine on the right. */
+.sv-memory-bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 320px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--sv-soft2);
+  font: 12px/1.5 var(--sv-font);
+}
+.sv-mb-note {
+  margin: 2px 0 4px !important;
+  color: var(--sv-faint);
+  font-size: 10.5px;
+  text-align: center;
+}
+.sv-mb-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 6px;
+}
+.sv-mb-line.sv-mb-same {
+  margin-top: 0;
+}
+.sv-mb-line.sv-mb-mine {
+  align-items: flex-end;
+}
+.sv-mb-who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 4px;
+  color: var(--sv-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.sv-mb-who > em {
+  color: var(--sv-faint);
+  font-style: normal;
+  font-weight: 400;
+}
+.sv-mb-same > .sv-mb-who,
+.sv-mb-mine > .sv-mb-who {
+  display: none;
+}
+.sv-mb-bubble {
+  max-width: min(84%, 520px);
+  padding: 5px 10px;
+  border-radius: 13px;
+  border-top-left-radius: 4px;
+  background: var(--sv-soft3, var(--sv-soft2));
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sv-mb-mine > .sv-mb-bubble {
+  border-top-left-radius: 13px;
+  border-top-right-radius: 4px;
+  background: var(--sv-brand-soft2, var(--sv-brand-soft));
+}
+.sv-memory-bubbles .sv-mb-time {
+  display: block;
+  margin: 0;
+  padding: 0 4px;
+  color: var(--sv-faint);
+  font-size: 9.5px;
+}
 .sv-memory-editor {
   width: 100%;
   min-height: 132px;
@@ -2712,11 +2808,11 @@
   z-index: 2147483500;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border: 1px solid var(--sv-line-strong);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--sv-surface);
   -webkit-backdrop-filter: blur(var(--sv-blur));
   backdrop-filter: blur(var(--sv-blur));
@@ -2754,7 +2850,35 @@
 #sv-phone-launcher .sv-fab-icon {
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: 16px;
+}
+/* 전화 탭 looking at a card that isn't open: no calls from here, and the card picker. */
+.sv-phone-elsewhere [data-board-call] {
+  display: none;
+}
+#sv-phone-card {
+  max-width: 100%;
+  font-weight: 600;
+}
+/* A text of a card that isn't open: the sender's picture fills the button. */
+#sv-phone-launcher .sv-fab-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The button's own shape. */
+  border-radius: inherit;
+  object-fit: cover;
+  pointer-events: none;
+}
+#sv-phone-launcher[data-face] .sv-fab-icon {
+  visibility: hidden;
+}
+/* Smaller than a fingertip to look at, as large as one to press. */
+#sv-phone-launcher::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
 }
 #sv-phone-launcher .sv-fab-ring {
   position: absolute;
@@ -4119,6 +4243,15 @@
   color: var(--ph-muted);
   text-align: center;
 }
+/* Under something else (tabs, buttons) it takes the room that is left, not a screen of its own. */
+.sv-smartphone-body:has(> .sv-phone-list-empty:not(:only-child)) {
+  display: flex;
+  flex-direction: column;
+}
+.sv-smartphone-body > .sv-phone-list-empty:not(:only-child) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .sv-phone-list-empty > i {
   margin-bottom: 8px;
   font-size: 28px;
@@ -4192,6 +4325,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The eye and the head count stay on one line and keep their width beside a long name. */
+.sv-msg-thread-main .sv-msg-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  white-space: nowrap;
+}
 .sv-msg-thread-main small {
   overflow: hidden;
   color: var(--ph-muted);
@@ -4228,6 +4370,91 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+/* 다른 봇카드의 문자: the heading over their rows in the list, and a visited card's screen. */
+.sv-msg-others-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 18px 4px;
+  padding: 4px 0;
+  color: var(--ph-muted);
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.sv-msg-others-title::-webkit-details-marker {
+  display: none;
+}
+.sv-msg-others-title em {
+  font-style: normal;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.sv-msg-others-new {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ph-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sv-msg-others-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.sv-msg-others[open] .sv-msg-others-chevron {
+  transform: rotate(180deg);
+}
+.sv-msg-others-title:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.sv-visit-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 16px 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-blue) 10%, transparent);
+  color: var(--ph-fg);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sv-visit-note span {
+  flex: 1;
+  min-width: 0;
+}
+.sv-visit-note button {
+  flex: none;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ph-blue) 18%, transparent);
+  color: var(--ph-blue);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#sv-smartphone[data-visit] .sv-smartphone-title {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--ph-blue);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Only one-to-one texts are shown of a card that isn't open. */
+#sv-smartphone[data-visit] .sv-msg-new-group {
+  display: none;
 }
 .sv-msg-new-group:hover {
   background: color-mix(in srgb, var(--ph-blue) 20%, transparent);
@@ -4591,7 +4818,166 @@
   font: 600 11px / 1 var(--sv-font);
   white-space: nowrap;
 }
-/* ‹ 2/3 ›: the message's other answers, on a line of their own under its buttons. */
+/* 반응: the emoji to tap behind ⋯, and the ones left on a text. */
+.sv-msg-reacts {
+  display: inline-flex;
+  flex-basis: 100%;
+  gap: 2px;
+  margin-top: 2px;
+}
+.sv-msg-meta .sv-msg-reacts button {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  font-size: 17px;
+}
+.sv-msg-meta .sv-msg-reacts .sv-msg-react-own {
+  font-size: 12px;
+  color: var(--ph-muted);
+}
+.sv-msg-react-input {
+  width: 46px;
+  height: 30px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--ph-blue) 45%, transparent);
+  border-radius: 10px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 16px;
+  text-align: center;
+}
+.sv-msg-meta .sv-msg-reacts button:hover {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+}
+.sv-msg-reactions {
+  display: contents;
+}
+.sv-msg-meta .sv-msg-reactions > * {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--ph-fg) 12%, transparent);
+  border-radius: 13px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 13px;
+  line-height: 1;
+}
+.sv-msg-meta .sv-msg-reactions > button {
+  border-color: color-mix(in srgb, var(--ph-blue) 45%, transparent);
+  cursor: pointer;
+}
+.sv-msg-reactions small {
+  color: var(--ph-muted);
+  font-size: 10px;
+}
+/* 영상: a dark screen with its play mark. */
+[data-card="video"] > .sv-card-art {
+  background: linear-gradient(160deg, #1d2430, #39465c);
+}
+.sv-card-screen {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 40px;
+  border-radius: 9px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 15px;
+}
+/* 투표를 만들 때: its choices one under another, and one more at a tap. */
+.sv-poll-edit {
+  display: grid;
+  gap: 6px;
+}
+.sv-poll-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px dashed color-mix(in srgb, var(--ph-fg) 24%, transparent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ph-muted);
+  font: 600 12px/1 var(--sv-font);
+  cursor: pointer;
+}
+.sv-poll-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* 노래: a record on a dusk, and its way to the real thing. 투표: the choices. */
+[data-card="song"] > .sv-card-art {
+  background: linear-gradient(135deg, #4b3f72, #7a5c9c);
+}
+.sv-card-disc {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0003;
+  color: #fff;
+  font-size: 18px;
+}
+.sv-card-actions > .sv-card-link {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+  color: var(--ph-fg);
+  font: 600 13px/1 var(--sv-font);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sv-card-options {
+  display: grid;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+.sv-card-options > * {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+  color: var(--ph-fg);
+  font: 600 13px/1.3 var(--sv-font);
+  text-align: left;
+}
+.sv-card-options > button {
+  cursor: pointer;
+}
+.sv-card-options > button:hover,
+.sv-card-options > .sv-poll-picked {
+  background: color-mix(in srgb, var(--ph-blue) 22%, transparent);
+  color: var(--ph-blue);
+}
+/* Behind ⋯: the buttons join the row when it is opened. */
+.sv-msg-extra {
+  display: contents;
+}
+/* 답변 재생성 (and ‹ 2/3 ›) on a line of its own under the buttons. */
+.sv-msg-again-line {
+  margin-top: 4px;
+}
+/* ‹ 2/3 ›: the message's other answers, beside 답변 재생성. */
 .sv-msg-versions {
   display: inline-flex;
   align-items: center;
@@ -4747,7 +5133,9 @@
   color: #ef8fab;
 }
 #sv-smartphone[data-phone-theme="blue"] {
-  /* Clear sky: #e2eff6 → #b7d7ea → #8dbedc → #64a4ce → #4893c6. */
+  /* Clear sky: #e2eff6 → #b7d7ea → #8dbedc → #64a4ce → #4893c6, with sunlight: #fff1b8 · #ffd76a · #f4bf45. */
+  --ph-sun: #f4bf45;
+  --ph-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ffe08a' d='M12 0C12.8 7.6 16.4 11.2 24 12C16.4 12.8 12.8 16.4 12 24C11.2 16.4 7.6 12.8 0 12C7.6 11.2 11.2 7.6 12 0Z'/%3E%3C/svg%3E");
   --ph-fg: #1f3d57;
   --ph-muted: rgba(31, 61, 87, 0.62);
   --ph-faint: rgba(31, 61, 87, 0.34);
@@ -4759,14 +5147,21 @@
   --ph-green: #64a4ce;
   --ph-red: #e5899a;
   --ph-wall:
+    var(--ph-star) 12% 44% / 15px 15px no-repeat,
+    var(--ph-star) 70% 66% / 20px 20px no-repeat,
+    var(--ph-star) 24% 88% / 11px 11px no-repeat,
+    radial-gradient(75% 36% at 100% 0%, rgba(255, 241, 196, 0.6) 0%, rgba(255, 241, 196, 0.22) 45%, transparent 75%),
     radial-gradient(70% 45% at 14% 4%, #ffffff 0%, transparent 66%),
     radial-gradient(60% 40% at 92% 40%, #e2eff6 0%, transparent 70%),
     radial-gradient(75% 50% at 88% 100%, #8dbedc 0%, transparent 70%),
     linear-gradient(172deg, #e2eff6 0%, #b7d7ea 58%, #8dbedc 100%);
-  --ph-call-bg: linear-gradient(180deg, #f3f8fb 0%, #e2eff6 45%, #b7d7ea 100%);
+  --ph-call-bg:
+    var(--ph-star) 85% 9% / 20px 20px no-repeat,
+    var(--ph-star) 11% 28% / 12px 12px no-repeat,
+    linear-gradient(180deg, #f3f8fb 0%, #e2eff6 45%, #b7d7ea 100%);
   --ph-app-phone: linear-gradient(180deg, #8dbedc, #4893c6);
   --ph-app-message: linear-gradient(180deg, #b7d7ea, #64a4ce);
-  --ph-app-history: linear-gradient(180deg, #64a4ce, #3f86b9);
+  --ph-app-history: linear-gradient(180deg, #fcecba, #efcb7e);
   --ph-app-settings: linear-gradient(180deg, #ffffff, #e2eff6);
   --ph-avatar: linear-gradient(160deg, #b7d7ea, #64a4ce);
   --ph-app-memo: linear-gradient(180deg, #c2cbf3, #8b9ade);
@@ -4775,6 +5170,22 @@
 }
 #sv-smartphone[data-phone-theme="blue"] .sv-app-settings {
   color: #4893c6;
+}
+/* Sunlight on the sky: what is new or waiting shows in a soft yellow. */
+#sv-smartphone[data-phone-theme="blue"] .sv-unread-dot {
+  background: var(--ph-sun);
+}
+#sv-smartphone[data-phone-theme="blue"] .sv-msg-compose > button.sv-card-open {
+  background: #fff3c9;
+  color: #a67c12;
+}
+#sv-smartphone[data-phone-theme="blue"] :is(.sv-msg-waiting, .sv-msg-replying) {
+  border-color: rgba(244, 191, 69, 0.5);
+  background: #fff8dd;
+}
+#sv-smartphone[data-phone-theme="blue"] .sv-msg-waiting > i,
+#sv-smartphone[data-phone-theme="blue"] .sv-msg-replying > i {
+  color: #c99a1e;
 }
 /* Pastel icons cast a tinted shadow instead of a grey one. */
 #sv-smartphone:is([data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-icon {
@@ -5159,6 +5570,28 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.sv-cast-head::-webkit-details-marker {
+  display: none;
+}
+.sv-cast-head:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 4px;
+}
+.sv-cast-head > .sv-cast-title {
+  flex: 1 1 auto;
+}
+.sv-cast-fold[open] > .sv-cast-head .sv-member-chevron {
+  transform: rotate(180deg);
+}
+.sv-cast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
 }
 .sv-cast-title {
   display: flex;
@@ -5183,6 +5616,16 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 14px;
+}
+/* An icon shown inside a sentence, to say what a button looks like. */
+.sv-inline-icon {
+  margin: 0 1px;
+  color: var(--sv-fg);
+  font-size: 0.95em;
+}
+/* The line under a list's title keeps the list's own spacing (a theme's paragraph margin aside). */
+.sv-members > .sv-hint {
+  margin: 0 !important;
 }
 .sv-members-off .sv-member-list,
 .sv-members-off .sv-member-add {
@@ -5220,7 +5663,8 @@
 .sv-member > summary:hover {
   background: var(--sv-soft2);
 }
-.sv-global-member-list > .sv-member > summary {
+.sv-global-member-list .sv-member > summary,
+.sv-global-member-list > .sv-cast-folder > summary {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -5232,8 +5676,105 @@
   outline-offset: 1px;
 }
 .sv-member-sorting,
-.sv-member-sorting > .sv-member > summary {
+.sv-member-sorting .sv-cast-folder > summary,
+.sv-member-sorting .sv-member > summary {
   cursor: grabbing;
+}
+/* Folders of the global list: a quiet frame around its people, with the folder's own line on top. */
+.sv-cast-folder {
+  border: 1px dashed var(--sv-line-strong);
+  border-radius: var(--sv-r-card);
+}
+.sv-cast-folder > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: calc(var(--sv-r-card) - 1px);
+  cursor: pointer;
+  list-style: none;
+}
+.sv-cast-folder > summary::-webkit-details-marker {
+  display: none;
+}
+.sv-cast-folder > summary:hover {
+  background: var(--sv-soft);
+}
+.sv-cast-folder > summary:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: -2px;
+}
+.sv-folder-icon {
+  flex: none;
+  color: var(--sv-brand-text);
+  font-size: 13px;
+}
+.sv-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--sv-fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sv-folder-dialog.sv-dialog {
+  width: min(380px, calc(100vw - 32px));
+}
+#sv-folder-dialog .sv-folder-rename {
+  width: 100%;
+  margin: 4px 0 2px;
+}
+.sv-folder-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-right: auto;
+}
+.sv-folder-tools .sv-icon-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+.sv-cast-folder[open] > summary .sv-member-chevron {
+  transform: rotate(180deg);
+}
+.sv-folder-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 6px 6px;
+}
+.sv-folder-empty {
+  margin: 0 !important;
+  padding: 10px 8px;
+  text-align: center;
+}
+.sv-folder-empty:not(:only-child) {
+  display: none;
+}
+/* A folded folder the held person is over: let go, and they are in it. */
+.sv-cast-folder.sv-folder-drop {
+  border-style: solid;
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+}
+.sv-members-title-tools > .sv-folder-add {
+  margin-left: auto;
+}
+/* A global person's bot cards: how many, and the two ways to clear them. */
+.sv-use-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--sv-control-h);
+}
+.sv-use-count {
+  margin-right: 4px;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
 }
 .sv-member-avatar {
   display: grid;
@@ -5287,6 +5828,19 @@
 .sv-choices-across .sv-choice + .sv-choice {
   border-top: 0;
   border-left: 1px solid var(--sv-line);
+}
+/* Three choices side by side while there is room for them (연락 방식). */
+@media (min-width: 900px) {
+  .sv-choices-across.sv-choices-three .sv-choices {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 641px) and (max-width: 899px) {
+  .sv-choices-across.sv-choices-three .sv-choice:nth-child(3) {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--sv-line);
+    border-left: 0;
+  }
 }
 @media (max-width: 640px) {
   .sv-choices-across .sv-choices {
@@ -5401,6 +5955,13 @@
 .sv-use-chip span {
   order: -1;
 }
+/* The switch alone (a folder's): no words beside it. */
+.sv-use-chip.sv-use-chip-bare,
+.sv-use-chip.sv-use-chip-bare:has(input:checked) {
+  padding: 0;
+  border: 0;
+  background: none;
+}
 .sv-use-chip:has(input:checked) {
   border-color: var(--sv-brand-line);
   background: var(--sv-brand-soft);
@@ -5453,6 +6014,43 @@
   color: var(--sv-fg);
   font-size: var(--sv-fs-sm);
   cursor: pointer;
+}
+
+/* 숨긴 메시지 → 요약으로 대신 읽기: what is injected into the chat, to pick from. */
+.sv-injected {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.sv-injected-list {
+  display: grid;
+  gap: 2px;
+}
+.sv-injected-list .sv-check {
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 2px;
+}
+.sv-injected-list .sv-check input {
+  flex: none;
+  margin-top: 2px;
+}
+.sv-injected-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.sv-injected-text b {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sv-injected-text small {
+  overflow: hidden;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ----- 21. 스마트폰 연락처 ----- */
@@ -5729,13 +6327,6 @@
 }
 
 /* ----- 22. 읽을 구간 ----- */
-.sv-read-lead {
-  margin: 0;
-}
-.sv-read-lead b {
-  color: var(--sv-fg);
-  font-weight: 600;
-}
 .sv-read-list {
   display: grid;
   gap: 0;
@@ -5797,7 +6388,68 @@
 .sv-read-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+/* 발음 사전: a list for every bot card and one for the open card, each under its own line
+   (whose words they are, and the button that adds one). */
+.sv-pron-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+.sv-pron-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 700;
+}
+.sv-pron-head > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-pron-head > .sv-btn {
+  flex: none;
+}
+/* 발음 사전: a written form and how it is said, a row each. */
+.sv-pron-list:empty {
+  display: none;
+}
+.sv-pron-word {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-pron-word:first-child {
+  border-top: 0;
+}
+:is(#sv-overlay) .sv-pron-word input[type="text"] {
+  width: 100%;
+  min-width: 0;
+}
+.sv-pron-word .sv-read-remove {
+  grid-area: auto;
+}
+.sv-pron-arrow {
+  color: var(--sv-faint);
+  font-size: 0.85em;
+}
+.sv-pron-word:not([data-auto]) .sv-pron-auto-mark {
+  display: none;
+}
+.sv-pron-word[data-auto] {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto auto;
 }
 
 /* ----- 23. 좁은 화면 · 터치 ----- */
@@ -6079,16 +6731,6 @@
   background: var(--sv-danger, #d9534f);
 }
 
-/* Adding a person: name, where it belongs, and the button. */
-#sv-cast-panel > .sv-member-add {
-  margin-top: 14px;
-}
-/* The scope stays as narrow as its short words, so the name has room (on a phone too). */
-#sv-cast-scope {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 0;
-}
 .sv-member-quick {
   display: flex;
 }
@@ -6187,6 +6829,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
+  justify-content: flex-end;
+}
+/* The note on the left, the button at the right end. */
+.sv-voice-tools > .sv-hint {
+  order: -1;
+  margin-right: auto;
 }
 .sv-voice-tools.hidden {
   display: none;
@@ -6240,11 +6888,36 @@
   border-radius: 12px;
   background: var(--ph-surface);
 }
+/* Nothing in it shows (the room isn't one without me): no empty box. */
+.sv-room-alone-options:not(:has(> :not([hidden]))),
 .sv-room-alone-options[hidden] {
   display: none;
 }
+/* The numbers a room goes by: the settings' in a line, or boxes for its own. */
+.sv-room-values {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--ph-fg) 14%, transparent);
+}
+.sv-room-values[hidden] {
+  display: none;
+}
+.sv-room-alone-options .sv-room-note {
+  margin: 0;
+}
 .sv-room-alone-options .sv-room-check {
   margin: 0;
+}
+.sv-room-num[hidden],
+.sv-room-note[hidden] {
+  display: none;
+}
+.sv-room-note {
+  margin: 0;
+  color: var(--ph-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 .sv-room-num {
   display: flex;
@@ -6566,7 +7239,7 @@
   right: 0;
   left: 0;
   z-index: 30;
-  max-height: 264px;
+  max-height: 320px;
   margin: 0;
   padding: 4px;
   overflow-y: auto;
@@ -6581,9 +7254,10 @@
   display: none;
 }
 .sv-voice-pick-option {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1px 8px;
   margin: 0;
   padding: 7px 10px;
   border-radius: calc(var(--sv-r-control) - 3px);
@@ -6592,9 +7266,102 @@
   line-height: 1.35;
   cursor: pointer;
 }
+.sv-voice-pick-option > :is(span, small) {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
 .sv-voice-pick-option small {
   color: var(--sv-faint);
   font-size: var(--sv-fs-xs);
+}
+/* The filters stay in sight above the voices as the list scrolls. */
+.sv-voice-pick-filters {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  margin: -4px -4px 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--sv-line);
+  background: var(--sv-surface-solid);
+}
+.sv-voice-pick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-chip {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sv-soft2);
+  box-shadow: none;
+  color: var(--sv-muted);
+  font: inherit;
+  font-size: var(--sv-fs-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-chip:hover {
+  color: var(--sv-fg);
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-chip[aria-pressed="true"] {
+  background: var(--sv-brand-soft2);
+  color: var(--sv-brand-text);
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-preview {
+  -webkit-appearance: none;
+  appearance: none;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sv-soft2);
+  box-shadow: none;
+  color: var(--sv-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background var(--sv-ease),
+    color var(--sv-ease);
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-preview:hover {
+  color: var(--sv-fg);
+}
+:is(#sv-overlay, .sv-dialog) .sv-voice-pick-preview.sv-playing {
+  background: var(--sv-brand-soft2);
+  color: var(--sv-brand-text);
+}
+@media (pointer: coarse) {
+  :is(#sv-overlay, .sv-dialog) .sv-voice-pick-chip {
+    height: 32px;
+    padding: 0 13px;
+  }
+  :is(#sv-overlay, .sv-dialog) .sv-voice-pick-preview {
+    width: 34px;
+    height: 34px;
+    font-size: 11px;
+  }
 }
 .sv-voice-pick-option:hover,
 .sv-voice-pick-option.sv-active {
@@ -6669,19 +7436,32 @@
 #sv-panel:is(.sv-chat-off, .sv-inactive) :is(.sv-chat-only, #sv-group-reading),
 #sv-panel:not(.sv-chat-off) .sv-chat-off-only,
 #sv-panel:not(.sv-chat-off.sv-mc-engine) .sv-mc-engine-note,
-#sv-panel.sv-chat-off.sv-mc-engine #sv-group-engine .sv-group-body > :not(.sv-mc-engine-note),
+#sv-panel.sv-chat-off.sv-mc-engine #sv-group-basic .sv-engine-sec,
 #sv-panel.sv-sfx-off .sv-sfx-only,
 #sv-panel.sv-casting-off .sv-casting-only,
-#sv-panel.sv-inactive .sv-basic-on,
+#sv-panel.sv-auto-call-off .sv-auto-call-only,
+#sv-panel.sv-outreach-off .sv-outreach-on-only,
+#sv-panel.sv-overheard-off .sv-overheard-only,
+#sv-panel.sv-call-me-off .sv-call-me-only,
+#sv-panel.sv-auto-text-off .sv-auto-text-only,
+#sv-panel.sv-overheard-text-off .sv-overheard-text-only,
+#sv-panel.sv-other-chats-off .sv-other-chats-only,
+#sv-panel.sv-state-idle .sv-state-fields,
+#sv-panel.sv-phone-off .sv-phone-only,
+#sv-panel.sv-memo-app-off .sv-memo-app-only,
+#sv-panel:is(.sv-mode-random, .sv-mode-time) .sv-mode-state-only,
+#sv-panel:not(.sv-mode-random) .sv-mode-random-only,
+#sv-panel.sv-mode-time .sv-mode-count-only,
+#sv-panel.sv-hidden-read .sv-hidden-summary-only,
+#sv-panel:not(.sv-mode-time) .sv-mode-time-only,
+#sv-panel.sv-inactive #sv-group-chat,
 #sv-panel.sv-chat-off .sv-basic-chat,
 #sv-panel.sv-prepare-off .sv-basic-prepare {
-  display: none;
+  /* Over the settings rows' own display (a row laid out as a grid would show again). */
+  display: none !important;
 }
 .sv-basic-on > .sv-notice {
   margin-top: 12px;
-}
-.sv-basic-on > .sv-divider {
-  margin: 4px 0 18px !important;
 }
 .sv-basic-chat {
   display: flex;
@@ -6696,8 +7476,8 @@ body.sv-hide-line-buttons .sv-inline-actions {
   display: none !important;
 }
 #sv-panel.sv-phone-off #sv-fold-smartphone .sv-group-body > :not(.sv-phone-app-row),
-#sv-panel.sv-phone-off #sv-fold-phone,
-#sv-panel.sv-phone-off #sv-fold-voice-message,
+#sv-panel.sv-phone-off #sv-fold-apps,
+#sv-panel.sv-phone-off #sv-fold-prompts,
 #sv-panel.sv-phone-off .sv-tab[data-tab="phone"] {
   display: none !important;
 }
@@ -6721,6 +7501,22 @@ body.sv-hide-line-buttons .sv-inline-actions {
 #sv-smartphone .sv-msg-row.sv-msg-reading .sv-msg-bubble {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ph-blue) 50%, transparent);
   transition: box-shadow 0.2s ease;
+}
+/* 한 번에 듣기 waiting for this message's voice: a dashed ring that breathes until it plays. */
+#sv-smartphone .sv-msg-row.sv-msg-making .sv-msg-bubble {
+  outline: 2px dashed color-mix(in srgb, var(--ph-blue) 55%, transparent);
+  outline-offset: 2px;
+  animation: sv-msg-making 1.2s ease-in-out infinite;
+}
+@keyframes sv-msg-making {
+  50% {
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-smartphone .sv-msg-row.sv-msg-making .sv-msg-bubble {
+    animation: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   #sv-smartphone .sv-msg-play.sv-playing i {
@@ -6841,6 +7637,43 @@ body.sv-hide-line-buttons .sv-inline-actions {
     background: rgb(from var(--SmartThemeBlurTintColor, #1d1f24) r g b / 1);
   }
 }
+/* ‹ › at the strip's right end, while a message's lines play in a row. */
+#sv-now-reading .sv-now-steps {
+  order: 1;
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin: -8px -10px -8px -6px;
+}
+#sv-now-reading .sv-now-steps[hidden] {
+  display: none;
+}
+#sv-now-reading .sv-now-steps > button {
+  appearance: none;
+  margin: 0;
+  padding: 8px 9px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  line-height: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#sv-now-reading .sv-now-steps > button:hover {
+  opacity: 1;
+}
+#sv-now-reading .sv-now-steps > button:focus-visible {
+  outline: 2px solid var(--sv-now-ink);
+  outline-offset: -4px;
+  border-radius: 999px;
+  opacity: 1;
+}
+#sv-now-reading .sv-now-steps > button:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
 /* Under the incoming-call banner when both are up. */
 body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   top: calc(var(--topBarBlockSize, 46px) + 92px + env(safe-area-inset-top));
@@ -6948,6 +7781,184 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 .sv-lore-fold > .sv-lore-picker {
   padding: 4px 12px 12px;
+}
+
+/* A fold inside a settings group: rarely changed settings, out of the way until opened. */
+.sv-sub-fold {
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+}
+.sv-sub-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: calc(var(--sv-r-card) - 1px);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.sv-sub-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.sv-sub-fold > summary > i:first-child {
+  color: var(--sv-muted);
+}
+.sv-sub-fold > summary > span {
+  flex: none;
+}
+.sv-sub-fold > summary > small {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-sub-fold > summary:hover {
+  background: var(--sv-soft2);
+}
+.sv-sub-fold > summary:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 2px;
+}
+.sv-sub-fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 12px 14px;
+}
+/* A run of settings that shows or hides together, spaced like the group around it. */
+.sv-stack-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* 인물별 상태 추적's own switch: only with the phone off (with it on, 선연락 decides). */
+#sv-panel:not(.sv-phone-off) .sv-state-block {
+  display: none;
+}
+/* A setting whose control is a button, laid out like a switch row beside it. */
+.sv-action-row {
+  cursor: default;
+}
+.sv-action-row > .sv-btn {
+  flex: none;
+}
+/* A heading inside a group that folds what follows it: an icon chip, the name, a line, a chevron. */
+.sv-sub-sec {
+  min-width: 0;
+}
+.sv-sub-sec > .sv-sub-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 14px;
+}
+.sv-sub-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 !important;
+  border-radius: 8px;
+  color: var(--sv-text);
+  font-size: 13.5px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sv-sub-title::-webkit-details-marker {
+  display: none;
+}
+.sv-sub-title > i:first-child {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+  font-size: 12px;
+}
+.sv-sub-title > span {
+  flex: none;
+}
+.sv-sub-title > small {
+  flex: none;
+  min-width: 0;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 400;
+}
+/* The line runs from the name (or its note) to the chevron. */
+.sv-sub-title > .sv-sub-chevron {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--sv-muted);
+  font-size: 11px;
+  transition: color 0.15s ease;
+}
+.sv-sub-title > .sv-sub-chevron::before {
+  order: 2;
+  transition: transform 0.18s ease;
+}
+.sv-sub-title > .sv-sub-chevron::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  height: 1px;
+  background: var(--sv-line);
+}
+.sv-sub-sec[open] > .sv-sub-title > .sv-sub-chevron::before {
+  transform: rotate(180deg);
+}
+.sv-sub-title:hover > .sv-sub-chevron {
+  color: var(--sv-text);
+}
+.sv-sub-title:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 3px;
+}
+/* 프롬프트 직접 수정: the wording in a box of its own, saved by its own buttons. 추가 지침 too. */
+.sv-extra-edit textarea {
+  min-height: 96px;
+  font-family: var(--sv-mono);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.55;
+  resize: vertical;
+}
+.sv-prompt-edit textarea {
+  min-height: 160px;
+  font-family: var(--sv-mono);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.55;
+  resize: vertical;
+}
+.sv-prompt-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sv-prompt-actions > .sv-hint {
+  flex: 1 1 120px;
+  margin: 0;
+}
+/* 저장됨 / 키 없음 beside a key's label, or at the end of the note that says where the key goes. */
+.sv-notice > .sv-key-state {
+  margin-left: auto;
 }
 
 /* 통화로 돌아가기: on a call, elsewhere on the phone, in the title's place. */
@@ -7706,20 +8717,20 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 .sv-msg-compose {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: end;
   column-gap: 8px;
   row-gap: 6px;
 }
 .sv-msg-compose > textarea {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
 }
 .sv-msg-compose > button {
   grid-row: 1;
 }
 .sv-msg-compose > .sv-draft-translation {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 2;
 }
 #sv-smartphone .sv-call-screen p.sv-draft-translation {
@@ -7969,4 +8980,1521 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 .sv-update-highlight li {
   font-weight: 600;
+}
+
+/* ----- 문자 카드 · 인용 답장 · 읽음 표시 ----- */
+.sv-msg-compose > button.sv-card-open {
+  grid-column: 1;
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+}
+.sv-msg-compose > button.sv-card-open[aria-expanded="true"] > i {
+  transform: rotate(45deg);
+}
+.sv-msg-compose > button.sv-card-open > i {
+  transition: transform var(--sv-ease);
+}
+.sv-msg-read {
+  color: var(--ph-blue);
+  font-size: 10px;
+}
+#sv-smartphone .sv-msg-card {
+  display: flex;
+  flex-direction: column;
+  width: 216px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ph-line);
+  border-radius: 16px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  text-align: left;
+}
+.sv-card-words {
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px 11px;
+}
+.sv-card-words > small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ph-muted);
+  font-size: 11px;
+}
+.sv-card-words > strong {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.sv-card-words > span {
+  color: var(--ph-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+#sv-smartphone .sv-msg-card-image {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+}
+/* Answering a card of theirs: its buttons, how it was answered, and my answer as a line. */
+.sv-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+.sv-card-actions > button {
+  flex: 1 1 0;
+  height: 34px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ph-fg) 9%, transparent);
+  color: var(--ph-fg);
+  font: 600 13px/1 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-card-actions > button.sv-card-yes {
+  background: var(--ph-blue);
+  color: #fff;
+}
+.sv-card-actions > button:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
+}
+.sv-card-answered {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 11px;
+  color: var(--ph-muted);
+  font-size: 12px;
+}
+#sv-smartphone .sv-msg-card-answer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--ph-line);
+  border-radius: 14px;
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+  font-size: 13px;
+  text-align: left;
+}
+.sv-msg-card-answer > i {
+  color: var(--ph-blue);
+}
+.sv-msg-card-answer > span {
+  min-width: 0;
+  color: var(--ph-muted);
+  overflow-wrap: anywhere;
+}
+.sv-msg-card-answer b {
+  margin-right: 6px;
+  color: var(--ph-fg);
+  font-weight: 600;
+}
+/* The picture part of a card, drawn here (no image files): its own colors, whatever the theme. */
+.sv-card-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 92px;
+  overflow: hidden;
+}
+/* 위치: a small drawn map with a pin where the place is. */
+.sv-card-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* 선물: wrapping paper with a ribbon across, and the box on top. */
+[data-card="gift"] > .sv-card-art {
+  background:
+    linear-gradient(90deg, transparent 0 calc(50% - 9px), #fff7 calc(50% - 9px) calc(50% + 9px), transparent calc(50% + 9px)),
+    linear-gradient(0deg, transparent 0 calc(50% - 9px), #fff7 calc(50% - 9px) calc(50% + 9px), transparent calc(50% + 9px)),
+    repeating-linear-gradient(45deg, #fbd5e1 0 10px, #fde6ee 10px 20px);
+}
+.sv-card-bow,
+.sv-card-coin,
+.sv-card-page {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.1);
+  font-size: 20px;
+}
+.sv-card-bow {
+  color: #e36a93;
+}
+/* 송금: the amount on a soft mint. */
+[data-card="transfer"] > .sv-card-art {
+  grid-auto-flow: column;
+  justify-content: start;
+  gap: 12px;
+  height: 76px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #e4f6ee, #d2efe3);
+  color: #0f6a52;
+}
+[data-card="transfer"] > .sv-card-art > b {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.sv-card-coin {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  box-shadow: 0 2px 6px rgba(15, 106, 82, 0.14);
+  color: #2aa37f;
+  font-size: 17px;
+}
+/* 약속: a calendar page on a soft sky. */
+[data-card="appointment"] > .sv-card-art {
+  height: 76px;
+  background: linear-gradient(160deg, #cfe3ff, #e8f1ff);
+}
+.sv-card-page {
+  width: 48px;
+  height: 50px;
+  border-top: 12px solid #e5484d;
+  border-radius: 9px;
+  color: #3b6fd9;
+}
+/* 사진 (described in words): a drawn landscape standing in for the photo. */
+[data-card="photo"] > .sv-card-art {
+  background: linear-gradient(180deg, #a9d8f7 0 58%, #cdeccb 58%);
+}
+.sv-card-sun {
+  position: absolute;
+  top: 16px;
+  right: 30px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffd76a;
+}
+.sv-card-hill {
+  position: absolute;
+  bottom: -46px;
+  left: -10px;
+  width: 130px;
+  height: 100px;
+  border-radius: 50%;
+  background: #8fcf8a;
+}
+.sv-card-hill + .sv-card-hill {
+  bottom: -58px;
+  left: 96px;
+  width: 150px;
+  background: #76c08a;
+}
+.sv-msg-quote {
+  display: grid;
+  gap: 2px;
+  max-width: 100%;
+  margin: 2px 0 -1px;
+  padding: 6px 11px 7px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--ph-fg) 7%, transparent);
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.sv-msg-quote > b {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ph-fg);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sv-msg-quote > b i {
+  font-size: 9.5px;
+  opacity: 0.6;
+}
+.sv-msg-quote > span {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.sv-msg-replying {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.sv-msg-replying > span {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.sv-msg-replying b {
+  margin-right: 6px;
+  color: var(--ph-fg);
+  font-weight: 600;
+}
+.sv-msg-replying {
+  max-width: none;
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid var(--ph-line);
+  background: color-mix(in srgb, var(--ph-bg) 96%, transparent);
+}
+.sv-msg-replying > span {
+  flex: 1 1 auto;
+}
+/* A theme that pads every one-line textarea for its own 30px boxes must not push the words up
+   in this taller one. */
+#sv-smartphone .sv-msg-compose textarea#sv-msg-input {
+  padding-block: 9px !important;
+}
+/* A card was sent and their answer not asked for yet. */
+.sv-msg-waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 !important;
+  padding: 7px 14px;
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sv-msg-waiting > i {
+  margin-top: 2px;
+}
+.sv-msg-replying > button,
+.sv-card-tray-head > button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ph-muted);
+  cursor: pointer;
+}
+.sv-card-tray {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--ph-line);
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+}
+.sv-card-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sv-card-tray-head > strong {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.sv-card-tray-note {
+  margin: 0 !important;
+  color: var(--ph-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sv-card-menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 6px;
+}
+.sv-card-menu > button {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 10px 4px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ph-fg) 7%, transparent);
+  color: var(--ph-fg);
+  font: 12px/1.2 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-card-menu > button > i {
+  color: var(--ph-blue);
+  font-size: 17px;
+}
+#sv-smartphone .sv-card-tray input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--ph-line);
+  border-radius: 10px;
+  outline: none;
+  background: var(--ph-bg);
+  color: var(--ph-fg);
+  font: 14px/1.3 var(--sv-font);
+}
+#sv-smartphone .sv-card-tray input[type="text"]::placeholder {
+  color: var(--ph-faint);
+}
+#sv-smartphone .sv-card-tray input[type="text"]:focus-visible,
+.sv-card-tray button:focus-visible,
+.sv-msg-replying > button:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 1px;
+}
+.sv-card-tray-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sv-card-tray-actions > button,
+.sv-card-photo > button {
+  height: 34px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+  font: 600 13px/1 var(--sv-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-card-tray-actions > button.sv-card-send {
+  background: var(--ph-blue);
+  color: #fff;
+}
+.sv-card-tray-actions > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#sv-smartphone .sv-card-kind {
+  padding: 5px 2px;
+  background: transparent;
+  font-size: 14px;
+}
+.sv-card-kind > span > i {
+  width: 18px;
+  margin-right: 8px;
+  color: var(--ph-blue);
+  text-align: center;
+}
+.sv-card-photo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sv-card-photo > img {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.sv-card-photo-pick {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px dashed var(--ph-line);
+  border-radius: 10px;
+  color: var(--ph-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sv-card-photo-pick:focus-within {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 1px;
+}
+
+/* ----- 처음 설정 안내 ----- */
+/* The ring on the setting a step is about; everything else dims behind it. */
+.sv-guide-spot {
+  position: absolute;
+  z-index: 40;
+  border: 2px solid var(--sv-brand);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.36);
+  pointer-events: none;
+  transition:
+    left 0.18s ease,
+    top 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+.sv-guide {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(480px, calc(100% - 24px));
+  max-height: min(70%, 520px);
+  padding: 12px 16px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--sv-line-strong);
+  border-radius: 16px;
+  background: var(--sv-surface-solid);
+  box-shadow: var(--sv-shadow-pop);
+  color: var(--sv-fg);
+  transform: translateX(-50%);
+}
+.sv-guide.sv-guide-top {
+  top: 16px;
+  bottom: auto;
+}
+.sv-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sv-guide-count {
+  color: var(--sv-brand-text);
+  font-size: var(--sv-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.sv-guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sv-guide-body h4 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 !important;
+  font-size: var(--sv-fs-lg, 1.05em);
+  font-weight: 700;
+}
+.sv-guide-body p {
+  margin: 0 !important;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  line-height: 1.55;
+  word-break: keep-all;
+}
+.sv-guide-body p b {
+  color: var(--sv-fg);
+}
+.sv-guide-note {
+  color: var(--sv-fg) !important;
+}
+.sv-guide-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.sv-guide-choices > button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  background: var(--sv-soft);
+  color: var(--sv-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sv-guide-choices > button > strong {
+  font-size: var(--sv-fs);
+}
+.sv-guide-choices > button > small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.4;
+}
+.sv-guide-choices > button[aria-pressed="true"] {
+  border-color: var(--sv-brand);
+  background: var(--sv-brand-soft);
+}
+.sv-guide-choices > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sv-guide-choices > button:focus-visible,
+.sv-guide-feature:focus-within {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 2px;
+}
+.sv-guide-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sv-guide-key > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sv-guide-key > .sv-btn {
+  flex: none;
+}
+.sv-guide-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  font-size: var(--sv-fs-sm);
+}
+.sv-guide-field > span {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+.sv-guide-field small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 400;
+}
+.sv-guide-feature {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-card);
+  cursor: pointer;
+}
+.sv-guide-feature > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sv-guide-feature small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  line-height: 1.45;
+  word-break: keep-all;
+}
+/* Tiny pictures of what each feature is: a spoken line with its button, a phone with its apps. */
+.sv-guide-art {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--sv-soft2);
+}
+.sv-guide-art-chat {
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+.sv-guide-art-chat > i {
+  overflow: hidden;
+  font-style: normal;
+  white-space: nowrap;
+}
+.sv-guide-art b {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--sv-brand);
+  color: #fff;
+  font-size: 10px;
+}
+/* 대사 옆 재생 버튼: two spoken lines, each with its own button. */
+.sv-guide-art-line {
+  grid-template-columns: auto auto;
+  align-content: center;
+  gap: 3px 4px;
+  padding: 0 6px;
+  font-size: 9px;
+}
+.sv-guide-art-line > i {
+  font-style: normal;
+  white-space: nowrap;
+}
+.sv-guide-art-line b {
+  width: 15px;
+  height: 15px;
+  font-size: 8px;
+}
+/* 이어 듣기 버튼: a message's row of buttons, the wave one lit. */
+.sv-guide-art-row {
+  grid-auto-flow: column;
+  gap: 6px;
+  color: var(--sv-muted);
+  font-size: 11px;
+}
+/* 스마트폰: two texts going back and forth. */
+.sv-guide-art-phone {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 9px;
+}
+.sv-guide-art-phone > i {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 8px 8px 8px 2px;
+  background: var(--sv-soft3);
+  color: var(--sv-fg);
+  font-style: normal;
+  white-space: nowrap;
+}
+.sv-guide-art-phone > i + i {
+  align-self: flex-end;
+  border-radius: 8px 8px 2px 8px;
+  background: var(--sv-brand);
+  color: #fff;
+}
+/* A tab's page: its icon beside the name, then what is in it. */
+.sv-guide-body h4 > i {
+  color: var(--sv-brand-text);
+}
+.sv-guide-list {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  line-height: 1.5;
+}
+.sv-guide-body p.sv-guide-tip {
+  display: flex;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: var(--sv-r-control);
+  background: var(--sv-brand-soft);
+  color: var(--sv-fg);
+}
+.sv-guide-tip > i {
+  flex: none;
+  margin-top: 0.25em;
+  color: var(--sv-brand-text);
+}
+.sv-guide-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .sv-guide {
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .sv-guide-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sv-guide-spot {
+    transition: none;
+  }
+}
+
+/* 설정 목록: in 공통 and 스마트폰 each setting is one line, its name (and note) on the left and
+   its control on the right, with a thin line between settings. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-stack-col, .sv-sub-block, .sv-toggle-group, .sv-basic-on, .sv-basic-chat) {
+  gap: 0;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > :is(.sv-field, .sv-switch-row, .sv-stack),
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-basic-on, .sv-sub-body) > .sv-switch-row {
+  width: auto;
+  padding: 11px 0;
+  /* Fainter and dashed, so a line between two settings never reads as a section's own line. */
+  border-bottom: 1px dashed color-mix(in srgb, var(--sv-line) 62%, transparent);
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-switch-row {
+  align-items: center;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 320px);
+  align-items: center;
+  gap: 2px 24px;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > .sv-label-line {
+  grid-column: 1;
+  grid-row: 1;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > .sv-hint {
+  grid-column: 1;
+  grid-row: 2;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > :not(.sv-label-line, .sv-hint) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-sec {
+  padding-top: 22px;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-group-body > .sv-sub-sec:first-child {
+  padding-top: 6px;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-sec > .sv-sub-body {
+  padding-top: 4px;
+}
+/* Whatever is not a setting line (a note, a list, a row of buttons, a block of its own) keeps
+   some air above and below it. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-stack-col, .sv-basic-on, .sv-basic-chat) > :not(.sv-row, .sv-switch-row, .sv-sub-sec, .sv-stack-col, .sv-toggle-group, .sv-sub-block, .sv-basic-on, .sv-basic-chat, .sv-state-block, [hidden]) {
+  margin-block: 12px !important;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > :first-child:not(.sv-row, .sv-switch-row) {
+  margin-top: 0 !important;
+}
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > :last-child:not(.sv-row, .sv-switch-row) {
+  margin-bottom: 0 !important;
+}
+/* The last line of a group or a section needs no line under it. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-sub-block) > .sv-row:last-child > :last-child,
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > .sv-switch-row:last-child {
+  border-bottom: 0;
+}
+@media (max-width: 640px) {
+  #sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+}
+/* A setting right above a section's heading: the heading's own line is enough. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row:has(+ .sv-sub-sec) > :last-child,
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-switch-row:has(+ :is(.sv-sub-sec, .sv-basic-on)) {
+  border-bottom: 0;
+}
+/* Nothing shows under it, or a section's heading comes next (client/ui.js: tidySettingLines). */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-line-end.sv-line-end {
+  border-bottom: 0;
+}
+/* The model (whichever engine's shows) is the last line before the engine's first heading. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row.sv-engine-main > .sv-engine-section {
+  border-bottom: 0;
+}
+/* A note box right under a section's heading keeps a little air from it. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-body > .sv-notice:first-child {
+  margin-top: 8px !important;
+}
+/* 봇카드 공통 설정 → 스마트폰 is laid out the same way (one setting a line); what a switch opens
+   under it keeps a little air. */
+#sv-settings-tab .sv-cast-phone .sv-sub-body {
+  display: flex;
+  flex-direction: column;
+}
+/* 선연락 사용 아래의 안내: its shortcut sits at the right end. */
+#sv-outreach-card-note {
+  /* What must be known before anyone reaches out: in the extension's own colour, its words
+     level with the button. */
+  align-items: center;
+  background: var(--sv-brand-soft);
+  box-shadow: inset 0 0 0 1px var(--sv-brand-line);
+  color: var(--sv-fg);
+}
+#sv-outreach-card-note > i {
+  margin-top: 0;
+  color: var(--sv-brand);
+}
+#sv-outreach-card-note > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#sv-outreach-card-note > .sv-btn {
+  flex: none;
+}
+/* A group's name stays on one line; on a narrow screen the request count takes the place of
+   the quieter word beside it. */
+.sv-group-title > .sv-group-name {
+  flex: none;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .sv-group-title > .sv-scope:has(+ .sv-cost) {
+    display: none;
+  }
+}
+/* 연결 확인 sits right under the key, without a gap of its own on top. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-body > .sv-engine-check {
+  margin-top: 0 !important;
+}
+/* 세 방식 자세히 비교: right under the mode's note, lightly in the brand colour. */
+#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-stack-col > .sv-read-actions {
+  margin-top: 0 !important;
+}
+#sv-outreach-compare {
+  border-color: var(--sv-brand-line);
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+#sv-outreach-compare:hover:not(:disabled) {
+  background: var(--sv-brand-soft2);
+}
+/* What a feature costs in AI requests: a small pill after its name. */
+.sv-cost {
+  gap: 5px;
+  font-weight: 600;
+}
+.sv-cost > i {
+  font-size: 0.82em;
+  opacity: 0.75;
+}
+/* A small heading over a few settings inside a block. */
+#sv-panel .sv-mini-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 2px !important;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+  font-weight: 700;
+}
+/* The bot card's phone settings: a section of its own under the card's other settings. */
+.sv-cast-phone > .sv-sub-body {
+  gap: 14px;
+}
+/* What hangs on a switch above it: set in a little, with a line down its side. */
+#sv-panel .sv-toggle-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+#sv-panel .sv-sub-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: 6px;
+  padding-left: 14px;
+  border-left: 2px solid color-mix(in srgb, var(--SmartThemeBodyColor, currentColor) 18%, transparent);
+}
+#sv-panel .sv-range-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#sv-panel .sv-range-pair input {
+  width: 72px;
+  min-width: 0;
+}
+/* A time of day needs room for 오전/오후 and its clock mark. */
+#sv-panel .sv-range-pair input[type="time"] {
+  width: 132px;
+}
+
+/* 응답 멈추기: the send button while their answer is being written. */
+#sv-smartphone .sv-msg-compose button.sv-msg-stop i {
+  font-size: 0.8em;
+}
+
+/* 송금·선물을 받았을 때: the same card, with a check on its picture. */
+.sv-card-received > .sv-card-art {
+  position: relative;
+}
+.sv-card-got {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2aa37f;
+  color: #fff;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+[data-card="gift"] .sv-card-got {
+  background: #e36a93;
+}
+
+/* 단체방의 랜덤 송금·선물: the choice in the tray, and who got what on the card. */
+#sv-smartphone .sv-card-random {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ph-muted);
+  cursor: pointer;
+}
+#sv-smartphone .sv-card-random input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2aa37f;
+}
+.sv-card-shares {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 12px 10px;
+  list-style: none;
+  font-size: 12.5px;
+}
+.sv-card-shares li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sv-card-shares b {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sv-card-winner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 12.5px;
+}
+.sv-card-winner i {
+  color: #e36a93;
+}
+.sv-card-winner b {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+/* A card's words in Korean, under the original. */
+.sv-card-words > .sv-card-translation {
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--ph-line);
+  color: var(--ph-muted);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+/* 송금: the currency in a small list beside the amount. */
+#sv-smartphone .sv-card-amount {
+  display: flex;
+  gap: 6px;
+}
+#sv-smartphone .sv-card-amount > select {
+  flex: none;
+  width: auto;
+  max-width: 46%;
+  height: 38px;
+  margin: 0;
+  border-radius: 10px;
+  font-size: 14px;
+}
+#sv-smartphone .sv-card-amount > input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The phone's own checkbox and drop-down list: drawn here, so a 실리태번 theme's shapes (stars,
+   pills, its own arrows) stay out of the phone. The switches (.sv-ph-toggle) have their own. */
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *) {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  display: inline-block !important;
+  flex: none !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1.5px solid var(--ph-faint) !important;
+  border-radius: 6px !important;
+  background: var(--ph-surface) none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  clip-path: none !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+  transform: none !important;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::before,
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::after {
+  content: none !important;
+}
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):checked {
+  border-color: var(--ph-blue) !important;
+  background: var(--ph-blue)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E")
+    50% 50% / 13px 13px no-repeat !important;
+}
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):focus-visible {
+  outline: 2px solid var(--ph-blue) !important;
+  outline-offset: 2px !important;
+}
+#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#sv-smartphone select {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  margin: 0 !important;
+  padding: 0 30px 0 12px !important;
+  border: 1px solid var(--ph-line) !important;
+  border-radius: 10px !important;
+  outline: none;
+  background: var(--ph-bg)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%238a94a3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E")
+    right 10px center / 12px 12px no-repeat !important;
+  box-shadow: none !important;
+  color: var(--ph-fg) !important;
+  font: 14px/1.3 var(--sv-font) !important;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+#sv-smartphone select option {
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+}
+#sv-smartphone select:focus-visible {
+  outline: 2px solid var(--ph-blue) !important;
+  outline-offset: 1px !important;
+}
+#sv-smartphone select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 프롬프트 직접 수정: which wording is shown, with a dot on the ones rewritten. */
+.sv-prompt-edit[hidden] {
+  display: none;
+}
+.sv-prompt-pick .sv-prompt-mine > span::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--sv-brand);
+  vertical-align: middle;
+}
+
+/* ----- 연락 방식 비교 ----- */
+#sv-compare-dialog.sv-dialog {
+  width: min(940px, calc(100vw - 32px));
+  overflow: hidden;
+}
+#sv-compare-dialog.sv-dialog > form {
+  max-height: calc(100vh - 50px);
+  max-height: calc(100dvh - 50px);
+}
+.sv-compare {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--sv-fs-sm);
+  line-height: 1.55;
+}
+.sv-compare h4 {
+  margin: 0 0 10px !important;
+  color: var(--sv-fg);
+  font-size: var(--sv-fs) !important;
+  font-weight: 700 !important;
+}
+.sv-compare h5 {
+  margin: 16px 0 8px !important;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm) !important;
+  font-weight: 700 !important;
+}
+.sv-compare h5 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sv-compare-way {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--sv-brand-soft2);
+  color: var(--sv-brand-text);
+  font-size: var(--sv-fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sv-compare h4 + h5 {
+  margin-top: 0 !important;
+}
+.sv-compare ul,
+.sv-compare ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sv-compare-ways {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.sv-way {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-group);
+  background: var(--sv-soft);
+}
+.sv-way > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sv-way > header > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sv-way > header strong {
+  font-size: var(--sv-fs);
+}
+.sv-way > header small {
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-way-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-way-steps {
+  display: grid;
+  gap: 6px;
+  counter-reset: sv-way;
+}
+.sv-way-steps > li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 3px 8px;
+  counter-increment: sv-way;
+}
+/* Under each step: whether it costs an AI request. */
+.sv-way-steps > li > em {
+  grid-column: 2;
+  justify-self: start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+.sv-way-ai {
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
+}
+.sv-way-free {
+  background: var(--sv-soft2);
+  color: var(--sv-muted);
+}
+.sv-way-steps > li::before {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--sv-soft3);
+  color: var(--sv-fg);
+  font-size: 11px;
+  font-weight: 700;
+  content: counter(sv-way);
+}
+.sv-way-part {
+  display: grid;
+  gap: 5px;
+}
+.sv-way-part > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--sv-fs-xs);
+}
+.sv-way-good > b {
+  color: var(--sv-ok-text);
+}
+.sv-way-bad > b {
+  color: var(--sv-warn-text);
+}
+.sv-way-part ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 12px;
+  color: var(--sv-muted);
+}
+.sv-way-part li {
+  position: relative;
+}
+.sv-way-part li::before {
+  position: absolute;
+  top: 0.62em;
+  left: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+.sv-way-fit {
+  display: flex;
+  gap: 8px;
+  margin: auto 0 0 !important;
+  padding: 9px 11px;
+  border-radius: var(--sv-r-control);
+  background: var(--sv-brand-soft);
+  color: var(--sv-fg);
+  font-size: var(--sv-fs-xs);
+}
+.sv-way-fit > i {
+  flex: none;
+  margin-top: 0.25em;
+  color: var(--sv-brand-text);
+}
+.sv-compare-table {
+  overflow-x: auto;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+}
+.sv-compare-table:focus-visible {
+  outline: 2px solid var(--sv-brand-line);
+  outline-offset: 2px;
+}
+.sv-compare-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sv-fs-xs);
+}
+.sv-compare-table :is(th, td) {
+  padding: 8px 12px;
+  border-top: 1px solid var(--sv-line);
+  text-align: left;
+  white-space: nowrap;
+}
+.sv-compare-table thead th {
+  border-top: 0;
+  background: var(--sv-soft);
+  color: var(--sv-muted);
+  font-weight: 700;
+}
+.sv-compare-table tbody th {
+  color: var(--sv-muted);
+  font-weight: 600;
+}
+.sv-compare-note {
+  margin: 8px 0 0 !important;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-xs);
+}
+.sv-compare-pick {
+  display: grid;
+  gap: 7px;
+}
+.sv-compare-pick > li {
+  padding: 9px 12px;
+  border-radius: var(--sv-r-control);
+  background: var(--sv-soft);
+}
+.sv-compare-pick b {
+  color: var(--sv-fg);
+}
+@media (max-width: 760px) {
+  .sv-compare-ways {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  /* The tables fit the screen: cells wrap instead of running off to the side. */
+  .sv-compare-table :is(th, td) {
+    padding: 7px 8px;
+    white-space: normal;
+  }
+  #sv-compare-dialog.sv-dialog {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+  #sv-compare-dialog.sv-dialog > form {
+    height: 100%;
+    max-height: none;
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ----- 분석 보기: a message's lines with their analysis ----- */
+#sv-analysis-dialog.sv-dialog {
+  width: min(720px, calc(100vw - 32px));
+  overflow: hidden;
+}
+#sv-analysis-dialog.sv-dialog > form {
+  max-height: calc(100vh - 50px);
+  max-height: calc(100dvh - 50px);
+}
+.sv-ma-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sv-ma-all > small {
+  color: var(--sv-brand-text);
+  font-weight: 700;
+}
+.sv-ma-list {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-r-control);
+  list-style: none;
+}
+.sv-ma-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  border-top: 1px solid var(--sv-line);
+}
+.sv-ma-line:first-child {
+  border-top: 0;
+}
+.sv-ma-line > input {
+  margin-top: 3px;
+}
+.sv-ma-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.sv-ma-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--sv-fs-sm);
+}
+.sv-ma-script {
+  margin: 0 !important;
+  color: var(--sv-muted);
+  font-size: var(--sv-fs-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.sv-ma-script > em {
+  color: var(--sv-brand-text);
+  font-style: normal;
+  font-weight: 600;
+}
+.sv-ma-tools {
+  display: flex;
+  gap: 2px;
+}
+.sv-ma-tools > .sv-icon-btn {
+  width: 32px;
+  height: 32px;
+}
+#sv-analysis-dialog .sv-dialog-actions {
+  margin-top: auto;
+}
+#sv-analysis-dialog [data-ma-again] > .sv-cost {
+  margin-left: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+}
+@media (max-width: 600px) {
+  #sv-analysis-dialog.sv-dialog {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+  #sv-analysis-dialog.sv-dialog > form {
+    height: 100%;
+    max-height: none;
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .sv-ma-line {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .sv-ma-tools {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
 }

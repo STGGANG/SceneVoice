@@ -14,14 +14,22 @@ import {
   wholeChoice,
 } from "../shared/backup-scope.js";
 
-const SHORT = { people: "인물", records: "생성 기록", phone: "통화·문자", states: "상태" };
+const SHORT = {
+  people: "인물",
+  records: "채팅 대사",
+  phone: "스마트폰",
+  states: "상태",
+};
 
 export const backup = {
   backupScopeName(scope, settings) {
     if (scope === GLOBAL) return "글로벌 인물";
     const name = this.cardInfo?.(scope)?.name;
     if (name && name !== scope) return name;
-    return settings?.character_voices?.[scope]?.name || scope.replace(/^character:/, "").replace(/\.[a-z]+$/i, "");
+    return (
+      settings?.character_voices?.[scope]?.name ||
+      scope.replace(/^character:/, "").replace(/\.[a-z]+$/i, "")
+    );
   },
 
   /** Bot cards (with 공통 설정 and 글로벌 인물) and kinds to choose, all chosen at first. */
@@ -29,11 +37,23 @@ export const backup = {
     const option = (name, value, label, hint) =>
       `<label class="sv-pick-option"><input type="checkbox" name="${name}" value="${escapeHtml(value)}" checked><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></label>`;
     const counts = (scope) =>
-      BACKUP_ITEMS.map(([key]) => (summary.get(scope)?.[key] ? `${SHORT[key]} ${summary.get(scope)[key]}` : ""))
+      // Only the kinds on offer (a file saved without its people still says whose records they are).
+      BACKUP_ITEMS.filter(([key]) => items.includes(key))
+        .map(([key]) =>
+          summary.get(scope)?.[key]
+            ? `${SHORT[key]} ${summary.get(scope)[key]}`
+            : "",
+        )
         .filter(Boolean)
         .join(" · ") || "비어 있음";
-    const named = scopes.map((scope) => [scope, this.backupScopeName(scope, settings)]);
-    named.sort(([a, x], [b, y]) => (a === GLOBAL) - (b === GLOBAL) || x.localeCompare(y, "ko"));
+    const named = scopes.map((scope) => [
+      scope,
+      this.backupScopeName(scope, settings),
+    ]);
+    named.sort(
+      ([a, x], [b, y]) =>
+        (a === GLOBAL) - (b === GLOBAL) || x.localeCompare(y, "ko"),
+    );
     return `<fieldset class="sv-pick">
         <legend><span>범위</span><button type="button" class="sv-btn sv-btn-sm sv-btn-ghost" data-pick-all>모두 해제</button></legend>
         <div class="sv-pick-list">
@@ -43,14 +63,19 @@ export const backup = {
       </fieldset>
       <fieldset class="sv-pick">
         <legend><span>항목</span><small>고른 봇카드마다</small></legend>
-        <div class="sv-pick-items">${BACKUP_ITEMS.filter(([key]) => items.includes(key))
+        <div class="sv-pick-items">${BACKUP_ITEMS.filter(([key]) =>
+          items.includes(key),
+        )
           .map(([key, label, hint]) => option("item", key, label, hint))
           .join("")}</div>
       </fieldset>`;
   },
 
   backupPickChoice(form) {
-    const values = (name) => [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value);
+    const values = (name) =>
+      [...form.querySelectorAll(`input[name="${name}"]:checked`)].map(
+        (input) => input.value,
+      );
     const scopes = values("scope");
     return {
       common: scopes.includes(COMMON),
@@ -64,9 +89,14 @@ export const backup = {
     const all = form.querySelector("[data-pick-all]");
     const boxes = () => [...form.querySelectorAll('input[name="scope"]')];
     const refresh = () => {
-      all.textContent = boxes().every((box) => box.checked) ? "모두 해제" : "모두 선택";
+      all.textContent = boxes().every((box) => box.checked)
+        ? "모두 해제"
+        : "모두 선택";
       const choice = this.backupPickChoice(form);
-      onChange(choice, !choice.common && !(choice.scopes.length && choice.items.length));
+      onChange(
+        choice,
+        !choice.common && !(choice.scopes.length && choice.items.length),
+      );
     };
     all.addEventListener("click", () => {
       const on = !boxes().every((box) => box.checked);
@@ -113,7 +143,7 @@ export const backup = {
       <header class="sv-dialog-head">
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-clock-rotate-left"></i></span>
         <div><h3>백업 복원</h3><small class="sv-file-name"><i class="fa-solid fa-file-code" aria-hidden="true"></i>${escapeHtml(file.name)}</small></div>
-        ${infoTip("복원하기 전 목록은 실리태번의 scenevoice_*_previous.json에 한 개씩 보관됩니다. 미리보기를 연 뒤 다른 기기에서 목록이 바뀌면 파일을 다시 골라야 합니다.\n여러 봇카드가 같이 쓰는 인물과 그 기록은 ‘글로벌 인물’에 있습니다.", "백업 복원 설명")}
+        ${infoTip("복원하기 직전의 목록은 실리태번의 scenevoice_*_previous.json에 한 개씩 보관됩니다.\n미리보기를 연 뒤 다른 기기에서 목록이 바뀌면 파일을 다시 골라야 합니다.\n여러 봇카드가 같이 쓰는 인물과 그 기록은 ‘글로벌 인물’에 있습니다.", "백업 복원 설명")}
       </header>
       ${this.backupPickHtml({ ...preview.contents, summary: backupSummary(data), settings: data.settings })}
       ${zipped || lost ? `<dl class="sv-stats">${zipped ? stat("zip에서 되살릴 음성", `${fromZip.length}개`) : ""}${stat("없는 음성 파일", `${lost}개`, lost > 0)}</dl>` : ""}
@@ -145,16 +175,30 @@ export const backup = {
           // Only the voices the chosen records use come out of the zip.
           const needed = wholeChoice(choice, preview.contents)
             ? null
-            : new Set(audioHolders(pickBackup(data, choice)).map((row) => row.audio_filename));
+            : new Set(
+                audioHolders(pickBackup(data, choice)).map(
+                  (row) => row.audio_filename,
+                ),
+              );
           const staged = fromZip.filter((name) => !needed || needed.has(name));
           if (staged.length) {
             const store = this.transport.local.store;
-            for (const name of staged) await store.stageAudio(name, audio.get(name));
+            for (const name of staged)
+              await store.stageAudio(name, audio.get(name));
             const restored = new Set(staged);
-            preview.missing = preview.missing.filter((name) => !restored.has(name));
+            preview.missing = preview.missing.filter(
+              (name) => !restored.has(name),
+            );
           }
+          // The open settings form still holds what was there before: it must not be saved
+          // back over what is restored (openPanel saves a panel that is still open).
+          clearTimeout(this.settingsSaveTimer);
+          this.settingsSaveTimer = null;
+          this.settingsDirty = false;
           await this.transport.local.store.restoreCatalog(preview, choice);
           this.resetChat();
+          document.getElementById("sv-overlay")?.remove();
+          this.voiceDraft = null;
           await this.loadConfig();
           this.removeDecorations();
           this.scheduleScan();

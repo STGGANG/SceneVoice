@@ -1,7 +1,7 @@
 // Shared runtime: chat identity and fingerprints, cancelling work when the chat changes, requests
 // to the service, settings from other devices, and disposal.
 import { contentKey } from "../shared/hash.js";
-import { withoutVoiceTags } from "./common.js";
+import { withoutVoiceTags, stOf } from "./common.js";
 export const runtime = {
   chatController: null,
   lifetimeController: null,
@@ -12,7 +12,7 @@ export const runtime = {
   // The hashes below are asked for by every line button on every pass; the SHA-256 is plain
   // JavaScript (it must work on plain-HTTP pages), so results are kept until their input changes.
   currentChatId() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const character = this.getCurrentCharacterProfile().key;
     const input = `${context.chatId || ""}\u0000${character}`;
     if (this.chatIdCache?.input !== input)
@@ -23,23 +23,33 @@ export const runtime = {
     return this.chatIdCache.value;
   },
   anchorFingerprint(index) {
-    const message = window.SillyTavern?.getContext?.()?.chat?.[Number(index)];
+    const message = stOf(this)?.chat?.[Number(index)];
     if (!message) return "";
     this.printCache ||= new WeakMap();
     const cached = this.printCache.get(message);
-    if (cached?.mes === message.mes && cached.swipe === message.swipe_id) return cached.value;
+    if (cached?.mes === message.mes && cached.swipe === message.swipe_id)
+      return cached.value;
     // MultiCast's 🚀 tags leaving the message don't make it another message.
-    const value = contentKey({ text: withoutVoiceTags(message.mes), swipe: message.swipe_id });
-    this.printCache.set(message, { mes: message.mes, swipe: message.swipe_id, value });
+    const value = contentKey({
+      text: withoutVoiceTags(message.mes),
+      swipe: message.swipe_id,
+    });
+    this.printCache.set(message, {
+      mes: message.mes,
+      swipe: message.swipe_id,
+      value,
+    });
     return value;
   },
   /** Where a call or text was made: the chat message it follows and the swipe then showing. */
   anchorStamp(index) {
-    const message = window.SillyTavern?.getContext?.()?.chat?.[Number(index)];
+    const message = stOf(this)?.chat?.[Number(index)];
     const tag = this.anchorTag(index);
     return {
       anchor_fingerprint: this.anchorFingerprint(index),
-      ...(typeof message?.swipe_id === "number" ? { anchor_swipe: message.swipe_id } : {}),
+      ...(typeof message?.swipe_id === "number"
+        ? { anchor_swipe: message.swipe_id }
+        : {}),
       ...(tag ? { anchor_tag: tag } : {}),
     };
   },
@@ -50,7 +60,7 @@ export const runtime = {
    * message takes that place.
    */
   anchorTag(index) {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const message = context.chat?.[Number(index)];
     if (!message) return "";
     if (!message.extra || typeof message.extra !== "object") message.extra = {};
@@ -60,7 +70,8 @@ export const runtime = {
       message.extra.scenevoice_anchor = tag;
       // Into the swipe's own record too, so it is there when this swipe is shown again.
       const info = message.swipe_info?.[message.swipe_id];
-      if (info && typeof info === "object") (info.extra ||= {}).scenevoice_anchor = tag;
+      if (info && typeof info === "object")
+        (info.extra ||= {}).scenevoice_anchor = tag;
       Promise.resolve(context.saveChat?.()).catch(() => undefined);
     }
     return String(tag);
@@ -78,10 +89,15 @@ export const runtime = {
   anchorPlace(record) {
     const match = String(record?.anchor_message_id ?? "").match(/^\d+$/);
     if (!match) return "here";
-    const message = window.SillyTavern?.getContext?.()?.chat?.[Number(match[0])];
+    const message = stOf(this)?.chat?.[Number(match[0])];
     // The message it was made at is gone: the chat went back to before it. One made in a chat
     // with no messages yet (kept at message 0, with nothing to mark) stays.
-    if (!message) return match[0] === "0" && !record.anchor_tag && !record.anchor_fingerprint ? "here" : "gone";
+    if (!message)
+      return match[0] === "0" &&
+        !record.anchor_tag &&
+        !record.anchor_fingerprint
+        ? "here"
+        : "gone";
     const made = this.anchorSwipeOf(record);
     const current = typeof message.swipe_id === "number" ? message.swipe_id : 0;
     if (made !== null && made !== current) {
@@ -92,7 +108,11 @@ export const runtime = {
       return record.anchor_tag && tag !== record.anchor_tag ? "gone" : "swipe";
     }
     // Another message has taken that place since (the chat went back and on again).
-    if (record.anchor_tag && message.extra?.scenevoice_anchor !== record.anchor_tag) return "gone";
+    if (
+      record.anchor_tag &&
+      message.extra?.scenevoice_anchor !== record.anchor_tag
+    )
+      return "gone";
     return "here";
   },
   /** A call or text of what the chat shows now (see anchorPlace). */
@@ -105,7 +125,7 @@ export const runtime = {
     return url;
   },
   captureChat() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const key = contentKey({
       chatId: context.chatId || "",
       character: context.characterId,
@@ -128,6 +148,34 @@ export const runtime = {
         "채팅이 바뀌어 작업을 취소했습니다.",
         "AbortError",
       );
+  },
+  /** CHAT_CHANGED for the chat that was already open (실리태번 drew it again). */
+  sameChatReloaded() {
+    const context = stOf(this) || {};
+    const key = contentKey({
+      chatId: context.chatId || "",
+      character: context.characterId,
+      group: context.groupId,
+    });
+    return (
+      Boolean(this.chatKey) &&
+      this.chatKey === key &&
+      Array.isArray(context.chat) &&
+      context.chat.length > 0
+    );
+  },
+  /** The chat's messages were drawn again: what hung on the old drawing is let go of. */
+  redrawnChat() {
+    this.clearMessageJobs?.();
+    this.lineStatePromise = null;
+    this.lineState = null;
+    document.getElementById("sv-line-editor")?.remove();
+    document.querySelectorAll(".sv-play-btn").forEach((button) => {
+      button.lineSignature = "";
+    });
+    this.queue = Promise.resolve();
+    this.analysisCache.clear();
+    this.statusLineCache?.clear();
   },
   resetChat(key = "") {
     this.chatController?.abort(
@@ -167,7 +215,8 @@ export const runtime = {
     this.radioShowOpen = null;
     this.radioStopAt = null;
     this.unheardMemos?.clear();
-    for (const timer of this.voicemailAnswers?.values() || []) clearTimeout(timer);
+    for (const timer of this.voicemailAnswers?.values() || [])
+      clearTimeout(timer);
     this.voicemailAnswers?.clear();
     // The last 연락 판단 belonged to the message shown before (another swipe, another chat).
     this.lastContactDecisions = [];
@@ -258,6 +307,24 @@ export const runtime = {
   request(path, options = {}, timeout = 10000) {
     return this.fetch(path, options, timeout);
   },
+  /**
+   * Something made in the background (a memo, a call between two people) that failed is tried
+   * once more after a short wait; failing again it is let go as before.
+   */
+  async twice(task) {
+    const operation = this.captureChat();
+    try {
+      return await task();
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      console.warn("[SceneVoice] 실패해서 한 번 더 시도합니다", error);
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.retryWait ?? 45000),
+      );
+      this.assertChat(operation);
+      return task();
+    }
+  },
   run(task) {
     Promise.resolve()
       .then(task)
@@ -341,7 +408,8 @@ export const runtime = {
       this.lineStatePromise = null;
       const state = await this.loadLineState();
       const same = (value) => JSON.stringify([value?.edits, value?.audio]);
-      if (!shownLines || same(shownLines) !== same(state)) await this.hydrateLines();
+      if (!shownLines || same(shownLines) !== same(state))
+        await this.hydrateLines();
       const tab = document.getElementById("sv-panel")?.dataset.tab;
       if (
         tab === "history" &&
@@ -358,6 +426,7 @@ export const runtime = {
     this.castOrderCleanup?.();
     this.castOrderCleanup = null;
     clearInterval(this.syncTimer);
+    clearInterval(this.timedOutreachTimer);
     clearInterval(this.phoneClockTimer);
     this.resetChat();
     this.lifetimeController?.abort();

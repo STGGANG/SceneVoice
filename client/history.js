@@ -10,7 +10,7 @@ export const history = {
     const names = new Map(
       items.map((item) => [
         item.speaker_key || "",
-        item.speaker_name || "기본 화자",
+        item.speaker_name || "기본 목소리",
       ]),
     );
     const select = document.createElement("select");
@@ -40,7 +40,11 @@ export const history = {
     const meta = [
       tags.map((tag) => `[${tag}]`).join(""),
       LANGUAGE_NAMES[item.language] || item.language || "",
-      item.engine === "elevenlabs" ? "ElevenLabs" : item.engine === "fish" ? "Fish" : item.engine || "",
+      item.engine === "elevenlabs"
+        ? "ElevenLabs"
+        : item.engine === "fish"
+          ? "Fish"
+          : item.engine || "",
     ]
       .filter(Boolean)
       .map(escapeHtml)
@@ -55,7 +59,7 @@ export const history = {
       : `<button type="button" class="sv-btn sv-btn-sm sv-btn-ghost-danger sv-history-delete" data-id="${escapeHtml(item.id)}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>삭제</span></button>`;
     return `<article class="sv-history-item" data-speaker="${escapeHtml(item.speaker_key || "")}">
         <header class="sv-history-meta">
-          <strong class="sv-history-speaker-name">${escapeHtml(item.speaker_name || "기본 화자")}</strong>
+          <strong class="sv-history-speaker-name">${escapeHtml(item.speaker_name || "기본 목소리")}</strong>
           <span class="sv-badge ${thought ? "sv-badge-thought" : "sv-badge-dialogue"}">${thought ? "생각" : "대사"}</span>
           ${item.mode === "phone" ? '<span class="sv-badge sv-badge-phone"><i class="fa-solid fa-phone" aria-hidden="true"></i>전화</span>' : item.mode === "voice_message" ? '<span class="sv-badge sv-badge-phone"><i class="fa-solid fa-comment" aria-hidden="true"></i>문자</span>' : ""}
           <span class="sv-history-tags">${meta}</span>
@@ -129,7 +133,7 @@ export const history = {
         <label class="sv-date-field"><span>시작일</span><input name="from" type="date"></label>
         <span class="sv-date-sep" aria-hidden="true">~</span>
         <label class="sv-date-field"><span>종료일</span><input name="to" type="date"></label>
-        ${infoTip("전체 생성 기록에서 대사·화자 이름·연기 태그를 찾습니다. 날짜는 UTC 기준이며, 결과는 50개씩 보여 줍니다.", "기록 검색 설명")}
+        ${infoTip("전체 생성 기록에서 대사·화자 이름·연기 태그를 찾습니다.\n날짜는 UTC 기준이며, 결과는 50개씩 보여 줍니다.", "기록 검색 설명")}
         <span class="sv-spacer"></span>
         ${filters.speaker_key ? '<button type="button" class="sv-btn sv-btn-ghost-danger" data-history-clear-speaker title="고른 화자의 음성 기록을 검색 조건과 상관없이 모두 지웁니다"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>이 화자 모두 지우기</span></button>' : ""}
         <button type="button" class="sv-btn sv-search-reset" title="검색어·화자·날짜 조건을 비웁니다. 기록은 지우지 않습니다." ${filters.q || filters.speaker_key || filters.mode || filters.from || filters.to ? "" : "disabled"}><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>검색 초기화</span></button>
@@ -154,10 +158,19 @@ export const history = {
     });
     form.elements.speaker_key.addEventListener("change", search);
     form.elements.mode.addEventListener("change", search);
-    form.querySelector("[data-history-clear-speaker]")?.addEventListener("click", () => {
-      const speaker = (data.speakers || []).find((x) => x.key === filters.speaker_key);
-      this.run(() => this.deleteSpeakerHistory(filters.speaker_key, speaker?.name || "이 화자"));
-    });
+    form
+      .querySelector("[data-history-clear-speaker]")
+      ?.addEventListener("click", () => {
+        const speaker = (data.speakers || []).find(
+          (x) => x.key === filters.speaker_key,
+        );
+        this.run(() =>
+          this.deleteSpeakerHistory(
+            filters.speaker_key,
+            speaker?.name || "이 화자",
+          ),
+        );
+      });
     form.querySelector(".sv-search-reset").onclick = () => {
       this.historyFilters = null;
       this.run(() => this.renderHistory());
@@ -202,21 +215,29 @@ export const history = {
     if (
       !key ||
       !confirm(
-        `‘${name}’의 음성 기록을 모두 지우시겠습니까?\n통화·문자에 쓰인 이 화자의 목소리도 함께 지워집니다(다시 만들 수 있습니다). 보관함에 넣은 음성은 남습니다.`,
+        `‘${name}’의 음성 기록을 모두 지우시겠습니까?\n전화·문자에 쓰인 이 화자의 목소리도 함께 지워집니다(다시 만들 수 있습니다). 보관함에 넣은 음성은 남습니다.`,
       )
     )
       return;
-    const response = await this.fetch(this.apiUrl("/api/plugins/scenevoice/history/speaker"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ speaker_key: key }),
-    });
+    const response = await this.fetch(
+      this.apiUrl("/api/plugins/scenevoice/history/speaker"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speaker_key: key }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `삭제 실패 (${response.status})`);
+    if (!response.ok)
+      throw new Error(data.detail || `삭제 실패 (${response.status})`);
     this.stopPlayback();
     this.lineStatePromise = null;
     this.invalidateGeneratedButtons();
-    this.historyFilters = { ...this.historyFilters, speaker_key: "", offset: 0 };
+    this.historyFilters = {
+      ...this.historyFilters,
+      speaker_key: "",
+      offset: 0,
+    };
     this.notify(`‘${name}’의 음성 ${data.removed}개를 지웠습니다.`, "info");
     await this.renderHistory();
   },
@@ -243,7 +264,8 @@ export const history = {
   async renderFavorites() {
     const container = document.getElementById("sv-favorites-tab");
     if (!container) return;
-    container.innerHTML = '<div class="sv-loading-line">보관함을 불러오는 중…</div>';
+    container.innerHTML =
+      '<div class="sv-loading-line">보관함을 불러오는 중…</div>';
     try {
       const response = await this.fetch(
         this.apiUrl("/api/plugins/scenevoice/favorites?limit=1000"),
@@ -254,7 +276,7 @@ export const history = {
       this.favoritesPath = data.path || this.favoritesPath;
       const toolbar = `<div class="sv-list-toolbar">
           <span class="sv-hint">영구 보관한 음성</span>
-          ${infoTip("보관함 음성은 별도 사본으로 저장되어, 오래된 음성을 자동으로 지울 때도 남습니다. 전체 기록에서 ‘영구 보관’을 눌러 추가합니다. 저장 위치는 설정 → 저장 공간에 있습니다.", "보관함 설명")}
+          ${infoTip("보관함 음성은 별도 사본으로 저장되어, 오래된 음성을 자동으로 지울 때도 남습니다.\n전체 기록에서 ‘영구 보관’을 눌러 추가합니다.\n저장 위치는 설정 → 저장 공간에 있습니다.", "보관함 설명")}
         </div>`;
       if (!data.items?.length) {
         container.innerHTML = `${toolbar}${emptyHtml("star", "아직 영구 보관한 음성이 없습니다", "기록 탭에서 마음에 드는 음성의 ‘영구 보관’을 눌러 보십시오.")}`;
@@ -274,7 +296,10 @@ export const history = {
   },
 
   async deleteFavorite(favoriteId) {
-    if (!favoriteId || !confirm("영구 보관한 음성과 메타데이터를 삭제하시겠습니까?"))
+    if (
+      !favoriteId ||
+      !confirm("영구 보관한 음성과 메타데이터를 삭제하시겠습니까?")
+    )
       return;
     try {
       const response = await this.fetch(
@@ -292,22 +317,25 @@ export const history = {
 
   /** After the limits were lowered: what is over them goes now, quietly unless anything went. */
   async pruneToLimits() {
-    const response = await this.request("/api/plugins/scenevoice/cache/cleanup", { method: "POST" });
+    const response = await this.request(
+      "/api/plugins/scenevoice/cache/cleanup",
+      { method: "POST" },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `정리 실패 (${response.status})`);
+    if (!response.ok)
+      throw new Error(data.detail || `정리 실패 (${response.status})`);
     if (!data.removed) return;
     this.lineStatePromise = null;
     this.invalidateGeneratedButtons();
-    this.notify(`바뀐 기준에 맞춰 오래된 음성 ${data.removed}개를 지웠습니다.`, "info");
+    this.notify(
+      `바뀐 기준에 맞춰 오래된 음성 ${data.removed}개를 지웠습니다.`,
+      "info",
+    );
     this.renderStorageMeter?.().catch(() => undefined);
   },
 
+  /** `clearAll`: every generated voice goes (보관함 stays), asked for in 데이터 초기화. */
   async cleanupCache(clearAll) {
-    if (
-      clearAll &&
-      !confirm("즐겨찾기를 제외한 생성 기록과 캐시 오디오를 모두 삭제하시겠습니까?")
-    )
-      return;
     try {
       const response = await this.fetch(
         this.apiUrl(
@@ -323,10 +351,12 @@ export const history = {
       this.stopPlayback();
       this.lineStatePromise = null;
       this.invalidateGeneratedButtons();
-      const status = document.getElementById("sv-cache-status");
-      if (status)
-        status.textContent = `${data.removed || 0}개 정리 · 현재 ${data.file_count || 0}개 / ${data.size_mb || 0}MB`;
-      this.notify("캐시 정리를 마쳤습니다.", "success");
+      this.notify(
+        clearAll
+          ? `생성 음성 ${data.removed || 0}개를 지웠습니다.`
+          : "캐시 정리를 마쳤습니다.",
+        "success",
+      );
       this.renderStorageMeter?.().catch(() => undefined);
     } catch (error) {
       this.notify(error.message || "캐시를 정리할 수 없습니다.", "error");

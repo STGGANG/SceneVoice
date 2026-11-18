@@ -9,20 +9,127 @@ export function infoTip(text, label = "설명") {
 
 const tipFor = (label, tip) => (tip ? infoTip(tip, `${label} 설명`) : "");
 
-/** `scope`: a quiet word on where the group applies (채팅 대사, 채팅·스마트폰). */
-export function groupHtml({ id, icon, title, tip = "", body, fold = false, badge = "", scope = "" }) {
-  const heading = `<i class="fa-solid fa-${icon} sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">${title}</span>${tipFor(title, tip)}${scope ? `<span class="sv-scope">${scope}</span>` : ""}`;
+/**
+ * `scope`: a quiet word on where the group applies (채팅 대사, 채팅·스마트폰). `extra`: a small mark
+ * after it (what the group costs in requests).
+ */
+const SUB_MARK = /<!--sv-sub (.*?)-->/g;
+/**
+ * A heading inside a group that folds what follows it (up to the next one, or the group's end).
+ * `id` keeps it folded or open on this device; `open: false` starts folded.
+ */
+export function subTitle(
+  id,
+  icon,
+  text,
+  { cls = "", attrs = "", open = true, note = "" } = {},
+) {
+  return `<!--sv-sub ${encodeURIComponent(JSON.stringify({ id, icon, text, cls, attrs, open, note }))}-->`;
+}
+/** Ends the section the last subTitle began: what follows belongs to the group again. */
+export const SUB_END = "<!--sv-sub end-->";
+/** Turns the marks subTitle left in a group's body into folding sections. */
+function foldSubSections(body) {
+  let opened = false;
+  const html = String(body).replace(SUB_MARK, (_, data) => {
+    if (data === "end") {
+      const closing = opened ? "</div></details>" : "";
+      opened = false;
+      return closing;
+    }
+    const { id, icon, text, cls, attrs, open, note } = JSON.parse(
+      decodeURIComponent(data),
+    );
+    const before = opened ? "</div></details>" : "";
+    opened = true;
+    return `${before}<details class="sv-sub-sec ${cls}" id="${id}" ${attrs} ${open ? "open" : ""}><summary class="sv-sub-title"><i class="fa-solid fa-${icon}" aria-hidden="true"></i><span>${text}</span>${note || ""}<i class="fa-solid fa-chevron-down sv-sub-chevron" aria-hidden="true"></i></summary><div class="sv-sub-body">`;
+  });
+  return opened ? `${html}</div></details>` : html;
+}
+
+// A setting line: it carries the dashed line that parts it from the next setting.
+const LINE =
+  ".sv-row > :is(.sv-field, .sv-switch-row, .sv-stack), :is(.sv-group-body, .sv-sub-body) > .sv-switch-row";
+const shown = (element) => getComputedStyle(element).display !== "none";
+/** What a group or section shows, top to bottom: its lines, its sections, and whatever else. */
+function shownBlocks(container, blocks = []) {
+  for (const child of container.children) {
+    if (!shown(child)) continue;
+    if (child.matches(`${LINE}, .sv-sub-sec`)) blocks.push(child);
+    // A row is only its lines: with all of them folded away it shows nothing.
+    else if (
+      child.matches(".sv-row") ||
+      child.querySelector(".sv-row, .sv-switch-row, .sv-sub-sec")
+    )
+      shownBlocks(child, blocks);
+    else blocks.push(child);
+  }
+  return blocks;
+}
+/**
+ * A setting with nothing showing under it (the rest is folded away by a switch) or with a
+ * section's heading next drops its dashed line. Run again whenever what shows changes.
+ */
+export function tidySettingLines(root) {
+  for (const container of root.querySelectorAll(
+    ".sv-pane:not([data-pane='people']) :is(.sv-group-body, .sv-sub-body), .sv-cast-phone > .sv-sub-body",
+  )) {
+    const blocks = shownBlocks(container);
+    blocks.forEach((block, index) => {
+      if (!block.matches(LINE)) return;
+      const next = blocks[index + 1];
+      block.classList.toggle(
+        "sv-line-end",
+        !next || next.matches(".sv-sub-sec"),
+      );
+    });
+  }
+}
+
+export function groupHtml({
+  id,
+  icon,
+  title,
+  tip = "",
+  body: plain,
+  fold = false,
+  open = false,
+  badge = "",
+  scope = "",
+  extra = "",
+}) {
+  const body = foldSubSections(plain);
+  const heading = `<i class="fa-solid fa-${icon} sv-group-icon" aria-hidden="true"></i><span class="sv-group-name">${title}</span>${tipFor(title, tip)}${scope ? `<span class="sv-scope">${scope}</span>` : ""}${extra}`;
   if (fold)
-    return `<details class="sv-group sv-fold" id="${id}"><summary class="sv-group-title">${heading}<span class="sv-spacer"></span>${badge}<i class="fa-solid fa-chevron-down sv-fold-chevron" aria-hidden="true"></i></summary><div class="sv-group-body">${body}</div></details>`;
+    return `<details class="sv-group sv-fold" id="${id}" ${open ? "open" : ""}><summary class="sv-group-title">${heading}<span class="sv-spacer"></span>${badge}<i class="fa-solid fa-chevron-down sv-fold-chevron" aria-hidden="true"></i></summary><div class="sv-group-body">${body}</div></details>`;
   return `<section class="sv-group" id="${id}"><h3 class="sv-group-title">${heading}</h3><div class="sv-group-body">${body}</div></section>`;
 }
 
-export function fieldHtml({ id, label, control, hint = "", tip = "", cls = "", attrs = "" }) {
-  return `<div class="sv-field ${cls}" ${attrs}><div class="sv-label-line"><label for="${id}">${label}</label>${tipFor(label, tip)}</div>${control}${hint ? `<small class="sv-hint">${hint}</small>` : ""}</div>`;
+/** `extra`: a small mark after the label (a badge saying how things stand). */
+export function fieldHtml({
+  id,
+  label,
+  control,
+  hint = "",
+  tip = "",
+  cls = "",
+  attrs = "",
+  extra = "",
+}) {
+  return `<div class="sv-field ${cls}" ${attrs}><div class="sv-label-line"><label for="${id}">${label}</label>${tipFor(label, tip)}${extra}</div>${control}${hint ? `<small class="sv-hint">${hint}</small>` : ""}</div>`;
 }
 
 /** `extra`: a small button after the label (a button inside the label doesn't flip the switch). */
-export function switchHtml({ id, label, hint = "", checked = false, tip = "", cls = "", attrs = "", extra = "" }) {
+export function switchHtml({
+  id,
+  label,
+  hint = "",
+  checked = false,
+  tip = "",
+  cls = "",
+  attrs = "",
+  extra = "",
+}) {
   return `<label class="sv-switch-row ${cls}" for="${id}"><span class="sv-switch-text"><span class="sv-label-line"><span>${label}</span>${tipFor(label, tip)}${extra}</span>${hint ? `<small class="sv-hint">${hint}</small>` : ""}</span><input type="checkbox" class="sv-switch" id="${id}" ${checked ? "checked" : ""} ${attrs}></label>`;
 }
 
@@ -30,13 +137,21 @@ export function switchHtml({ id, label, hint = "", checked = false, tip = "", cl
  * Choices as a list: a row each, with an icon, a title and a line under it, and a round radio.
  * `choices`: [value, icon, title, hint].
  */
-export function choiceListHtml({ name, label, value, choices, tip = "", cls = "" }) {
+export function choiceListHtml({
+  name,
+  label,
+  value,
+  choices,
+  tip = "",
+  cls = "",
+}) {
   const rows = choices
     .map(
-      ([key, icon, title, hint]) => `<label class="sv-choice"><span class="sv-choice-icon" aria-hidden="true"><i class="fa-solid fa-${icon}"></i></span><span class="sv-choice-text"><strong>${title}</strong>${hint ? `<small>${hint}</small>` : ""}</span><input type="radio" name="${name}" value="${key}" ${key === value ? "checked" : ""}></label>`,
+      ([key, icon, title, hint]) =>
+        `<label class="sv-choice"><span class="sv-choice-icon" aria-hidden="true"><i class="fa-solid fa-${icon}"></i></span><span class="sv-choice-text"><strong>${title}</strong>${hint ? `<small>${hint}</small>` : ""}</span><input type="radio" name="${name}" value="${key}" ${key === value ? "checked" : ""}></label>`,
     )
     .join("");
-  return `<div class="sv-field ${cls}"><div class="sv-label-line"><span id="${name}-label">${label}</span>${tipFor(label, tip)}</div><div class="sv-choices" role="radiogroup" aria-labelledby="${name}-label">${rows}</div></div>`;
+  return `<div class="sv-field sv-field-plain ${cls}"><div class="sv-label-line"><span id="${name}-label">${label}</span>${tipFor(label, tip)}</div><div class="sv-choices" role="radiogroup" aria-labelledby="${name}-label">${rows}</div></div>`;
 }
 
 export function rangeHtml({ id, min, max, step, value }) {
@@ -98,15 +213,13 @@ function openTip(trigger) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  if (lines.length > 1) {
-    const list = document.createElement("ul");
-    for (const line of lines) {
-      const item = document.createElement("li");
-      item.textContent = line;
-      list.append(item);
-    }
-    pop.append(list);
-  } else pop.textContent = lines[0] || "";
+  const list = document.createElement("ul");
+  for (const line of lines) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.append(item);
+  }
+  pop.append(list);
   pop.svTrigger = trigger;
   host.append(pop);
   trigger.setAttribute("aria-expanded", "true");
@@ -179,7 +292,10 @@ function paintRange(range) {
   const max = Number(range.max) || 1;
   const value = Number(range.value);
   const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
-  range.style.setProperty("--sv-fill", `${Math.min(100, Math.max(0, percent))}%`);
+  range.style.setProperty(
+    "--sv-fill",
+    `${Math.min(100, Math.max(0, percent))}%`,
+  );
 }
 
 /** The number input keeps the saved value; the slider is a shortcut that mirrors it. */
@@ -207,8 +323,10 @@ export function bindRanges(root) {
 export function bindStateBadges(root) {
   const update = () =>
     root?.querySelectorAll("[data-sv-badge]").forEach((badge) => {
-      const input = document.getElementById(badge.dataset.svBadge);
-      const on = Boolean(input?.checked);
+      // Several switches (ids apart by a space): on when any of them is.
+      const on = badge.dataset.svBadge
+        .split(" ")
+        .some((id) => document.getElementById(id)?.checked);
       badge.textContent = on ? badge.dataset.on : badge.dataset.off;
       badge.classList.toggle("sv-badge-on", on);
     });

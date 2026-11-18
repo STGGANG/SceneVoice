@@ -28,7 +28,8 @@ export function validateBackup(input) {
       if (item.versions !== undefined && !Array.isArray(item.versions)) fail();
       for (const version of [item, ...(item.versions || [])]) {
         if (!object(version)) fail();
-        if (version.audio_filename && !validAudioName(version.audio_filename)) fail();
+        if (version.audio_filename && !validAudioName(version.audio_filename))
+          fail();
         delete version.audio_url;
       }
     }

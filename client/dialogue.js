@@ -9,6 +9,7 @@ import {
   normalizeTags,
   tagsText,
   withoutVoiceTags,
+  stOf,
 } from "./common.js";
 
 // Elements this extension puts into the chat. Changes inside them, or the insertion of them,
@@ -21,6 +22,12 @@ export const dialogue = {
     document.addEventListener(
       "click",
       (event) => {
+        // A line's other buttons (opened with ⋯) go back behind ⋯ at a click anywhere else.
+        for (const group of document.querySelectorAll(
+          ".sv-inline-actions.sv-open",
+        ))
+          if (!group.contains(event.target))
+            this.toggleLineActions(group, false);
         const memoryAction = event.target.closest("[data-sv-memory-action]");
         if (memoryAction) {
           event.preventDefault();
@@ -29,9 +36,7 @@ export const dialogue = {
           return;
         }
 
-        const launcher = event.target.closest(
-          "#sv-extension-menu-item",
-        );
+        const launcher = event.target.closest("#sv-extension-menu-item");
         if (launcher) {
           event.preventDefault();
           this.run(() => this.openPanel());
@@ -43,7 +48,11 @@ export const dialogue = {
           event.preventDefault();
           event.stopPropagation();
           if (event.shiftKey)
-            this.run(() => this.withBusyButton(playButton, () => this.reanalyzeButton(playButton)));
+            this.run(() =>
+              this.withBusyButton(playButton, () =>
+                this.reanalyzeButton(playButton),
+              ),
+            );
           else this.handlePlayClick(playButton);
           return;
         }
@@ -66,6 +75,21 @@ export const dialogue = {
           if (play) this.run(() => this.editLine(play));
           return;
         }
+        const saveButton = event.target.closest(".sv-download-btn");
+        if (saveButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          const play = saveButton
+            .closest(".sv-inline-actions")
+            ?.querySelector(".sv-play-btn");
+          if (play)
+            this.run(() =>
+              this.withBusyButton(saveButton, () =>
+                this.downloadLineAudio(play),
+              ),
+            );
+          return;
+        }
         const rerollButton = event.target.closest(".sv-reroll-btn");
         if (rerollButton) {
           event.preventDefault();
@@ -74,7 +98,11 @@ export const dialogue = {
             .closest(".sv-inline-actions")
             ?.querySelector(".sv-play-btn");
           if (playButton)
-            this.run(() => this.withBusyButton(rerollButton, () => this.handleRerollClick(playButton)));
+            this.run(() =>
+              this.withBusyButton(rerollButton, () =>
+                this.handleRerollClick(playButton),
+              ),
+            );
           return;
         }
 
@@ -116,15 +144,29 @@ export const dialogue = {
         const avatar = image.closest(".sv-phone-avatar");
         if (!avatar) return;
         image.remove();
-        avatar.innerHTML = '<i class="fa-solid fa-user" aria-hidden="true"></i>';
-        avatar
-          .closest(".sv-has-wall")
-          ?.classList.remove("sv-has-wall");
+        avatar.innerHTML =
+          '<i class="fa-solid fa-user" aria-hidden="true"></i>';
+        avatar.closest(".sv-has-wall")?.classList.remove("sv-has-wall");
+      },
+      { capture: true, signal: this.lifetimeController.signal },
+    );
+    // Esc puts a line's other buttons away too, and the place goes back to its ⋯.
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Escape") return;
+        const group = document.activeElement?.closest?.(
+          ".sv-inline-actions.sv-open",
+        );
+        if (!group) return;
+        event.stopPropagation();
+        this.toggleLineActions(group, false);
+        group.querySelector(".sv-more-btn")?.focus();
       },
       { capture: true, signal: this.lifetimeController.signal },
     );
     if (!this.chatMemoryEventsBound) {
-      const context = window.SillyTavern?.getContext?.() || {};
+      const context = stOf(this) || {};
       const events = context.eventTypes || context.event_types || {};
       const source = context.eventSource;
       const refreshEvents = [
@@ -165,18 +207,44 @@ export const dialogue = {
               }
               return;
             }
-            if (resetting.includes(eventName)) {
+            const reloaded =
+              eventName === events.CHAT_CHANGED && this.sameChatReloaded();
+            if (reloaded) {
+              // The same chat drawn again (a connection profile applied, a display setting
+              // changed): calls and texts under way go on; only the drawn lines start over.
+              this.redrawnChat();
+            } else if (resetting.includes(eventName)) {
               this.resetChat();
               this.captureChat();
               this.run(() => this.restorePhoneSession());
             }
-            if (eventName === events.CHAT_CHANGED) this.run(() => this.syncMultiCastCast?.());
-            if ([events.MESSAGE_RECEIVED, events.GENERATION_ENDED].includes(eventName))
+            if (eventName === events.CHAT_CHANGED)
+              this.run(() => this.syncMultiCastCast?.());
+            // Another chat is here: what went on for cards that weren't open is let go of, the
+            // texts this chat's people sent meanwhile get their chat memory, and the other
+            // cards' unread texts are counted again.
+            if (eventName === events.CHAT_CHANGED && !reloaded) {
+              this.dropCardViews();
+              this.run(async () => {
+                await this.adoptRenamedChat();
+                await this.settleAwayTexts();
+                await this.refreshOtherUnread();
+              });
+            }
+            if (
+              [events.MESSAGE_RECEIVED, events.GENERATION_ENDED].includes(
+                eventName,
+              )
+            )
               this.generatingSince = 0;
             this.scheduleChatMemoryRefresh();
             const index = Number(messageId);
             this.scheduleScan(
-              oneMessage.includes(eventName) && Number.isInteger(index) && index >= 0 ? index : null,
+              oneMessage.includes(eventName) &&
+                Number.isInteger(index) &&
+                index >= 0
+                ? index
+                : null,
             );
             if (
               [
@@ -188,6 +256,14 @@ export const dialogue = {
               ].includes(eventName)
             )
               this.scheduleStateTracking();
+            if (
+              [
+                events.CHAT_CHANGED,
+                events.MESSAGE_RECEIVED,
+                events.GENERATION_ENDED,
+              ].includes(eventName)
+            )
+              this.scheduleRandomOutreach();
             // Rooms where the members talk among themselves may pick up after a reply, and a
             // new message may be analysed ahead of time.
             if (eventName === events.MESSAGE_RECEIVED) {
@@ -216,13 +292,25 @@ export const dialogue = {
         const renamed = (oldAvatar, newAvatar) =>
           this.run(async () => {
             if (!oldAvatar || !newAvatar || oldAvatar === newAvatar) return;
-            const moved = await this.relinkCard(`character:${oldAvatar}`, `character:${newAvatar}`);
-            if (moved) this.notify("봇카드 이름이 바뀌어, 씬보이스 기록을 새 이름으로 옮겼습니다.", "success");
+            const moved = await this.relinkCard(
+              `character:${oldAvatar}`,
+              `character:${newAvatar}`,
+            );
+            if (moved)
+              this.notify(
+                "봇카드 이름이 바뀌어, 씬보이스 기록을 새 이름으로 옮겼습니다.",
+                "success",
+              );
           });
         for (const [eventName, listener] of [
           [events.GENERATION_STARTED, generating],
           [events.GENERATION_STOPPED, stopped],
           [events.CHARACTER_RENAMED, renamed],
+          // A chat renamed (1.18+): its records follow; older versions find them when it opens.
+          [
+            events.CHAT_RENAMED,
+            (data) => this.run(() => this.chatRenamed(data)),
+          ],
         ]) {
           if (!eventName) continue;
           source.on(eventName, listener);
@@ -235,7 +323,9 @@ export const dialogue = {
         // Right before a reply (or a new swipe) is written, the chat records are synced at once:
         // the swipe being replaced must not pass its call or text records to the new one.
         for (const eventName of new Set(
-          [events.GENERATION_STARTED, events.GENERATION_AFTER_COMMANDS].filter(Boolean),
+          [events.GENERATION_STARTED, events.GENERATION_AFTER_COMMANDS].filter(
+            Boolean,
+          ),
         )) {
           const sync = () => this.syncChatMemoryPrompts();
           source.on(eventName, sync);
@@ -272,7 +362,9 @@ export const dialogue = {
         // Our buttons, wrappers and records going in (or changing inside) are no news.
         if (
           target?.closest(OWN) ||
-          added.some((node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN))
+          added.some(
+            (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN),
+          )
         )
           continue;
         const message = target?.closest(".mes");
@@ -286,13 +378,16 @@ export const dialogue = {
         let found = false;
         for (const node of added) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          for (const item of node.matches(".mes") ? [node] : node.querySelectorAll(".mes")) {
+          for (const item of node.matches(".mes")
+            ? [node]
+            : node.querySelectorAll(".mes")) {
             this.scheduleScan(item);
             found = true;
           }
         }
         // Outside the usual message layout (other front ends): look at everything.
-        if (!found && target?.closest(".markdown-content, .message-body")) this.scheduleScan(null);
+        if (!found && target?.closest(".markdown-content, .message-body"))
+          this.scheduleScan(null);
       }
     });
     this.observer.observe(document.getElementById("chat") || document.body, {
@@ -330,7 +425,9 @@ export const dialogue = {
     if (all) {
       containers = Array.from(document.querySelectorAll(".mes_text"));
       if (containers.length === 0)
-        containers.push(...document.querySelectorAll(".markdown-content, .message-body"));
+        containers.push(
+          ...document.querySelectorAll(".markdown-content, .message-body"),
+        );
     } else {
       messages = [
         ...new Set(
@@ -343,7 +440,9 @@ export const dialogue = {
             .filter((message) => message?.isConnected),
         ),
       ];
-      containers = messages.flatMap((message) => [...message.querySelectorAll(".mes_text")]);
+      containers = messages.flatMap((message) => [
+        ...message.querySelectorAll(".mes_text"),
+      ]);
     }
     if (this.chatVoiceOn()) {
       for (const container of containers) this.decorateContainer(container);
@@ -352,7 +451,8 @@ export const dialogue = {
         this.run(async () => {
           for (const root of roots) await this.hydrateLines(root);
           // Buttons drawn again (a setting switched, a redraw) come back once voices are known.
-          for (const container of containers) await this.revealMessageTools?.(container);
+          for (const container of containers)
+            await this.revealMessageTools?.(container);
         });
     }
     this.renderChatMemoryDecorations(messages);
@@ -360,8 +460,9 @@ export const dialogue = {
 
   /** The message a reply is streaming into right now (left alone until it is done). */
   isStreamingMessage(messageId) {
-    if (!this.generatingSince || Date.now() - this.generatingSince > 180000) return false;
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    if (!this.generatingSince || Date.now() - this.generatingSince > 180000)
+      return false;
+    const chat = stOf(this)?.chat || [];
     return String(messageId) === String(chat.length - 1);
   },
 
@@ -388,7 +489,7 @@ export const dialogue = {
       quoteIndex += 1;
     }
 
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const raw = withoutVoiceTags(context.chat?.[Number(messageId)]?.mes || "");
     // Markdown turns *…* and _…_ into emphasis and removes the marks. Only decorate emphasis
     // whose text matches a region marked that way in the message source.
@@ -428,16 +529,29 @@ export const dialogue = {
       }
       const at = (position, ending) => {
         let index = run.length - 1;
-        while (index > 0 && (ending ? starts[index] >= position : starts[index] > position)) index--;
+        while (
+          index > 0 &&
+          (ending ? starts[index] >= position : starts[index] > position)
+        )
+          index--;
         return [run[index], position - starts[index]];
       };
       for (const segment of segments)
-        lines.push({ segment, start: at(segment.start, false), end: at(segment.end, true) });
+        lines.push({
+          segment,
+          start: at(segment.start, false),
+          end: at(segment.end, true),
+        });
     }
     lines.forEach((line) => (line.index = quoteIndex++));
     // From the last line back, so splitting text never moves a line still to come.
     for (const { segment, start, end, index } of lines.reverse()) {
-      const group = this.createButtonGroup(segment.text, messageId, index, segment.kind);
+      const group = this.createButtonGroup(
+        segment.text,
+        messageId,
+        index,
+        segment.kind,
+      );
       const range = document.createRange();
       range.setStart(...start);
       range.setEnd(...end);
@@ -455,8 +569,12 @@ export const dialogue = {
       // Themes paint quotes (<q>) as a highlight; a line filling its <q> has its buttons after the
       // <q>, so the highlight stays on the words and no theme rule meets buttons inside it.
       const quote = wrapper.parentElement;
-      const filled = quote?.tagName === "Q" && quote !== container &&
-        !/[^\s"'“”‘’「」『』«»]/.test(quote.textContent.replace(wrapper.textContent, ""));
+      const filled =
+        quote?.tagName === "Q" &&
+        quote !== container &&
+        !/[^\s"'“”‘’「」『』«»]/.test(
+          quote.textContent.replace(wrapper.textContent, ""),
+        );
       if (filled) quote.after(group);
       else wrapper.append(group);
     }
@@ -493,7 +611,10 @@ export const dialogue = {
         }
         // A line may go on over a line break, as it does in the message text.
         if (child.tagName === "BR") continue;
-        const block = !/^(A|ABBR|B|BDI|BDO|CITE|DATA|DEL|DFN|EM|FONT|I|INS|KBD|MARK|Q|RUBY|RT|S|SAMP|SMALL|SPAN|STRONG|SUB|SUP|TIME|U|VAR)$/.test(child.tagName);
+        const block =
+          !/^(A|ABBR|B|BDI|BDO|CITE|DATA|DEL|DFN|EM|FONT|I|INS|KBD|MARK|Q|RUBY|RT|S|SAMP|SMALL|SPAN|STRONG|SUB|SUP|TIME|U|VAR)$/.test(
+            child.tagName,
+          );
         if (block) flush();
         visit(child);
         if (block) flush();
@@ -529,13 +650,20 @@ export const dialogue = {
     reroll.className = "sv-reroll-btn";
     reroll.title = "음성 재생성: 같은 분석으로 목소리만 새로 만듭니다";
     reroll.setAttribute("aria-label", `${spokenText} 음성 재생성`);
-    reroll.innerHTML = '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>';
+    reroll.innerHTML =
+      '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>';
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "sv-edit-btn";
     edit.title = "고치기: 화자·연기 태그 확인·수정, AI 분석 다시";
     edit.setAttribute("aria-label", "이 대사의 화자와 연기 고치기");
     edit.innerHTML = '<i class="fa-solid fa-pen" aria-hidden="true"></i>';
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "sv-download-btn";
+    save.title = "내려받기: 이 대사의 음성만 파일로(WAV)";
+    save.setAttribute("aria-label", `${spokenText} 음성 내려받기`);
+    save.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
     // Only play and ⋯ show by default; ⋯ reveals the rest for this line.
     const more = document.createElement("button");
     more.type = "button";
@@ -546,7 +674,7 @@ export const dialogue = {
     more.innerHTML = '<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>';
     // The speaker menu comes the first time ⋯ opens (toggleLineActions): one for every line
     // from the start would be thousands of hidden options in a long chat.
-    group.append(play, more, reroll, edit);
+    group.append(play, more, reroll, edit, save);
     // Hidden at once when the speaker is already known: the message's author reads it.
     const author = this.messageSpeaker(play).key;
     if (
@@ -572,15 +700,18 @@ export const dialogue = {
   },
 
   async analyzeLatestMessage() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const index = (context.chat || []).length - 1;
     const message = context.chat?.[index];
     if (!message || message.is_user || message.is_system) return;
-    const container = document.querySelector(`#chat .mes[mesid="${index}"] .mes_text`);
+    const container = document.querySelector(
+      `#chat .mes[mesid="${index}"] .mes_text`,
+    );
     if (!container) return;
     // With a translation on screen, the source lines (what 음성 준비 reads) are analysed.
     const source = this.sourceLineButtons?.(container);
-    const button = source?.buttons[0] || container.querySelector(".sv-play-btn");
+    const button =
+      source?.buttons[0] || container.querySelector(".sv-play-btn");
     if (!button || button.dataset.status === "ready") return;
     await this.analyzeUtterance(button);
   },
@@ -614,12 +745,20 @@ export const dialogue = {
     group.classList.toggle("sv-open", open);
     const more = group.querySelector(".sv-more-btn");
     more?.setAttribute("aria-expanded", String(open));
+    // ⋯ itself steps aside while the buttons are out: the keyboard's place moves on to them.
+    if (open && more && document.activeElement === more)
+      group
+        .querySelector(".sv-reroll-btn, .sv-edit-btn, .sv-download-btn")
+        ?.focus();
   },
 
   /** A chat line's voice (a thought with its inner-voice effect). */
   playLine(button, options = {}) {
+    this.noteLineLevel(button);
     return this.playAudio(button.dataset.audioUrl, button, false, {
       thoughtEffect: this.wantsThoughtEffect(button),
+      place: this.linePlace(button),
+      level: this.lineLevel(button),
       ...options,
     });
   },
@@ -668,7 +807,9 @@ export const dialogue = {
    */
   async withBusyButton(control, work) {
     if (control.classList.contains("sv-busy")) return;
-    const icon = control.classList.contains("sv-play-btn") ? null : control.querySelector("i");
+    const icon = control.classList.contains("sv-play-btn")
+      ? null
+      : control.querySelector("i");
     const before = icon?.className;
     control.classList.add("sv-busy");
     if (icon) icon.className = "fa-solid fa-spinner fa-spin";
@@ -710,7 +851,13 @@ export const dialogue = {
   /** Returns true when audio is ready, "skipped" for a line left for the user to assign (skipUncertain). */
   async generateForButton(
     button,
-    { regenerate = false, autoplay = true, skipUncertain = false, skipUnvoiced = false, signal } = {},
+    {
+      regenerate = false,
+      autoplay = true,
+      skipUncertain = false,
+      skipUnvoiced = false,
+      signal,
+    } = {},
   ) {
     const operation = this.captureChat();
     button.dataset.status = "generating";
@@ -720,7 +867,7 @@ export const dialogue = {
 
     try {
       if (!this.chatVoiceOn())
-        throw new Error("채팅 대사 읽기가 꺼져 있습니다(설정 → 기본).");
+        throw new Error("채팅 대사 읽기가 꺼져 있습니다(설정 → 채팅 대사).");
       const text = button.dataset.text || "";
       await button.lineSaving;
       await this.loadLineState();
@@ -742,7 +889,11 @@ export const dialogue = {
         analysis.needs_confirmation &&
         !button.dataset.speakerOverride &&
         this.config.casting?.uncertain === "default";
-      if (analysis.needs_confirmation && !button.dataset.speakerOverride && !asDefault) {
+      if (
+        analysis.needs_confirmation &&
+        !button.dataset.speakerOverride &&
+        !asDefault
+      ) {
         // Left closed (no line opens by itself); ⋯ shows "화자 확인 필요" in its speaker menu.
         if (skipUncertain) {
           button.dataset.status = "waiting";
@@ -761,37 +912,53 @@ export const dialogue = {
       if (
         !asDefault &&
         skipUnvoiced &&
-        (this.speakerSkipped(speaker.key) || !this.speakerHasVoice(speaker.key, button.dataset.kind))
+        (this.speakerSkipped(speaker.key) ||
+          !this.speakerHasVoice(speaker.key, button.dataset.kind))
       ) {
         button.dataset.status = "waiting";
         button.classList.remove("sv-loading", "sv-queued");
         this.setPlayButtonIcon(button, "waiting");
         button.title = this.speakerSkipped(speaker.key)
-          ? "메시지 음성 버튼에서 건너뛰도록 설정한 인물입니다. 누르면 만듭니다."
-          : this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name)
+          ? "이어 듣기에서 건너뛰도록 설정한 인물입니다. 누르면 만듭니다."
+          : this.speakerVoiceMissing(
+                speaker.key,
+                button.dataset.kind,
+                analysis.gender,
+                speaker.name,
+              )
             ? `‘${speaker.name}’에게 목소리가 없어 건너뛰었습니다. 캐릭터별 목소리에서 정하거나 ⋯에서 인물을 고르십시오.`
-            : "목소리를 등록하지 않은 인물이라 메시지 음성 버튼에서 건너뛰었습니다. 누르면 기본 목소리로 만듭니다.";
+            : "목소리를 등록하지 않은 인물이라 이어 듣기에서 건너뛰었습니다. 누르면 기본 목소리로 만듭니다.";
         return "unvoiced";
       }
-      if (this.speakerVoiceMissing(speaker.key, button.dataset.kind, analysis.gender, speaker.name))
+      if (
+        this.speakerVoiceMissing(
+          speaker.key,
+          button.dataset.kind,
+          analysis.gender,
+          speaker.name,
+        )
+      )
         throw new Error(
           asDefault
-            ? "기본 목소리가 없습니다. 설정 → 음성 엔진에서 남성·여성 기본 목소리를 정해 주십시오."
+            ? "기본 목소리가 없습니다. 설정 → 기본 → 상세 설정에서 남성·여성 기본 목소리를 정해 주십시오."
             : `‘${speaker.name || "이 인물"}’에게 쓸 목소리가 없습니다. 설정 → 캐릭터별 목소리에서 목소리를 정하거나, 대사 옆 ⋯에서 인물을 고르십시오.`,
         );
       const payload = {
         text,
         line_key: lineKey,
-        config_key: this.lineConfigKey(),
         edit_key: contentKey(edit),
         speaker_key: speaker.key,
         speaker_name: speaker.name,
+        card_keys: this.currentCardKeys?.() || [],
         utterance_kind: button.dataset.kind || "dialogue",
         language: analysis.language,
         voice_gender: analysis.gender || "",
         script: analysis.script || "",
         tags: normalizeTags(analysis),
         intensity: analysis.intensity,
+        // Kept with the voice (not part of what is asked of the engine): where it is heard from.
+        side: analysis.side ?? button.dataset.side ?? "",
+        space: analysis.space ?? button.dataset.space ?? "",
         chat_id: this.currentChatId(),
         message_id: button.dataset.messageId || "",
         quote_index: Number(button.dataset.quoteIndex || 0),
@@ -831,6 +998,8 @@ export const dialogue = {
       button.dataset.status = "ready";
       button.dataset.madeAt = String(Date.now());
       button.dataset.emotion = analysis.emotion;
+      button.dataset.side = payload.side;
+      button.dataset.space = payload.space;
       button.dataset.speakerName = asDefault ? "" : speaker.name || "";
       button.dataset.appliedControl = appliedControl;
       button.dataset.historyId = historyId;
@@ -889,7 +1058,7 @@ export const dialogue = {
     });
 
     let currentMessage = "";
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const message = context.chat?.[Number(button.dataset.messageId)];
     const shown = message?.extra?.display_text;
     // Lines of the message as written (on screen with no translation, or the off-screen source
@@ -938,14 +1107,16 @@ export const dialogue = {
   },
 
   buildPreviousContext(button) {
-    const context = window.SillyTavern?.getContext?.();
+    const context = stOf(this);
     const chat = Array.isArray(context?.chat) ? context.chat : [];
     const messageId = Number(button.dataset.messageId);
     const currentIndex =
       Number.isFinite(messageId) && messageId >= 0
         ? Math.min(messageId, chat.length - 1)
         : chat.length - 1;
-    const count = clamp(this.config.context_messages ?? 4, 0, 12);
+    // 0 = every message before this one.
+    const asked = Number(this.config.context_messages ?? 4);
+    const count = asked === 0 ? currentIndex : clamp(asked, 1, 100000);
     const start = Math.max(0, currentIndex - count);
     const selected = chat.slice(start, currentIndex);
     const lines = selected.map((message, offset) => {
@@ -963,6 +1134,8 @@ export const dialogue = {
         URL.revokeObjectURL(button.dataset.audioUrl);
       delete button.dataset.audioUrl;
       delete button.dataset.emotion;
+      delete button.dataset.side;
+      delete button.dataset.space;
       delete button.dataset.appliedControl;
       delete button.dataset.historyId;
       button.dataset.status = "waiting";
@@ -995,10 +1168,14 @@ export const dialogue = {
           .forEach((item) => item.remove());
         delete line.dataset.svDecorated;
       });
-    document.querySelectorAll("q + .sv-inline-actions").forEach((item) => item.remove());
+    document
+      .querySelectorAll("q + .sv-inline-actions")
+      .forEach((item) => item.remove());
     document.querySelectorAll(".sv-utterance").forEach((wrapper) => {
       // A line may hold formatting (bold, italics); only its buttons go.
-      wrapper.querySelectorAll(":scope > .sv-inline-actions").forEach((item) => item.remove());
+      wrapper
+        .querySelectorAll(":scope > .sv-inline-actions")
+        .forEach((item) => item.remove());
       const parent = wrapper.parentNode;
       wrapper.replaceWith(...wrapper.childNodes);
       parent?.normalize();

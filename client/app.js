@@ -25,9 +25,16 @@ import { runtime } from "./runtime.js";
 import { backup } from "./backup.js";
 import { lineEdits } from "./line-edits.js";
 import { messageGeneration } from "./message-generation.js";
+import { messageButtons } from "./message-buttons.js";
+import { loudness } from "./loudness.js";
+import { cards } from "./cards.js";
+import { guide } from "./guide.js";
 import { contacts } from "./contacts.js";
 import { maintenance } from "./maintenance.js";
 import { reading } from "./reading.js";
+import { pronunciation } from "./pronunciation.js";
+import { outreachCompare } from "./outreach-compare.js";
+import { messageAnalysis } from "./message-analysis.js";
 import { voicePicker } from "./voice-picker.js";
 import { multicast } from "./multicast.js";
 import { publicApi } from "./public-api.js";
@@ -38,6 +45,9 @@ import { memos } from "./memos.js";
 import { forward } from "./forward.js";
 import { groupCall } from "./group-call.js";
 import { radio } from "./radio.js";
+import { otherChats } from "./other-chats.js";
+import { timedOutreach } from "./timed-outreach.js";
+import { visit } from "./visit.js";
 
 export const SceneVoice = {
   connectionService: null,
@@ -75,6 +85,10 @@ export const SceneVoice = {
   // Messaging app: the open conversation, contacts with unread replies, and the reply in progress.
   messageThreadKey: "",
   unreadThreads: new Set(),
+  // 다른 봇카드의 문자 (visit.js): the card the phone shows instead of the open chat, and their
+  // texts not read yet.
+  visiting: null,
+  otherUnread: new Map(),
   // 적용 기억 or 미적용 기억, per app (message, history).
   phoneShelf: {},
   // Replies waiting per conversation (a short pause for more texts), the one being written, and
@@ -94,9 +108,16 @@ export const SceneVoice = {
   ...backup,
   ...lineEdits,
   ...messageGeneration,
+  ...messageButtons,
+  ...loudness,
+  ...cards,
+  ...guide,
   ...contacts,
   ...maintenance,
   ...reading,
+  ...pronunciation,
+  ...outreachCompare,
+  ...messageAnalysis,
   ...voicePicker,
   ...multicast,
   ...publicApi,
@@ -107,6 +128,9 @@ export const SceneVoice = {
   ...forward,
   ...groupCall,
   ...radio,
+  ...otherChats,
+  ...timedOutreach,
+  ...visit,
   ...casting,
   ...shell,
   ...calls,

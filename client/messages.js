@@ -8,7 +8,12 @@ import {
   textSystem,
   phoneMessages,
 } from "./prompts.js";
-import { escapeHtml, normalizeTags } from "./common.js";
+import { escapeHtml, normalizeTags, stOf } from "./common.js";
+import { cardCanBeAnswered, REACTIONS } from "./cards.js";
+import { validReaction } from "../shared/store.js";
+
+// How often a reply is offered the chance to text someone else about it (다른 인물에게 전하기).
+const TELL_CHANCE = 0.35;
 
 export const messages = {
   /**
@@ -28,7 +33,8 @@ export const messages = {
     // Every name a sender's key was saved with: a key whose person is gone finds them by any.
     this.senderNames ||= new Map();
     for (const item of data.items || []) {
-      if (!item.character_key || !item.character_name || item.role === "user") continue;
+      if (!item.character_key || !item.character_name || item.role === "user")
+        continue;
       const names = this.senderNames.get(item.character_key) || new Set();
       if (!names.has(item.character_name)) {
         names.add(item.character_name);
@@ -52,28 +58,36 @@ export const messages = {
   messageThreadOf(item) {
     return (
       item?.thread_key ||
-      (item?.character_key && this.livePersonKey(item.character_key, item.character_name)) ||
+      (item?.character_key &&
+        this.livePersonKey(item.character_key, item.character_name)) ||
       this.getCurrentCharacterProfile().key
     );
   },
 
   messagePreview(item) {
     if (!item) return "대화를 시작해 보십시오";
-    const first = String(item.text || "").split("\n")[0];
+    const first = item.card?.solo
+      ? this.cardLabel(item.card)
+      : String(item.text || "").split("\n")[0];
     if (item.role === "user") return `나: ${first}`;
-    const preview = (item.kind || "voice") === "voice" ? `음성 메시지 · ${first}` : first;
+    const preview =
+      (item.kind || "voice") === "voice" ? `음성 메시지 · ${first}` : first;
     return item.thread_key ? `${item.character_name}: ${preview}` : preview;
   },
 
   async renderSmartphoneMessages(body) {
     // The room editor stays as it is while texts come in: its choices are kept in groupEditor,
     // and drawing it again would blink it and lose its scroll.
-    if (this.groupEditor && this.groupEditorShown === this.groupEditor && body.querySelector(".sv-room-editor"))
+    if (
+      this.groupEditor &&
+      this.groupEditorShown === this.groupEditor &&
+      body.querySelector(".sv-room-editor")
+    )
       return;
     // A conversation or the list already shown stays until the new one is ready (no flicker).
     if (!body.querySelector(".sv-msg-thread-view, .sv-msg-threads"))
       body.innerHTML =
-        '<div class="sv-phone-list-empty"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i><p>메시지를 불러오는 중…</p></div>';
+        '<div class="sv-phone-list-empty"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i><p>문자를 불러오는 중…</p></div>';
     try {
       const [everything, groupList] = await Promise.all([
         this.loadMessages({ hidden: true, all: true }),
@@ -83,9 +97,13 @@ export const messages = {
       const items = here.filter((item) => !item.hidden);
       this.hiddenRounds = here.filter((item) => item.hidden);
       // 미적용 기억: texts of a swipe not showing now, or of a part of the chat taken back.
-      const away = everything.filter((item) => !item.hidden && !this.anchorShown(item));
+      const away = everything.filter(
+        (item) => !item.hidden && !this.anchorShown(item),
+      );
       // Their groups' other rounds go with them when they are cleared.
-      this.awayHidden = everything.filter((item) => item.hidden && !this.anchorShown(item));
+      this.awayHidden = everything.filter(
+        (item) => item.hidden && !this.anchorShown(item),
+      );
       if (this.groupEditor) {
         this.renderGroupEditor(body);
         return;
@@ -93,7 +111,10 @@ export const messages = {
       this.phoneShelf ||= {};
       if (this.phoneShelf.message === "unapplied") {
         const awayKey = this.messageThreadKey;
-        if (awayKey && away.some((item) => this.messageThreadOf(item) === awayKey))
+        if (
+          awayKey &&
+          away.some((item) => this.messageThreadOf(item) === awayKey)
+        )
           this.renderAwayThread(body, awayKey, away);
         else {
           this.messageThreadKey = "";
@@ -110,13 +131,25 @@ export const messages = {
         const key = this.messageThreadOf(item);
         if (!keys.includes(key) && !this.isGroupThread(key)) keys.push(key);
       }
+      // Conversations of the cards that aren't open, under this chat's own.
+      this.otherThreads = this.visitOf
+        ? []
+        : await this.loadOtherThreads().catch(() => []);
+      if (!keys.length && this.otherThreads.length) {
+        this.messageThreadKey = "";
+        this.renderMessageThreads(body, [], [], 0);
+        return;
+      }
       if (!keys.length) {
         body.innerHTML =
           '<div class="sv-phone-list-empty"><i class="fa-solid fa-comment-slash" aria-hidden="true"></i><p>캐릭터 채팅을 열면 문자를 주고받을 수 있습니다.</p></div>';
         return;
       }
       // A group that was left is no longer there to open.
-      if (this.isGroupThread(this.messageThreadKey) && !this.messageGroup(this.messageThreadKey))
+      if (
+        this.isGroupThread(this.messageThreadKey) &&
+        !this.messageGroup(this.messageThreadKey)
+      )
         this.messageThreadKey = "";
       // The list (with its 적용 기억 | 미적용 기억 tabs) comes first, even with one person.
       const key = this.messageThreadKey;
@@ -135,12 +168,22 @@ export const messages = {
         last: items.filter((item) => this.messageThreadOf(item) === key).at(-1),
       }))
       .sort((a, b) =>
-        String(b.last?.created_at || "").localeCompare(String(a.last?.created_at || "")),
+        String(b.last?.created_at || "").localeCompare(
+          String(a.last?.created_at || ""),
+        ),
       );
     // A group needs two people besides the user.
     const canGroup = this.phoneContacts().length >= 2;
+    // Unread since the page was loaded too (kept with the message until its conversation opens).
+    const unreadKeys = new Set(
+      items
+        .filter((item) => item.unread)
+        .map((item) => this.messageThreadOf(item)),
+    );
     // Drawn again (a reply came in): the list keeps where it was scrolled to.
-    const keepScroll = body.querySelector(".sv-msg-threads") ? body.scrollTop : 0;
+    const keepScroll = body.querySelector(".sv-msg-threads")
+      ? body.scrollTop
+      : 0;
     body.innerHTML = `<div class="sv-msg-threads">${this.phoneShelfTabs("message", away)}${
       canGroup
         ? '<button type="button" class="sv-msg-new-group" data-group-new><i class="fa-solid fa-user-group" aria-hidden="true"></i><span>새 단체방</span></button>'
@@ -151,12 +194,34 @@ export const messages = {
           <button type="button" class="sv-msg-thread" data-thread="${escapeHtml(key)}">
             ${this.threadAvatarMarkup(contact)}
             <span class="sv-msg-thread-main"><strong><span class="sv-msg-thread-name">${escapeHtml(contact.name)}</span>${contact.group ? `<em class="sv-msg-count">${this.messageGroup(key)?.without_user ? `<i class="fa-solid fa-eye" aria-hidden="true" title="나 없는 방"></i> ${contact.members.length}` : contact.members.length + 1}</em>` : ""}</strong><small>${escapeHtml(this.messagePreview(last))}</small></span>
-            <span class="sv-msg-thread-meta">${last ? `<time>${escapeHtml(this.formatPhoneDate(last.created_at))}</time>` : ""}${this.unreadThreads.has(key) ? '<i class="sv-unread-dot" aria-label="읽지 않음"></i>' : ""}</span>
+            <span class="sv-msg-thread-meta">${last ? `<time>${escapeHtml(this.formatPhoneDate(last.created_at))}</time>` : ""}${this.unreadThreads.has(key) || unreadKeys.has(key) ? '<i class="sv-unread-dot" aria-label="읽지 않음"></i>' : ""}</span>
           </button>`,
       )
-      .join("")}</div>`;
+      .join("")}${this.otherThreadsHtml(this.otherThreads || [])}</div>`;
     body.scrollTop = keepScroll;
     this.bindPhoneShelf(body, "message");
+    body.querySelector("[data-others]")?.addEventListener("toggle", (event) => {
+      try {
+        localStorage.setItem(
+          "scenevoice_others_open",
+          event.target.open ? "1" : "0",
+        );
+      } catch {
+        /* not kept */
+      }
+    });
+    body
+      .querySelectorAll("[data-other-card]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.visitCard(
+              button.dataset.otherCard,
+              button.dataset.otherThread,
+            ),
+          ),
+        ),
+      );
     body
       .querySelector("[data-group-new]")
       ?.addEventListener("click", () => this.openGroupEditor());
@@ -173,9 +238,16 @@ export const messages = {
     const rows = [...new Set(away.map((item) => this.messageThreadOf(item)))]
       .map((key) => {
         const list = away.filter((item) => this.messageThreadOf(item) === key);
-        return { key, contact: this.threadContact(key), count: list.length, last: list.at(-1) };
+        return {
+          key,
+          contact: this.threadContact(key),
+          count: list.length,
+          last: list.at(-1),
+        };
       })
-      .sort((a, b) => String(b.last.created_at).localeCompare(String(a.last.created_at)));
+      .sort((a, b) =>
+        String(b.last.created_at).localeCompare(String(a.last.created_at)),
+      );
     body.innerHTML = `<div class="sv-msg-threads">${this.phoneShelfTabs("message", away.length)}${
       rows.length ? this.phoneShelfNote() : this.phoneShelfEmpty()
     }${rows
@@ -191,7 +263,9 @@ export const messages = {
     this.bindPhoneShelf(body, "message");
     body
       .querySelector("[data-shelf-clear]")
-      ?.addEventListener("click", () => this.run(() => this.clearAwayMessages(away)));
+      ?.addEventListener("click", () =>
+        this.run(() => this.clearAwayMessages(away)),
+      );
     body.querySelectorAll("[data-thread]").forEach((button) =>
       button.addEventListener("click", () => {
         this.messageThreadKey = button.dataset.thread;
@@ -208,14 +282,19 @@ export const messages = {
     this.messageRecords = new Map();
     const contact = this.threadContact(key);
     const thread = away.filter((item) => this.messageThreadOf(item) === key);
-    const pointOf = (item) => `${item.anchor_message_id}|${item.anchor_swipe ?? ""}|${item.anchor_tag || ""}`;
+    const pointOf = (item) =>
+      `${item.anchor_message_id}|${item.anchor_swipe ?? ""}|${item.anchor_tag || ""}`;
     const shown = body.querySelector(".sv-msg-away");
     const keepScroll = shown?.dataset.thread === key ? body.scrollTop : null;
+    // 한 번에 듣기: the messages here that have a voice, in order (none is made for it).
+    const voiced = thread.filter((item) => item.audio_url).length;
+    const aloud = this.threadPlayback?.key === `away:${key}`;
     body.innerHTML = `
       <div class="sv-msg-thread-view sv-msg-away" data-thread="${escapeHtml(key)}">
         <header class="sv-msg-head">
           <button type="button" class="sv-phone-back sv-msg-back" data-thread-back aria-label="미적용 기억" title="미적용 기억"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
           <div class="sv-msg-who">${this.threadAvatarMarkup(contact)}<span class="sv-msg-who-text"><strong>${escapeHtml(contact.name)}</strong><small><i class="fa-solid fa-trash-can" aria-hidden="true"></i> 미적용 기억</small></span></div>
+          ${voiced ? `<button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : `한 번에 듣기: 이 대화에서 음성이 있는 문자 ${voiced}개를 차례로 들려줍니다(새로 만들지 않음)`}"><i class="fa-solid ${aloud ? "fa-stop" : "fa-headphones"}" aria-hidden="true"></i></button>` : ""}
         </header>
         <div class="sv-msg-list" role="log">
           ${thread
@@ -225,10 +304,12 @@ export const messages = {
               const sameSender =
                 !point &&
                 before.role === item.role &&
-                (item.role === "user" || before.character_key === item.character_key);
+                (item.role === "user" ||
+                  before.character_key === item.character_key);
               const head =
                 !sameSender ||
-                this.formatPhoneDate(before.created_at) !== this.formatPhoneDate(item.created_at);
+                this.formatPhoneDate(before.created_at) !==
+                  this.formatPhoneDate(item.created_at);
               return `${point ? `<div class="sv-msg-point"><span>${escapeHtml(this.awayPointLabel(item))}</span></div>` : ""}${this.messageBubbleHtml(
                 item,
                 {
@@ -236,7 +317,10 @@ export const messages = {
                   head,
                   sender:
                     contact.group && item.role !== "user"
-                      ? this.memberContact({ key: item.character_key, name: item.character_name })
+                      ? this.memberContact({
+                          key: item.character_key,
+                          name: item.character_name,
+                        })
                       : null,
                 },
               )}`;
@@ -249,20 +333,32 @@ export const messages = {
       this.messageThreadKey = "";
       this.renderSmartphone();
     });
+    body
+      .querySelector("[data-thread-aloud]")
+      ?.addEventListener("click", () =>
+        this.run(() => this.playThreadAloud(key, thread)),
+      );
     const record = (button) => this.messageRecord(button);
     const lit = body.querySelector(".sv-msg-play.sv-playing");
     if (lit && this.currentAudio) this.currentPlayButton = lit;
     body.querySelectorAll(".sv-msg-play").forEach((button) =>
       button.addEventListener("click", () => {
         const item = record(button);
-        if (item.audio_url) this.playMessageAudio(item, this.apiUrl(item.audio_url), button);
+        if (item.audio_url)
+          this.playMessageAudio(item, this.apiUrl(item.audio_url), button);
         else this.generateVoiceMessageAudio(item, button);
       }),
     );
-    body.querySelectorAll(".sv-msg-delete").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.deleteMessage(record(button)))),
-    );
-    body.scrollTop = keepScroll ?? body.scrollHeight;
+    body
+      .querySelectorAll(".sv-msg-delete")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.deleteMessage(record(button))),
+        ),
+      );
+    this.bindMessageMore(body);
+    if (!this.showReadingMessage(body))
+      body.scrollTop = keepScroll ?? body.scrollHeight;
   },
 
   /**
@@ -273,24 +369,29 @@ export const messages = {
     if (!away.length) return;
     if (
       !confirm(
-        `미적용 기억의 메시지 ${away.length}개를 모두 지우시겠습니까?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
+        `미적용 기억의 문자 ${away.length}개를 모두 지우시겠습니까?\n스마트폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
       )
     )
       return;
-    const response = await this.request("/api/plugins/scenevoice/voice-messages/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: this.currentChatId(),
-        ids: [...away, ...(this.awayHidden || [])].map((item) => item.id),
-      }),
-    });
+    const response = await this.request(
+      "/api/plugins/scenevoice/voice-messages/delete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: this.currentChatId(),
+          ids: [...away, ...(this.awayHidden || [])].map((item) => item.id),
+        }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "메시지를 지우지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "문자를 지우지 못했습니다.");
     // Once per conversation and point in the chat.
     const done = new Set();
     for (const item of away) {
-      const texts = (item.kind || "voice") === "text" || item.origin === "reply";
+      const texts =
+        (item.kind || "voice") === "text" || item.origin === "reply";
       const thread = texts ? this.messageThreadOf(item) : "";
       const mark = `${thread || item.id}|${item.anchor_message_id}|${item.anchor_swipe}`;
       if (done.has(mark)) continue;
@@ -304,7 +405,7 @@ export const messages = {
   /** The user's own messages can be voiced too, once their persona has a voice of its own. */
   personaVoiceReady() {
     const persona = this.config.character_voices?.[this.personaKey()] || {};
-    return Boolean(persona.voice_id || persona.thought_voice_id);
+    return Boolean(persona.voice_id);
   },
 
   /**
@@ -312,7 +413,19 @@ export const messages = {
    * when the sender or the minute changes. Buttons are icons; their names are in the tooltips.
    * `frozen`: a message in 미적용 기억, only to play or delete.
    */
-  messageBubbleHtml(item, { latest = false, head = false, sender = null, rounds = null, frozen = false } = {}) {
+  messageBubbleHtml(
+    item,
+    {
+      latest = false,
+      head = false,
+      sender = null,
+      rounds = null,
+      frozen = false,
+      read = false,
+      canQuote = false,
+      answered = "",
+    } = {},
+  ) {
     // Buttons carry the message's id; the record itself is kept for this drawing (messageRecord).
     (this.messageRecords ||= new Map()).set(item.id, item);
     const record = escapeHtml(item.id);
@@ -322,7 +435,7 @@ export const messages = {
           sender
             ? `${this.contactAvatarMarkup(sender)}<b>${escapeHtml(sender.name)}</b><span class="sv-msg-sep" aria-hidden="true">|</span>`
             : ""
-        }${time}</div>`
+        }${time}${read ? '<i class="fa-solid fa-check sv-msg-read" role="img" aria-label="읽음" title="읽음"></i>' : ""}</div>`
       : "";
     // The same words and icons everywhere: 재생 ▶ (makes the voice first if there is none) ·
     // 음성 재생성 ↻ · 답변 재생성 ⟳ · 고치기 ✎ · 삭제. The newest message names its main ones; older
@@ -344,19 +457,31 @@ export const messages = {
           )
         : "";
     // Earlier answers of this message (답변 재생성): ‹ 2/3 ›, the one shown is the one used.
-    const versions = latest && item.role !== "user" && item.versions?.length > 1 ? item.versions.length : 0;
-    const shown = versions ? (Number.isInteger(item.version) ? item.version : versions - 1) : 0;
+    const versions =
+      latest && item.role !== "user" && item.versions?.length > 1
+        ? item.versions.length
+        : 0;
+    const shown = versions
+      ? Number.isInteger(item.version)
+        ? item.version
+        : versions - 1
+      : 0;
     // A group's round: ‹ 1/2 › pages the whole round of answers.
     const roundPager =
       latest && rounds?.count > 1
         ? `<div class="sv-msg-versions" title="다른 답 보기: 지금 보이는 답이 대화 흐름과 채팅 기억에 쓰입니다"><button type="button" class="sv-msg-round" data-family="${escapeHtml(rounds.family)}" data-index="${rounds.index - 1}" aria-label="이전 답" ${rounds.index > 0 ? "" : "disabled"}><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button><small>${rounds.index + 1}/${rounds.count}</small><button type="button" class="sv-msg-round" data-family="${escapeHtml(rounds.family)}" data-index="${rounds.index + 1}" aria-label="다음 답" ${rounds.index < rounds.count - 1 ? "" : "disabled"}><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></div>`
         : "";
-    const pager = roundPager || (versions
-      ? `<div class="sv-msg-versions" title="다른 답 보기: 지금 보이는 답이 대화 흐름과 채팅 기억에 쓰입니다"><button type="button" class="sv-msg-version" data-id="${record}" data-version="${shown - 1}" aria-label="이전 답" ${shown > 0 ? "" : "disabled"}><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button><small>${shown + 1}/${versions}</small><button type="button" class="sv-msg-version" data-id="${record}" data-version="${shown + 1}" aria-label="다음 답" ${shown < versions - 1 ? "" : "disabled"}><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></div>`
-      : "");
+    const pager =
+      roundPager ||
+      (versions
+        ? `<div class="sv-msg-versions" title="다른 답 보기: 지금 보이는 답이 대화 흐름과 채팅 기억에 쓰입니다"><button type="button" class="sv-msg-version" data-id="${record}" data-version="${shown - 1}" aria-label="이전 답" ${shown > 0 ? "" : "disabled"}><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button><small>${shown + 1}/${versions}</small><button type="button" class="sv-msg-version" data-id="${record}" data-version="${shown + 1}" aria-label="다음 답" ${shown < versions - 1 ? "" : "disabled"}><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></div>`
+        : "");
     const voiced = item.role !== "user" || this.personaVoiceReady();
     // The message playing now keeps its lit button through redraws.
-    const playing = this.playingMessageId === item.id && this.currentAudio ? " sv-playing" : "";
+    const playing =
+      this.playingMessageId === item.id && this.currentAudio
+        ? " sv-playing"
+        : "";
     // Its bubbles are outlined too, so it is clear which message is being read.
     const reading = playing ? " sv-msg-reading" : "";
     const play =
@@ -372,35 +497,86 @@ export const messages = {
     // message without its voice yet offers to make it right away.
     // A message in 미적용 기억 keeps its voice as it is (the bubble's own ▶ makes one).
     // A forwarded recording plays from its card; its voice isn't mine to make again.
-    const reroll = frozen || item.forward
-      ? ""
-      : item.audio_url
-        ? button("sv-msg-reroll", "fa-rotate-right", "음성 재생성: 같은 문장으로 목소리만 새로 만듭니다", "음성 재생성")
-        : this.voicePending?.has(item.id)
-          ? `<button type="button" class="sv-msg-reroll" disabled aria-label="새 음성을 만드는 중" title="새 음성을 만드는 중"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></button>`
-          : voice && item.role !== "user"
-            ? button(`sv-msg-play sv-msg-make${playing}`, "fa-play", "재생: 음성을 만든 뒤 재생합니다", "재생")
-            : "";
+    const reroll =
+      frozen || item.forward
+        ? ""
+        : item.audio_url
+          ? button(
+              "sv-msg-reroll",
+              "fa-rotate-right",
+              "음성 재생성: 같은 문장으로 목소리만 새로 만듭니다",
+            )
+          : this.voicePending?.has(item.id)
+            ? `<button type="button" class="sv-msg-reroll" disabled aria-label="새 음성을 만드는 중" title="새 음성을 만드는 중"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></button>`
+            : voice && item.role !== "user"
+              ? button(
+                  `sv-msg-play sv-msg-make${playing}`,
+                  "fa-play",
+                  "재생: 음성을 만든 뒤 재생합니다",
+                  "재생",
+                )
+              : "";
     // Translations always show under their message.
     const translation = item.translation
       ? `<div class="sv-msg-translation">${this.translationHtml(item)}</div>`
       : "";
-    const edit = frozen || item.forward
-      ? ""
-      : item.role === "user"
-        ? button("sv-msg-edit", "fa-pen", "고치기: 보낸 문자를 고칩니다")
-        : button("sv-msg-edit", "fa-pen", "고치기: 고친 뒤 음성을 새로 만듭니다");
+    const edit =
+      frozen || item.forward
+        ? ""
+        : item.role === "user"
+          ? button("sv-msg-edit", "fa-pen", "고치기: 보낸 문자를 고칩니다")
+          : button(
+              "sv-msg-edit",
+              "fa-pen",
+              "고치기: 고친 뒤 음성을 새로 만듭니다",
+            );
     // 음성 전달: a voice message of theirs can be passed on to someone else.
     const share =
       item.role !== "user" && voice && item.audio_url && !frozen
-        ? button("sv-msg-share", "fa-share", "공유: 이 음성 메시지를 다른 인물에게 들려줍니다")
+        ? button(
+            "sv-msg-share",
+            "fa-share",
+            "공유: 이 음성 메시지를 다른 인물에게 들려줍니다",
+          )
         : "";
-    // ‹ 1/2 › goes on its own line under the buttons.
-    const meta = `<div class="sv-msg-meta">${item.forward ? "" : play}${reroll}${again}${edit}${share}${remove}</div>${pager}`;
-    const lines = String(item.forward && !item.forward.note ? "" : item.text || "")
+    // 인용 답장: this message is picked as the one my next text answers.
+    const quoteButton =
+      canQuote && !frozen
+        ? button(
+            "sv-msg-quote-btn",
+            "fa-reply",
+            "답장: 이 문자를 인용해 답합니다",
+          )
+        : "";
+    const save =
+      voiced && !item.forward
+        ? `<button type="button" class="sv-msg-save" data-id="${record}" aria-label="내려받기" title="${item.audio_url ? "내려받기: 이 문자의 음성만 파일로(WAV)" : "음성을 만든 뒤에 내려받을 수 있습니다"}" ${item.audio_url ? "" : "disabled"}><i class="fa-solid fa-download" aria-hidden="true"></i></button>`
+        : "";
+    // 재생 stays in sight (so does a voice being made); the rest sits behind ⋯.
+    const made = reroll.includes('class="sv-msg-reroll" data-id');
+    const extra = `${made ? reroll : ""}${save}${quoteButton}${edit}${share}${remove}`;
+    const open = this.messageMoreOpen === item.id;
+    // Someone else's text can be answered with an emoji at a tap.
+    const reacts =
+      item.role !== "user" && !frozen
+        ? `<span class="sv-msg-reacts" role="group" aria-label="반응 남기기">${REACTIONS.map((emoji) => `<button type="button" data-react="${emoji}" data-id="${record}" aria-label="반응 ${emoji}" title="반응 남기기">${emoji}</button>`).join("")}<button type="button" class="sv-msg-react-own" data-react-own data-id="${record}" aria-label="다른 이모지로 반응" title="다른 이모지 직접 넣기"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></span>`
+        : "";
+    const more = `<button type="button" class="sv-msg-more" data-id="${record}" aria-expanded="${open}" aria-label="더 보기" title="더 보기: 음성 재생성 · 내려받기 · 답장 · 고치기 · 삭제"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><span class="sv-msg-extra" ${open ? "" : "hidden"}>${extra}${reacts}</span>`;
+    // 답변 재생성 and ‹ 1/2 › go on a line of their own under the buttons.
+    const meta = `<div class="sv-msg-meta">${this.reactionsHtml?.(item) || ""}${item.forward ? "" : play}${made ? "" : reroll}${more}</div>${again || pager ? `<div class="sv-msg-meta sv-msg-again-line">${again}${pager}</div>` : ""}`;
+    const lines = String(
+      (item.forward && !item.forward.note) || item.card?.solo
+        ? ""
+        : item.text || "",
+    )
       .split("\n")
       .filter((line) => line.trim());
-    const bubbles = lines.map((line) => `<p class="sv-msg-bubble">${escapeHtml(line)}</p>`).join("");
+    const attached = `${this.quoteHtml?.(item) || ""}${this.cardHtml?.(item, { answered, canAnswer: canQuote && !frozen }) || ""}`;
+    const bubbles =
+      attached +
+      lines
+        .map((line) => `<p class="sv-msg-bubble">${escapeHtml(line)}</p>`)
+        .join("");
     if (item.role === "user")
       return `<div class="sv-msg-row sv-msg-mine${reading}">${label}${this.forwardCardHtml?.(item, playing) || ""}${bubbles}${translation}${meta}</div>`;
     if ((item.kind || "voice") === "voice")
@@ -424,34 +600,50 @@ export const messages = {
     const thread = items.filter((item) => this.messageThreadOf(item) === key);
     // Seeing the conversation reads it.
     this.unreadThreads.delete(key);
+    const unread = thread.filter((item) => item.unread);
+    if (unread.length) {
+      for (const item of unread) delete item.unread;
+      this.markMessagesRead(unread.map((item) => item.id));
+    }
     this.updatePhoneLauncherVisibility();
-    const typing = this.textReplyBusy === key || this.incomingText?.callerKey === key;
+    const typing =
+      this.textReplyBusy === key || this.incomingText?.callerKey === key;
     const previous = body.querySelector("#sv-msg-input");
     const hadFocus = previous && document.activeElement === previous;
     this.messageDrafts ||= {};
-    // A redraw of the same conversation with nothing new (a voice made or played) keeps the
-    // reading place; a new message, the typing dots or another conversation scroll to the end.
+    // The same conversation drawn again keeps the reading place once I have scrolled up from
+    // its end: messages arriving one by one don't pull the view down. At the end (or after I
+    // send something, or in another conversation) it follows to the end.
     const shownView = body.querySelector(".sv-msg-thread-view");
     const tail = `${thread.at(-1)?.id || ""}|${typing ? 1 : 0}`;
+    const mineJustSent =
+      thread.at(-1)?.role === "user" && shownView?.dataset.tail !== tail;
     const keepScroll =
       shownView?.dataset.thread === key &&
-      shownView.dataset.tail === tail &&
+      !mineJustSent &&
       body.scrollHeight - body.scrollTop - body.clientHeight > 40
         ? body.scrollTop
         : null;
     const aloud = this.threadPlayback?.key === key;
+    // Cards answered (mine by them in a reply, theirs by me with a button): message id → the answer.
+    const answers = this.cardAnswers(thread);
+    const observing = Boolean(this.messageGroup(key)?.without_user);
+    const replying = this.replyTarget?.key === key ? this.replyTarget : null;
     // The latest round's versions (답변 재생성 in a group): which one is shown, of how many.
     const lastItem = thread.at(-1);
     let rounds = null;
     if (contact.group && lastItem?.family) {
       const family = [...thread, ...(this.hiddenRounds || [])].filter(
-        (item) => item.family === lastItem.family && this.messageThreadOf(item) === key,
+        (item) =>
+          item.family === lastItem.family && this.messageThreadOf(item) === key,
       );
       const list = this.roundsOf(family);
       rounds = {
         family: lastItem.family,
         count: list.length,
-        index: list.findIndex((items) => items.some((item) => item.id === lastItem.id)),
+        index: list.findIndex((items) =>
+          items.some((item) => item.id === lastItem.id),
+        ),
       };
     }
     body.innerHTML = `
@@ -464,14 +656,17 @@ export const messages = {
                   // A group named after its people would show the same names twice.
                   this.messageGroup(key)?.without_user
                     ? `나 없는 방 · ${contact.members.length}명`
-                    : contact.name === contact.members.map((member) => member.name).join(", ")
+                    : contact.name ===
+                        contact.members.map((member) => member.name).join(", ")
                       ? `나 포함 ${contact.members.length + 1}명`
-                      : contact.members.map((member) => escapeHtml(member.name)).join(", ")
+                      : contact.members
+                          .map((member) => escapeHtml(member.name))
+                          .join(", ")
                 }</small>`
               : ""
           }</span></div>
-          <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화방에서 목소리를 만든 메시지를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
-          <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 메시지 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? "fa-stop" : "fa-headphones"}" aria-hidden="true"></i></button>
+          <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화에서 목소리를 만든 문자를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+          <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 문자 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? (this.threadPlayback.making ? "fa-spinner fa-spin" : "fa-stop") : "fa-headphones"}" aria-hidden="true"></i></button>
           ${contact.group && !this.messageGroup(key)?.without_user && contact.members.length > 1 ? '<button type="button" class="sv-msg-aloud" data-group-call-room aria-label="단체 통화" title="단체 통화: 이 방 사람들에게 한꺼번에 전화합니다"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
           ${contact.group ? '<button type="button" class="sv-msg-group-edit" data-group-edit aria-label="단체방 설정" title="방 이름·참여자 바꾸기, 나가기"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>' : ""}
         </header>
@@ -484,7 +679,8 @@ export const messages = {
                     const sameSender =
                       before &&
                       before.role === item.role &&
-                      (item.role === "user" || before.character_key === item.character_key);
+                      (item.role === "user" ||
+                        before.character_key === item.character_key);
                     // The name and time head a run of messages from one sender within a minute.
                     const head =
                       !sameSender ||
@@ -494,9 +690,22 @@ export const messages = {
                       latest: index === thread.length - 1 && !typing,
                       rounds,
                       head,
+                      // Mine is read once they answer (or are typing); theirs once it is opened.
+                      read:
+                        item.role === "user"
+                          ? typing ||
+                            thread
+                              .slice(index + 1)
+                              .some((later) => later.role !== "user")
+                          : !item.unread,
+                      canQuote: !observing,
+                      answered: answers.get(item.id) || "",
                       sender:
                         contact.group && item.role !== "user"
-                          ? this.memberContact({ key: item.character_key, name: item.character_name })
+                          ? this.memberContact({
+                              key: item.character_key,
+                              name: item.character_name,
+                            })
                           : null,
                     });
                   })
@@ -508,24 +717,43 @@ export const messages = {
         ${
           this.messageGroup(key)?.without_user
             ? `<div class="sv-msg-observer">
-          <small><i class="fa-solid fa-eye" aria-hidden="true"></i>나는 이 방에 없습니다 · 한 번에 ${this.messageGroup(key).burst_min}~${this.messageGroup(key).burst_max}개</small>
-          <button type="button" data-group-burst ${typing ? "disabled" : ""}><i class="fa-solid ${typing ? "fa-spinner fa-spin" : "fa-forward"}" aria-hidden="true"></i><span>대화 이어 보기</span></button>
+          <small><i class="fa-solid fa-eye" aria-hidden="true"></i>나 없는 채팅방 · 한 번에 ${this.messageGroup(key).burst_min}~${this.messageGroup(key).burst_max}개</small>
+          ${
+            typing
+              ? '<button type="button" data-group-stop><i class="fa-solid fa-stop" aria-hidden="true"></i><span>멈추기</span></button>'
+              : '<button type="button" data-group-burst><i class="fa-solid fa-forward" aria-hidden="true"></i><span>대화 이어 보기</span></button>'
+          }
         </div>`
             : ""
         }
-        <form class="sv-msg-compose" ${this.messageGroup(key)?.without_user ? "hidden" : ""}>
-          <textarea id="sv-msg-input" rows="1" maxlength="2000" placeholder="보낼 내용 혹은 대필 지시 내용" aria-label="${escapeHtml(contact.name)}에게 보낼 문자"></textarea>
+        ${observing ? "" : this.cardTrayHtml(key)}
+        ${replying ? `<div class="sv-msg-replying"><i class="fa-solid fa-reply" aria-hidden="true"></i><span><b>${escapeHtml(replying.from || "")}</b>${escapeHtml(replying.text)}</span><button type="button" data-quote-clear aria-label="인용 취소" title="인용 취소"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>` : ""}
+        ${this.cardWaiting === key && thread.at(-1)?.role === "user" && !typing ? '<p class="sv-msg-waiting"><i class="fa-regular fa-clock" aria-hidden="true"></i><span>AI 응답 요청을 아직 보내지 않았습니다. 더 보낼 것이 있으면 보낸 뒤, 보내기 버튼을 누르면 답장이 옵니다.</span></p>' : ""}
+        <form class="sv-msg-compose" ${observing ? "hidden" : ""}>
+          <button type="button" class="sv-card-open" data-card-open aria-label="카드 보내기" title="카드 보내기: 사진·위치·약속·송금·선물" aria-expanded="${this.cardTray?.key === key}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+          <textarea id="sv-msg-input" rows="1" maxlength="2000" placeholder="보낼 내용 또는 대필 지시" aria-label="${escapeHtml(contact.name)}에게 보낼 문자"></textarea>
           <button type="button" class="sv-ghostwrite" data-ghostwrite aria-label="대필" title="대필: 내 페르소나로 보낼 문자를 대신 써 줍니다. 입력칸에 ‘늦는다고 사과해 줘’처럼 원하는 내용을 적어 두면 그 뜻대로 자연스럽게 쓰고, 써 둔 초안이면 다듬습니다. 비워 두면 알아서 씁니다." ${this.ghostwriteBusy === key ? "disabled" : ""}><i class="fa-solid ${this.ghostwriteBusy === key ? "fa-spinner fa-spin" : "fa-pen-nib"}" aria-hidden="true"></i></button>
-          <button type="submit" aria-label="보내기" title="${thread.at(-1)?.role === "user" ? "보내기 · 비워 두고 누르면 마지막 문자에 대한 답장을 받습니다" : "보내기"}"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+          ${
+            this.textReplyBusy === key
+              ? '<button type="submit" class="sv-msg-stop" aria-label="응답 멈추기" title="응답 멈추기"><i class="fa-solid fa-stop" aria-hidden="true"></i></button>'
+              : `<button type="submit" aria-label="보내기" title="${thread.at(-1)?.role === "user" ? "보내기 (Ctrl·⌘·Alt+Enter) · 비워 두고 누르면 마지막 문자에 대한 답장을 받습니다" : "보내기 (Ctrl·⌘·Alt+Enter)"}"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>`
+          }
           ${this.draftTranslationHtml?.(key, this.messageDrafts[key]) || ""}
         </form>
       </div>`;
     const input = body.querySelector("#sv-msg-input");
     input.value = this.messageDrafts[key] || "";
     // Enter starts a new line (each line goes out as its own bubble); the box grows with it.
+    // Its height is touched only when it has to change: every change of it makes the whole page
+    // work out its layout again, which on a long chat is felt as lag on each key.
+    let lastLength = input.value.length;
     const fit = () => {
-      input.style.height = "auto";
-      input.style.height = `${Math.min(input.scrollHeight + 2, 110)}px`;
+      const shorter = input.value.length < lastLength && input.style.height;
+      lastLength = input.value.length;
+      if (!shorter && input.scrollHeight <= input.clientHeight) return;
+      if (shorter) input.style.height = "auto";
+      const height = `${Math.min(input.scrollHeight + 2, 110)}px`;
+      if (input.style.height !== height) input.style.height = height;
     };
     // A redraw keeps the typing place on a desktop; on a phone it would pop the keyboard up.
     if (hadFocus && !this.isMobilePhoneLayout()) input.focus();
@@ -535,10 +763,28 @@ export const messages = {
       this.syncDraftTranslation?.(draftBox, key, input.value);
       fit();
     });
+    // Enter is a new line; with Ctrl, ⌘ or Alt it sends (not while a syllable is still being put together).
+    input.addEventListener("keydown", (event) => {
+      if (
+        event.key !== "Enter" ||
+        // Safari ends a Korean or Japanese composition with an Enter that isn't marked composing.
+        event.isComposing ||
+        event.keyCode === 229 ||
+        !(event.ctrlKey || event.metaKey || event.altKey)
+      )
+        return;
+      event.preventDefault();
+      send();
+    });
     if (input.value) requestAnimationFrame(fit);
     // My text is the last one (its answer failed, or was deleted): an empty send asks for it.
     const lastMine = thread.at(-1)?.role === "user";
     const send = () => {
+      // While their answer is being written the button stops it; what I typed stays in the box.
+      if (this.textReplyBusy === key) {
+        this.stopTextReply(key);
+        return;
+      }
       const value = input.value;
       if (!value.trim()) {
         if (lastMine && !typing) this.run(() => this.generateTextReply(key));
@@ -548,8 +794,63 @@ export const messages = {
       if (translation) this.draftTranslation = null;
       this.messageDrafts[key] = "";
       input.value = "";
-      this.run(() => this.sendTextMessage(key, value, translation));
+      this.run(() => this.sendTextMessage(key, value, translation, quoted()));
     };
+    // The message picked to answer goes with the next thing sent, once.
+    const quoted = () => {
+      const target = this.replyTarget?.key === key ? this.replyTarget : null;
+      this.replyTarget = null;
+      return target
+        ? { quote: { id: target.id, from: target.from, text: target.text } }
+        : {};
+    };
+    // A card goes out on its own and waits: what is typed in the box stays there, and their
+    // answer is asked for only by the send button (so a photo and a text can go together).
+    this.bindCardTray(body, key, (card) =>
+      this.run(() =>
+        this.sendTextMessage(
+          key,
+          card.title || "사진",
+          "",
+          { card: { ...card, solo: true }, ...quoted() },
+          { reply: false },
+        ),
+      ),
+    );
+    // Answering a card of theirs sends my answer as a text, and asks for theirs.
+    body.querySelectorAll("[data-card-answer]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const card = this.cardAnswer(
+          this.messageRecord(button),
+          button.dataset.cardAnswer,
+        );
+        if (card)
+          this.run(() => this.sendTextMessage(key, card.title, "", { card }));
+      }),
+    );
+    // A pick-one of theirs: my choice goes out as a text that quotes the card.
+    body.querySelectorAll("[data-poll-pick]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const quote = this.quoteOfMessage(this.messageRecord(button));
+        this.run(() =>
+          this.sendTextMessage(
+            key,
+            button.dataset.pollPick,
+            "",
+            quote ? { quote } : {},
+          ),
+        );
+      }),
+    );
+    body.querySelectorAll(".sv-msg-quote-btn").forEach((button) =>
+      button.addEventListener("click", () => {
+        const quote = this.quoteOfMessage(this.messageRecord(button));
+        if (!quote) return;
+        this.replyTarget = { key, ...quote };
+        this.messageMoreOpen = "";
+        this.renderSmartphone();
+      }),
+    );
     body.querySelector("[data-ghostwrite]").addEventListener("click", () =>
       this.run(async () => {
         if (this.ghostwriteBusy) return;
@@ -568,21 +869,32 @@ export const messages = {
         }
       }),
     );
-    body.querySelector(".sv-msg-compose").addEventListener("submit", (event) => {
-      event.preventDefault();
-      send();
-    });
+    body
+      .querySelector(".sv-msg-compose")
+      .addEventListener("submit", (event) => {
+        event.preventDefault();
+        send();
+      });
+    body
+      .querySelector("[data-group-stop]")
+      ?.addEventListener("click", () => this.stopTextReply(key));
     body
       .querySelector("[data-group-edit]")
       ?.addEventListener("click", () => this.openGroupEditor(key));
     body
       .querySelector("[data-group-call-room]")
       ?.addEventListener("click", () =>
-        this.run(() => this.startGroupCall(contact.members.slice(0, 4).map((member) => member.key))),
+        this.run(() =>
+          this.startGroupCall(
+            contact.members.slice(0, 4).map((member) => member.key),
+          ),
+        ),
       );
     body
       .querySelector("[data-group-burst]")
-      ?.addEventListener("click", () => this.run(() => this.continueGroupBurst(key)));
+      ?.addEventListener("click", () =>
+        this.run(() => this.continueGroupBurst(key)),
+      );
     body.querySelector("[data-thread-back]").addEventListener("click", () => {
       this.messageThreadKey = "";
       this.renderSmartphone();
@@ -591,49 +903,86 @@ export const messages = {
     // The message playing now: its new button takes over from the one this redraw removed.
     const lit = body.querySelector(".sv-msg-play.sv-playing");
     if (lit && this.currentAudio) this.currentPlayButton = lit;
-    body.querySelector("[data-thread-aloud]")?.addEventListener("click", () =>
-      this.run(() => this.playThreadAloud(key)),
-    );
+    body
+      .querySelector("[data-thread-aloud]")
+      ?.addEventListener("click", () =>
+        this.run(() => this.playThreadAloud(key)),
+      );
     const save = body.querySelector("[data-thread-download]");
     save?.addEventListener("click", () =>
-      this.run(() => this.withBusyButton(save, () => this.downloadThreadAudio(key))),
+      this.run(() =>
+        this.withBusyButton(save, () => this.downloadThreadAudio(key)),
+      ),
     );
     body.querySelectorAll(".sv-msg-play").forEach((button) =>
       button.addEventListener("click", () => {
         const item = record(button);
-        if (item.audio_url) this.playMessageAudio(item, this.apiUrl(item.audio_url), button);
+        if (item.audio_url)
+          this.playMessageAudio(item, this.apiUrl(item.audio_url), button);
         else this.generateVoiceMessageAudio(item, button);
       }),
     );
-    body.querySelectorAll(".sv-msg-reroll").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.generateVoiceMessageAudio(record(button), button, true),
-      ),
-    );
-    body.querySelectorAll(".sv-msg-delete").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.deleteMessage(record(button)))),
-    );
-    body.querySelectorAll(".sv-msg-round").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.switchRound(key, button.dataset.family, Number(button.dataset.index))),
-      ),
-    );
-    body.querySelectorAll(".sv-msg-version").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.switchMessageVersion(record(button), Number(button.dataset.version))),
-      ),
-    );
-    body.querySelectorAll(".sv-msg-again").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.regenerateMessage(record(button))),
-      ),
-    );
-    body.querySelectorAll(".sv-msg-edit").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.editVoiceMessage(record(button)))),
-    );
-    body.querySelectorAll(".sv-msg-share").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.shareVoiceMessage(record(button)))),
-    );
+    body
+      .querySelectorAll(".sv-msg-reroll")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.generateVoiceMessageAudio(record(button), button, true),
+        ),
+      );
+    body
+      .querySelectorAll(".sv-msg-delete")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.deleteMessage(record(button))),
+        ),
+      );
+    this.bindMessageMore(body);
+    body
+      .querySelectorAll(".sv-msg-round")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.switchRound(
+              key,
+              button.dataset.family,
+              Number(button.dataset.index),
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll(".sv-msg-version")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.switchMessageVersion(
+              record(button),
+              Number(button.dataset.version),
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll(".sv-msg-again")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.regenerateMessage(record(button))),
+        ),
+      );
+    body
+      .querySelectorAll(".sv-msg-edit")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.editVoiceMessage(record(button))),
+        ),
+      );
+    body
+      .querySelectorAll(".sv-msg-share")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.shareVoiceMessage(record(button))),
+        ),
+      );
     body.querySelectorAll(".sv-msg-forward-play").forEach((button) =>
       button.addEventListener("click", () => {
         const item = record(button);
@@ -641,17 +990,31 @@ export const messages = {
           this.stopPlayback();
           return;
         }
-        this.playMessageAudio({ ...item, kind: "voice" }, this.apiUrl(item.audio_url), button);
+        this.playMessageAudio(
+          { ...item, kind: "voice" },
+          this.apiUrl(item.audio_url),
+          button,
+        );
       }),
     );
-    body.scrollTop = keepScroll ?? body.scrollHeight;
+    // The + tray, the quote bar and the waiting note sit at the end: shown, they are in view.
+    if (aloud) this.showThreadMaking();
+    if (this.cardTray?.key === key || replying || this.cardWaiting === key)
+      body.scrollTop = body.scrollHeight;
+    else if (!(aloud && this.showReadingMessage(body)))
+      body.scrollTop = keepScroll ?? body.scrollHeight;
   },
 
   /**
    * Plays one message's voice, lighting its play button for as long as it sounds (also after
    * the conversation is redrawn). `onEnded`/`onStop` as in playAudio.
    */
-  playMessageAudio(item, url, button = null, { revoke = false, onEnded = null, onStop = null } = {}) {
+  playMessageAudio(
+    item,
+    url,
+    button = null,
+    { revoke = false, onEnded = null, onStop = null } = {},
+  ) {
     const done = (callback) => () => {
       if (this.playingMessageId === item.id) this.playingMessageId = "";
       document
@@ -677,26 +1040,192 @@ export const messages = {
 
   /** 내려받기: only messages that already have a voice (making them for a whole room would cost too much). */
   async downloadThreadAudio(key) {
-    const thread = (await this.loadMessages()).filter((item) => this.messageThreadOf(item) === key);
+    const thread = (await this.loadMessages()).filter(
+      (item) => this.messageThreadOf(item) === key,
+    );
     const voiced = thread.filter((item) => item.audio_url);
     if (!voiced.length)
-      throw new Error("내려받을 음성이 없습니다. 목소리를 만든(들어 본) 메시지만 들어갑니다.");
+      throw new Error(
+        "내려받을 음성이 없습니다. 목소리를 만든(들어 본) 문자만 들어갑니다.",
+      );
     const files = await this.downloadJoinedAudio(
       voiced.map((item) => ({
         url: this.apiUrl(item.audio_url),
-        filter: (item.kind || "voice") === "voice" && this.shouldApplyCommunicationFilter("voice_message", item),
+        filter:
+          (item.kind || "voice") === "voice" &&
+          this.shouldApplyCommunicationFilter("voice_message", item),
       })),
       `${this.threadContact(key).name}-문자-${this.fileStamp()}`,
       { gap: 0.8 },
     );
     const notes = [];
     if (files > 1) notes.push(`길어서 30분씩 ${files}개 파일로 나눴습니다.`);
-    if (thread.length > voiced.length) notes.push(`목소리를 만들지 않은 메시지 ${thread.length - voiced.length}개는 빠졌습니다.`);
+    if (thread.length > voiced.length)
+      notes.push(
+        `목소리를 만들지 않은 문자 ${thread.length - voiced.length}개는 빠졌습니다.`,
+      );
     if (notes.length) this.notify(notes.join(" "), "info");
   },
 
+  /** ⋯ under a message shows its other buttons (one message at a time), and 내려받기 among them. */
+  bindMessageMore(body) {
+    // The buttons opened with ⋯ go back behind it at a click anywhere else in the phone (Esc too).
+    body.svCloseMore = (event) => {
+      // What was clicked may already be gone from the page (+ turned into its box): not "elsewhere".
+      if (event.type === "click" && !event.target.isConnected) return;
+      if (
+        event.target
+          .closest?.(".sv-msg-meta")
+          ?.querySelector(".sv-msg-extra:not([hidden])")
+      )
+        return;
+      const open = body.querySelector('.sv-msg-more[aria-expanded="true"]');
+      if (!open) return;
+      open.setAttribute("aria-expanded", "false");
+      open.nextElementSibling.hidden = true;
+      this.messageMoreOpen = "";
+      if (event.type === "keydown") open.focus();
+    };
+    if (!body.dataset.svMoreBound) {
+      body.dataset.svMoreBound = "1";
+      body.addEventListener("click", (event) => body.svCloseMore?.(event));
+      body.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") body.svCloseMore?.(event);
+      });
+    }
+    body.querySelectorAll(".sv-msg-more").forEach((button) =>
+      button.addEventListener("click", () => {
+        const open = button.getAttribute("aria-expanded") !== "true";
+        body.querySelectorAll(".sv-msg-more").forEach((other) => {
+          other.setAttribute("aria-expanded", "false");
+          other.nextElementSibling.hidden = true;
+        });
+        button.setAttribute("aria-expanded", String(open));
+        button.nextElementSibling.hidden = !open;
+        this.messageMoreOpen = open ? button.dataset.id : "";
+        // ⋯ steps aside while its buttons are out: the keyboard's place moves on to them.
+        if (open) button.nextElementSibling.querySelector("button")?.focus();
+      }),
+    );
+    body.querySelectorAll("[data-react]").forEach((button) =>
+      button.addEventListener("click", () =>
+        this.run(async () => {
+          await this.reactToMessage(button.dataset.id, button.dataset.react);
+          this.messageMoreOpen = "";
+          await this.renderSmartphone();
+        }),
+      ),
+    );
+    // Any other emoji: the + turns into a small box to type (or paste) one into.
+    body.querySelectorAll("[data-react-own]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const box = document.createElement("input");
+        box.type = "text";
+        box.className = "sv-msg-react-input";
+        box.maxLength = 24;
+        box.placeholder = "🙂";
+        box.setAttribute("aria-label", "반응으로 남길 이모지");
+        // Enter and leaving the box both say "done": it is left once.
+        let left = false;
+        const leave = () => {
+          const emoji = box.value.trim();
+          if (!emoji || left) return;
+          if (!validReaction(emoji)) {
+            this.notify("이모지 하나만 넣어 주십시오.", "info");
+            return;
+          }
+          left = true;
+          this.run(async () => {
+            await this.reactToMessage(button.dataset.id, emoji);
+            this.messageMoreOpen = "";
+            await this.renderSmartphone();
+          });
+        };
+        box.addEventListener("change", leave);
+        box.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && !event.isComposing) {
+            event.preventDefault();
+            leave();
+          }
+        });
+        button.replaceWith(box);
+        box.focus();
+      }),
+    );
+    body
+      .querySelectorAll(".sv-msg-save")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.withBusyButton(button, () =>
+              this.downloadMessageVoice(this.messageRecord(button)),
+            ),
+          ),
+        ),
+      );
+  },
+
+  /** One message's voice as a file. */
+  async downloadMessageVoice(item) {
+    if (!item?.audio_url) throw new Error("내려받을 음성이 없습니다.");
+    await this.downloadJoinedAudio(
+      [
+        {
+          url: this.apiUrl(item.audio_url),
+          filter:
+            (item.kind || "voice") === "voice" &&
+            this.shouldApplyCommunicationFilter("voice_message", item),
+        },
+      ],
+      `${item.role === "user" ? this.userCharacterName() : item.character_name || "문자"}-문자-${this.fileStamp()}`,
+    );
+  },
+
+  /**
+   * 한 번에 듣기 in the conversation shown: the message being read is put mid-screen. Done when
+   * the conversation is drawn too, since a draw (a voice made ahead being saved) would otherwise
+   * put the view back where it was, or at the end. False when nothing is being read here.
+   */
+  /**
+   * 한 번에 듣기 waiting for a voice still being made: the listen button turns while it waits,
+   * and that message is marked, so a gap between two voices doesn't look like the end.
+   */
+  showThreadMaking() {
+    const state = this.threadPlayback;
+    const icon = document.querySelector(
+      "#sv-smartphone [data-thread-aloud].sv-playing i",
+    );
+    if (icon)
+      icon.className = `fa-solid ${state?.making ? "fa-spinner fa-spin" : "fa-stop"}`;
+    document
+      .querySelectorAll("#sv-smartphone .sv-msg-making")
+      .forEach((row) => row.classList.remove("sv-msg-making"));
+    if (state?.making)
+      this.messagePlayButton(state.making)
+        ?.closest(".sv-msg-row")
+        ?.classList.add("sv-msg-making");
+  },
+
+  showReadingMessage(shown = null, smooth = false) {
+    const row =
+      this.threadPlayback?.at &&
+      this.messagePlayButton(this.threadPlayback.at)?.closest(".sv-msg-row");
+    const body = row && (shown || row.closest(".sv-smartphone-body"));
+    if (!body?.contains(row)) return false;
+    const top =
+      body.scrollTop +
+      row.getBoundingClientRect().top -
+      body.getBoundingClientRect().top -
+      (body.clientHeight - row.offsetHeight) / 2;
+    if (smooth && body.scrollTo) body.scrollTo({ top, behavior: "smooth" });
+    else body.scrollTop = top;
+    return true;
+  },
+
   messagePlayButton(id) {
-    return document.querySelector(`#sv-smartphone .sv-msg-play[data-id="${CSS.escape(String(id))}"]`);
+    return document.querySelector(
+      `#sv-smartphone .sv-msg-play[data-id="${CSS.escape(String(id))}"]`,
+    );
   },
 
   /** The message a bubble's button belongs to, as it was drawn. */
@@ -708,46 +1237,71 @@ export const messages = {
    * 한 번에 듣기: the latest batch received (the replies after the user's last text; if the user
    * wrote last, the batch before that; in a room without the user, its last round), up to 15,
    * voiced and played in a row. The next one is made while one plays. Pressed again, it stops.
+   * `kept`: a conversation of 미적용 기억 (its messages): every one that has a voice already is
+   * played, in order, and none is made.
    */
-  async playThreadAloud(key) {
-    if (this.threadPlayback?.key === key) {
-      this.threadPlayback.stopped = true;
+  async playThreadAloud(key, kept = null) {
+    const playing = kept ? `away:${key}` : key;
+    // Stopped at once, also while it waits for a voice: the run lets go of the button and its
+    // marks now, and ends by itself when the voice it was waiting for is back.
+    const halt = async () => {
+      const running = this.threadPlayback;
+      running.stopped = true;
+      running.making = "";
+      this.threadPlayback = null;
       this.stopPlayback();
-      return;
+      this.showThreadMaking();
+      if (this.phoneActiveTab === "message") await this.renderSmartphone();
+    };
+    if (this.threadPlayback?.key === playing) return halt();
+    if (this.threadPlayback) await halt();
+    let batch;
+    if (kept) batch = kept.filter((item) => item.audio_url);
+    else {
+      const thread = (await this.loadMessages()).filter(
+        (item) => this.messageThreadOf(item) === key,
+      );
+      // The run of received messages at the end, past any texts of the user's still unanswered.
+      let end = thread.length;
+      while (end > 0 && thread[end - 1].role === "user") end--;
+      let start = end;
+      while (start > 0 && thread[start - 1].role !== "user") start--;
+      batch = thread.slice(start, end);
+      // A room without the user is one long run: only its last round (one 대화 이어 보기).
+      const mark = batch.at(-1)?.reason;
+      if (this.messageGroup(key)?.without_user && mark?.startsWith("round-"))
+        batch = batch.filter((item) => item.reason === mark);
+      batch = batch.slice(-15);
     }
-    if (this.threadPlayback) {
-      this.threadPlayback.stopped = true;
-      this.stopPlayback();
-    }
-    const thread = (await this.loadMessages()).filter((item) => this.messageThreadOf(item) === key);
-    // The run of received messages at the end, past any texts of the user's still unanswered.
-    let end = thread.length;
-    while (end > 0 && thread[end - 1].role === "user") end--;
-    let start = end;
-    while (start > 0 && thread[start - 1].role !== "user") start--;
-    let batch = thread.slice(start, end);
-    // A room without the user is one long run: only its last round (one 대화 이어 보기).
-    const mark = batch.at(-1)?.reason;
-    if (this.messageGroup(key)?.without_user && mark?.startsWith("round-"))
-      batch = batch.filter((item) => item.reason === mark);
-    batch = batch.slice(-15);
     if (!batch.length) {
-      this.notify("들을 메시지가 없습니다.");
+      this.notify("들을 문자가 없습니다.");
       return;
     }
     const operation = this.captureChat();
-    const state = { key, stopped: false };
+    const state = { key: playing, stopped: false };
     this.threadPlayback = state;
     this.unlockAudioForMobile();
     await this.renderSmartphone();
     const made = [];
     const settled = new Set();
+    // The first try keeps a failure to itself; the second one shows it.
+    const make = (item, quiet = false) =>
+      this.generateVoiceMessageAudio(item, null, false, { play: false, quiet });
     const prepare = (index) =>
       index < batch.length
         ? (made[index] ||= (
             batch[index].audio_url
-              ? Promise.resolve({ url: this.apiUrl(batch[index].audio_url), revoke: false })
-              : this.generateVoiceMessageAudio(batch[index], null, false, { play: false })
+              ? Promise.resolve({
+                  url: this.apiUrl(batch[index].audio_url),
+                  revoke: false,
+                })
+              : make(batch[index], true)
+                  // A voice that failed is asked for once more, a moment later.
+                  .catch(() =>
+                    new Promise((resolve) => setTimeout(resolve, 1500)).then(
+                      () => (over() ? null : make(batch[index])),
+                    ),
+                  )
                   .then((url) => (url ? { url, revoke: true } : null))
                   .catch(() => null)
           ).finally(() => settled.add(index)))
@@ -759,20 +1313,31 @@ export const messages = {
       for (let index = 0; index < batch.length && !over(); index++) {
         // Two voices first, and two more whenever it catches up with the making, so a slow one
         // doesn't leave a gap midway.
-        if (index === 0 || !settled.has(index)) await Promise.all([prepare(index), prepare(index + 1)]);
+        if (!settled.has(index) && !batch[index].audio_url) {
+          // Still being made: the view goes to it and shows that it is on its way.
+          state.at = batch[index].id;
+          state.making = batch[index].id;
+          this.showThreadMaking();
+          this.showReadingMessage(null, true);
+        }
+        if (index === 0 || !settled.has(index))
+          await Promise.all([prepare(index), prepare(index + 1)]);
         const ready = await prepare(index);
-        prepare(index + 1);
-        prepare(index + 2);
+        if (state.making) {
+          state.making = "";
+          this.showThreadMaking();
+        }
         if (over()) {
           if (ready?.revoke) URL.revokeObjectURL(ready.url);
           break;
         }
+        prepare(index + 1);
+        prepare(index + 2);
         heard = index;
         if (!ready) continue;
         // The message being read comes into view, so a long run can be followed without scrolling.
-        this.messagePlayButton(batch[index].id)
-          ?.closest(".sv-msg-row")
-          ?.scrollIntoView({ block: "center", behavior: "smooth" });
+        state.at = batch[index].id;
+        this.showReadingMessage(null, true);
         await new Promise((resolve) =>
           this.playMessageAudio(batch[index], ready.url, null, {
             revoke: ready.revoke,
@@ -797,7 +1362,7 @@ export const messages = {
 
   /**
    * Whether someone texting one to one may say they'll call right away (call_after): calls of
-   * theirs are switched on (캐릭터가 먼저 전화하기), they are a contact who reaches out, and the
+   * theirs are switched on (나에게 전화), they are a contact who reaches out, and the
    * line is free.
    */
   canCallAfterText(key) {
@@ -849,40 +1414,66 @@ export const messages = {
 
   /** The user texts someone; their reply follows after a short pause for more texts. */
   /** `extra`: more fields for the saved text (음성 전달: what is forwarded with it). */
-  async sendTextMessage(key, value, translation = "", extra = {}) {
+  /** `reply: false`: sent, but their answer waits until I press send (a card, with more to add). */
+  async sendTextMessage(
+    key,
+    value,
+    translation = "",
+    extra = {},
+    { reply = true } = {},
+  ) {
     this.unlockAudioForMobile();
-    const text = String(value || "").trim().slice(0, 2000);
+    const text = String(value || "")
+      .trim()
+      .slice(0, 2000);
     if (!text) return;
     // I texted them first: no getting back to my voicemail on top of their reply.
     this.cancelVoicemailAnswer?.(key);
     const contact = this.threadContact(key);
     const identity = this.getStateIdentity();
     const anchor = this.currentPhoneAnchor();
-    const response = await this.fetch(this.apiUrl("/api/plugins/scenevoice/voice-messages"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: identity.chatId,
-        anchor_message_id: String(anchor.index),
-        ...this.anchorStamp(anchor.index),
-        character_key: key,
-        character_name: contact.name,
-        ...(contact.group ? { thread_key: key } : {}),
-        role: "user",
-        kind: "text",
-        origin: "reply",
-        text,
-        ...(translation ? { translation } : {}),
-        language: this.scriptLanguage(text) || this.chatLanguage(),
-        ...extra,
-      }),
-    });
+    const response = await this.fetch(
+      this.apiUrl("/api/plugins/scenevoice/voice-messages"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: identity.chatId,
+          anchor_message_id: String(anchor.index),
+          ...this.anchorStamp(anchor.index),
+          character_key: key,
+          character_name: contact.name,
+          ...(contact.group ? { thread_key: key } : {}),
+          role: "user",
+          kind: "text",
+          origin: "reply",
+          text,
+          ...(translation ? { translation } : {}),
+          language: this.scriptLanguage(text) || this.chatLanguage(),
+          ...(this.visitOf ? { away: true } : {}),
+          ...extra,
+        }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "문자를 보내지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "문자를 보내지 못했습니다.");
     this.playMessageTone("send");
     await this.persistTextThreadMemory(key, anchor.index);
+    this.cardWaiting = reply ? "" : key;
     await this.renderSmartphone();
-    this.queueTextReply(key);
+    if (reply) this.queueTextReply(key);
+  },
+
+  /** Their texts in the conversation just opened are read from now on (kept with the messages). */
+  markMessagesRead(ids) {
+    this.request("/api/plugins/scenevoice/voice-messages/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: this.getStateIdentity().chatId, ids }),
+    }).catch((error) =>
+      console.warn("[SceneVoice] 읽음 표시 저장 실패", error),
+    );
   },
 
   /** Each conversation waits its own short pause for more texts; others are not affected. */
@@ -897,12 +1488,28 @@ export const messages = {
     );
   },
 
+  /**
+   * 응답 멈추기: the answer being written for this conversation is dropped (the request ends,
+   * nothing more of it is saved). The send button asks for it again.
+   */
+  stopTextReply(key) {
+    if (this.textReplyBusy !== key || !this.textReplyStop) return;
+    clearTimeout(this.textReplyTimers?.get(key));
+    this.textReplyTimers?.delete(key);
+    this.textReplyAgain?.delete(key);
+    this.cardWaiting = key;
+    this.textReplyStop.abort(
+      new DOMException("응답을 멈췄습니다.", "AbortError"),
+    );
+  },
+
   /** The character answers the user's latest texts: usually by text, sometimes by voice. */
   async generateTextReply(key) {
     if (this.textReplyBusy) {
       this.textReplyAgain.add(key);
       return;
     }
+    if (this.cardWaiting === key) this.cardWaiting = "";
     const operation = this.captureChat();
     const profileId =
       this.config.phone?.connection_profile_id ||
@@ -916,15 +1523,22 @@ export const messages = {
       this.phoneActiveTab === "message" &&
       this.messageThreadKey === key;
     this.textReplyBusy = key;
+    const stop = (this.textReplyStop = new AbortController());
     if (viewing()) await this.renderSmartphone();
     try {
       if (this.isGroupThread(key)) {
-        await this.generateGroupReply(key, { operation, profileId, viewing });
+        await this.generateGroupReply(key, {
+          operation,
+          profileId,
+          viewing,
+          signal: stop.signal,
+        });
         return;
       }
-      const thread = (await this.loadMessages())
-        .filter((item) => this.messageThreadOf(item) === key)
-        .slice(-40);
+      const whole = (await this.loadMessages()).filter(
+        (item) => this.messageThreadOf(item) === key,
+      );
+      const thread = this.lastTexts ? this.lastTexts(whole) : whole.slice(-40);
       if (thread.at(-1)?.role !== "user") return;
       const character = this.phoneContact(key);
       // Answer in the language the user is texting in.
@@ -934,19 +1548,31 @@ export const messages = {
         key,
       );
       const allowVoice = this.config.voice_message?.reply_voice !== false;
-      const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(
-        await this.stateForPrompt(key),
-      );
+      const {
+        blocks: stateBlocks,
+        absent,
+        unknown,
+      } = this.stateBlocks(await this.stateForPrompt(key));
       const emotions = Array.from(this.analysisEmotionCandidates()).sort();
       const canCall = this.canCallAfterText(key);
       const me = this.userCharacterName();
       const status = await this.statusLine?.(key).catch(() => "");
+      const { images, unseen } = await this.threadImages(thread);
+      // 다른 인물에게 전하기: offered only now and then, and only while people text each other.
+      const acquaintances = this.overheardTextsOn?.()
+        ? this.statePeople().filter(
+            (person) => !person.hidden && person.key !== key,
+          )
+        : [];
+      const mayTell = acquaintances.length > 0 && Math.random() < TELL_CHANCE;
       const messages = phoneMessages(
         textSystem({
+          mayTell,
           emotions,
           language,
           translation: this.wantsTranslation(language),
           replying: true,
+          photos: unseen.some(Boolean),
           allowVoice,
           soundEffects: this.phoneSoundEffects(character.key),
           fixedLanguage: this.languageIsFixed(key),
@@ -954,6 +1580,9 @@ export const messages = {
           unknown,
           canCall,
           statusLine: typeof status === "string",
+          style: this.config.prompts?.text_style,
+          cards: this.cardKindsOn(),
+          openCard: this.hasOpenCard(thread),
         }),
         [
           dataBlock("user_character", me),
@@ -965,12 +1594,24 @@ export const messages = {
           ...stateBlocks,
           dataBlock(
             "recent_chat",
-            this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
+            this.buildRecentChatContext(
+              this.config.phone?.context_messages ?? 10,
+            ),
           ),
           ...((await this.statusLinesBlocks?.()) || []),
-          ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) || []),
+          ...((await this.worldInfoBlocks?.(thread.map((item) => item.text))) ||
+            []),
           ...this.currentTimeBlocks([key]),
           dataBlock("previous_calls", await this.loadPreviousCalls(key)),
+          ...(mayTell
+            ? [
+                dataBlock(
+                  "people_they_know",
+                  acquaintances.map((person) => person.name),
+                ),
+              ]
+            : []),
+          ...((await this.otherChatsBlocks?.([key], key)) || []),
           dataBlock(
             "text_thread",
             this.textThreadData(thread, character.name, this.realtimeFor(key)),
@@ -979,14 +1620,42 @@ export const messages = {
         textFinal(character.name, language, me),
       );
       this.assertChat(operation);
-      const parsed = await this.requestSpokenReply(profileId, messages, 900);
       this.assertChat(operation);
-      const kind = allowVoice && String(parsed?.type).toLowerCase() === "voice" ? "voice" : "text";
-      const record = await this.saveCharacterMessage({ character, kind, origin: "reply", parsed });
+      const parsed = await this.requestSpokenReply(
+        profileId,
+        messages,
+        900,
+        null,
+        { images, signal: stop.signal },
+      );
+      this.assertChat(operation);
+      if (stop.signal.aborted) return;
+      await this.notePhotosSeen(parsed, unseen);
+      const kind =
+        allowVoice && String(parsed?.type).toLowerCase() === "voice"
+          ? "voice"
+          : "text";
+      const record = await this.saveCharacterMessage({
+        character,
+        kind,
+        origin: "reply",
+        parsed,
+        thread,
+      });
       await this.textStatusChange(character, parsed, status);
-      if (!viewing()) this.announceText(key, character.name, record?.text, kind);
-      if (canCall && parsed?.call_after === true) this.callAfterText(character, record?.text);
+      if (mayTell && parsed?.tell)
+        this.tellSomeone(character, parsed.tell, acquaintances).catch((error) =>
+          console.warn("[SceneVoice] 다른 인물에게 전하기 실패", error),
+        );
+      if (!viewing())
+        this.announceText(key, character.name, record?.text, kind);
+      if (canCall && parsed?.call_after === true)
+        this.callAfterText(character, record?.text);
+    } catch (error) {
+      // Stopped by the user: not an error.
+      if (!stop.signal.aborted || operation.signal.aborted) throw error;
     } finally {
+      if (this.textReplyStop === stop) this.textReplyStop = null;
       if (!operation.signal.aborted) {
         this.textReplyBusy = "";
         if (viewing()) await this.renderSmartphone();
@@ -1001,7 +1670,14 @@ export const messages = {
   },
 
   async deleteMessage(item) {
-    if (!confirm(item.role === "user" ? "보낸 문자를 지우시겠습니까?" : "이 메시지를 지우시겠습니까?")) return;
+    if (
+      !confirm(
+        item.role === "user"
+          ? "보낸 문자를 지우시겠습니까?"
+          : "이 문자를 지우시겠습니까?",
+      )
+    )
+      return;
     const response = await this.request(
       `/api/plugins/scenevoice/voice-messages/${encodeURIComponent(item.id)}`,
       {
@@ -1011,7 +1687,8 @@ export const messages = {
       },
     );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "메시지를 지우지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "문자를 지우지 못했습니다.");
     await this.forgetMessageMemory(item);
     await this.renderSmartphone();
   },
@@ -1020,7 +1697,10 @@ export const messages = {
   async forgetMessageMemory(item) {
     const texts = (item.kind || "voice") === "text" || item.origin === "reply";
     if (!this.anchorShown(item))
-      await this.forgetSwipeMemory(item, texts ? this.messageThreadOf(item) : "");
+      await this.forgetSwipeMemory(
+        item,
+        texts ? this.messageThreadOf(item) : "",
+      );
     else if (texts)
       await this.persistTextThreadMemory(
         this.messageThreadOf(item),
@@ -1038,7 +1718,9 @@ export const messages = {
       return;
     }
     if (this.isGroupThread(key)) {
-      await this.regenerateGroupReply(key);
+      // What the members wrote by themselves is written again the same way.
+      if (item.origin === "incoming") await this.regenerateGroupBurst(key);
+      else await this.regenerateGroupReply(key);
       return;
     }
     // Set aside, not deleted: the new answer keeps it as an earlier version (‹ › to compare).
@@ -1053,18 +1735,27 @@ export const messages = {
         },
       );
       if (!response.ok)
-        throw new Error((await response.json()).detail || "메시지를 다시 받을 수 없습니다.");
+        throw new Error(
+          (await response.json()).detail || "문자를 다시 받을 수 없습니다.",
+        );
     };
     await stash(true);
     await this.forgetMessageMemory(item);
-    const replacing = (this.replacingMessage = { key, id: item.id, done: false });
+    const replacing = (this.replacingMessage = {
+      key,
+      id: item.id,
+      done: false,
+    });
     try {
       if (item.origin === "reply") {
         await this.renderSmartphone();
         await this.generateTextReply(key);
       } else
         await this.generateIncomingVoiceMessage({
-          type: (item.kind || "voice") === "text" ? "text_message" : "voice_message",
+          type:
+            (item.kind || "voice") === "text"
+              ? "text_message"
+              : "voice_message",
           reason: item.reason || "",
           callerKey: key,
           sourceMessageId: item.anchor_message_id,
@@ -1083,9 +1774,16 @@ export const messages = {
   /** What the chat memory holds of a message: its thread's texts, or its own voice message. */
   async rememberMessage(item) {
     if ((item.kind || "voice") === "text" || item.origin === "reply")
-      await this.persistTextThreadMemory(this.messageThreadOf(item), item.anchor_message_id);
+      await this.persistTextThreadMemory(
+        this.messageThreadOf(item),
+        item.anchor_message_id,
+      );
     else
-      await this.persistVoiceMessageToMessage({ ...item, type: "voice_message", reason: item.reason || "" });
+      await this.persistVoiceMessageToMessage({
+        ...item,
+        type: "voice_message",
+        reason: item.reason || "",
+      });
   },
 
   /** ‹ ›: another of the message's answers becomes the one shown, used and remembered. */
@@ -1100,7 +1798,8 @@ export const messages = {
       },
     );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "다른 답으로 바꾸지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "다른 답으로 바꾸지 못했습니다.");
     if (this.playingMessageId === item.id) this.stopPlayback();
     await this.forgetMessageMemory(item);
     await this.rememberMessage(data.item);
@@ -1124,12 +1823,24 @@ export const messages = {
   /** Shows or hides messages of a group (one round of answers kept behind another). */
   async setRoundHidden(items, hidden, { round = "", family = "" } = {}) {
     if (!items.length) return;
-    const response = await this.request("/api/plugins/scenevoice/voice-messages/visibility", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: items[0].chat_id, ids: items.map((item) => item.id), hidden, round, family }),
-    });
-    if (!response.ok) throw new Error((await response.json()).detail || "메시지를 바꾸지 못했습니다.");
+    const response = await this.request(
+      "/api/plugins/scenevoice/voice-messages/visibility",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: items[0].chat_id,
+          ids: items.map((item) => item.id),
+          hidden,
+          round,
+          family,
+        }),
+      },
+    );
+    if (!response.ok)
+      throw new Error(
+        (await response.json()).detail || "문자를 바꾸지 못했습니다.",
+      );
   },
 
   /**
@@ -1137,10 +1848,16 @@ export const messages = {
    * back) and `ask` brings a new round in the same family; with no new round, it shows again.
    */
   async regenerateRound(key, round, ask) {
-    const family = round.find((item) => item.family)?.family || `family-${round[0].id}`;
-    const anchors = () => new Set(round.map((item) => String(item.anchor_message_id)));
-    await this.setRoundHidden(round, true, { round: round[0].round || `round-${round[0].id}`, family });
-    for (const anchor of anchors()) await this.persistTextThreadMemory(key, anchor);
+    const family =
+      round.find((item) => item.family)?.family || `family-${round[0].id}`;
+    const anchors = () =>
+      new Set(round.map((item) => String(item.anchor_message_id)));
+    await this.setRoundHidden(round, true, {
+      round: round[0].round || `round-${round[0].id}`,
+      family,
+    });
+    for (const anchor of anchors())
+      await this.persistTextThreadMemory(key, anchor);
     const replacing = (this.roundFamily = { key, family, done: false });
     try {
       await ask();
@@ -1148,7 +1865,8 @@ export const messages = {
       if (this.roundFamily === replacing) this.roundFamily = null;
       if (!replacing.done) {
         await this.setRoundHidden(round, false);
-        for (const anchor of anchors()) await this.persistTextThreadMemory(key, anchor);
+        for (const anchor of anchors())
+          await this.persistTextThreadMemory(key, anchor);
         await this.renderSmartphone();
       }
     }
@@ -1164,10 +1882,16 @@ export const messages = {
     const target = rounds[index];
     const shown = rounds.find((items) => items.some((item) => !item.hidden));
     if (!target || target === shown) return;
-    if (this.playingMessageId && everything.some((item) => item.id === this.playingMessageId)) this.stopPlayback();
+    if (
+      this.playingMessageId &&
+      everything.some((item) => item.id === this.playingMessageId)
+    )
+      this.stopPlayback();
     await this.setRoundHidden(shown || [], true);
     await this.setRoundHidden(target, false);
-    for (const anchor of new Set(everything.map((item) => String(item.anchor_message_id))))
+    for (const anchor of new Set(
+      everything.map((item) => String(item.anchor_message_id)),
+    ))
       await this.persistTextThreadMemory(key, anchor);
     await this.renderSmartphone();
   },
@@ -1180,17 +1904,51 @@ export const messages = {
       if (!rounds.has(id)) rounds.set(id, []);
       rounds.get(id).push(item);
     }
-    return [...rounds.values()].sort((a, b) => String(a[0].created_at).localeCompare(String(b[0].created_at)));
+    return [...rounds.values()].sort((a, b) =>
+      String(a[0].created_at).localeCompare(String(b[0].created_at)),
+    );
   },
 
   /** The thread for prompts: my lines under my character's name, never "USER". */
   textThreadData(thread, name, timed = false) {
     const me = this.userCharacterName?.() || "User";
-    return thread.map((item) => ({
-      from: item.role === "user" ? me : item.thread_key ? item.character_name : name,
+    // n: what a reply's reply_to points at. read: whether I opened their text (one to one).
+    // card_open: a card of mine nobody answered yet (their reply may accept or decline it).
+    const answers = this.cardAnswers?.(thread) || new Map();
+    return thread.map((item, index) => ({
+      n: index + 1,
+      from:
+        item.role === "user"
+          ? me
+          : item.thread_key
+            ? item.character_name
+            : name,
       kind: item.kind || "voice",
       text: this.messageWords(item),
-      ...(timed ? { sent_at: this.realTimeLabel(item.created_at) } : {}),
+      ...(item.reactions?.length
+        ? {
+            reactions: item.reactions.map((reaction) => ({
+              by: reaction.by === "user" ? me : reaction.name || name,
+              emoji: reaction.emoji,
+            })),
+          }
+        : {}),
+      ...(item.role === "user" &&
+      cardCanBeAnswered(item.card) &&
+      !answers.has(item.id)
+        ? { card_open: true }
+        : {}),
+      ...(item.role !== "user" && !item.thread_key
+        ? { read: !item.unread }
+        : {}),
+      ...(timed
+        ? {
+            sent_at: this.realTimeLabel(
+              item.created_at,
+              this.timeZoneFor(item.character_key),
+            ),
+          }
+        : {}),
     }));
   },
 
@@ -1200,8 +1958,21 @@ export const messages = {
    */
   messageWords(item) {
     const forward = item?.forward;
-    if (!forward) return item?.text || "";
-    const kind = { call: "a recording of a phone call", memo: "a voice memo recording", voice: "a voice message" }[forward.type] || "a recording";
+    // A card and a quoted message come first, each as a bracket line.
+    if (!forward)
+      return [
+        this.quoteLine?.(item?.quote),
+        this.cardLine?.(item?.card),
+        item?.card?.solo ? "" : item?.text || "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    const kind =
+      {
+        call: "a recording of a phone call",
+        memo: "a voice memo recording",
+        voice: "a voice message",
+      }[forward.type] || "a recording";
     return [
       ...(forward.note ? [item.text] : []),
       `[Forwarded ${kind}: ${forward.title}]`,
@@ -1219,48 +1990,77 @@ export const messages = {
     anchorIndex = null,
     threadKey = "",
     round = "",
+    thread = null,
   }) {
     const draft = this.normalizePhoneDraft(parsed, reason);
-    if (!draft.text)
-      throw new Error("보조 모델이 메시지를 반환하지 않았습니다.");
+    // A text may answer a card of mine or bring a card of its own (one or the other), and quote a
+    // message of the thread it was written from.
+    const card =
+      kind === "text"
+        ? (thread && this.cardAnswerFromReply?.(parsed, thread)) ||
+          this.cardFromReply?.(parsed)
+        : null;
+    const quote = thread ? this.quoteFromReply?.(parsed, thread) : null;
+    if (!draft.text) throw new Error("보조모델이 문자를 반환하지 않았습니다.");
     const identity = this.getStateIdentity();
     const anchor =
       anchorIndex === null ? this.currentPhoneAnchor().index : anchorIndex;
     // 답변 재생성 of this person's message: the new answer takes the old one in as a version.
     const replacing =
-      !threadKey && this.replacingMessage?.key === character.key ? this.replacingMessage : null;
-    const family = threadKey && this.roundFamily?.key === threadKey ? this.roundFamily : null;
-    const response = await this.fetch(this.apiUrl("/api/plugins/scenevoice/voice-messages"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: identity.chatId,
-        anchor_message_id: String(anchor),
-        ...this.anchorStamp(anchor),
-        character_key: character.key,
-        character_name: character.name,
-        ...(threadKey ? { thread_key: threadKey } : {}),
-        role: "character",
-        kind,
-        origin,
-        reason,
-        text: draft.text,
-        // A text keeps its tagged line too: hidden on screen, used when it is listened to.
-        script: draft.script,
-        translation: draft.translation,
-        tags: draft.tags,
-        intensity: draft.intensity,
-        language: draft.language,
-        ...(replacing ? { replaces: replacing.id } : {}),
-        ...(round ? { round } : {}),
-        ...(family ? { family: family.family } : {}),
-      }),
-    });
+      !threadKey && this.replacingMessage?.key === character.key
+        ? this.replacingMessage
+        : null;
+    const family =
+      threadKey && this.roundFamily?.key === threadKey
+        ? this.roundFamily
+        : null;
+    const response = await this.fetch(
+      this.apiUrl("/api/plugins/scenevoice/voice-messages"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: identity.chatId,
+          anchor_message_id: String(anchor),
+          ...this.anchorStamp(anchor),
+          character_key: character.key,
+          character_name: character.name,
+          ...(threadKey ? { thread_key: threadKey } : {}),
+          role: "character",
+          kind,
+          origin,
+          reason,
+          text: draft.text,
+          // A text keeps its tagged line too: hidden on screen, used when it is listened to.
+          script: draft.script,
+          translation: draft.translation,
+          tags: draft.tags,
+          intensity: draft.intensity,
+          language: draft.language,
+          ...(card ? { card } : {}),
+          ...(quote ? { quote } : {}),
+          ...(replacing ? { replaces: replacing.id } : {}),
+          ...(round ? { round } : {}),
+          ...(family ? { family: family.family } : {}),
+          // Written while this card's chat wasn't open (visit.js): its chat memory comes later.
+          ...(this.visitOf ? { away: true } : {}),
+        }),
+      },
+    );
     const data = await response.json();
     if (!response.ok)
-      throw new Error(data.detail || `메시지 저장 실패 (${response.status})`);
+      throw new Error(data.detail || `문자 저장 실패 (${response.status})`);
     if (replacing) replacing.done = true;
     if (family) family.done = true;
+    // An emoji they left on someone's text along with this one.
+    const reaction = thread
+      ? this.reactionFromReply?.(parsed, thread, character.key)
+      : null;
+    if (reaction)
+      await this.reactToMessage(reaction.id, reaction.emoji, {
+        by: character.key,
+        name: character.name,
+      }).catch((error) => console.warn("[SceneVoice] 반응 저장 실패", error));
     // One tone for this person's turn, however many bubbles it shows as.
     this.playMessageTone("receive", character.key);
     const record = {
@@ -1275,6 +2075,8 @@ export const messages = {
       kind,
       origin,
       ...draft,
+      ...(card ? { card } : {}),
+      ...(quote ? { quote } : {}),
     };
     if (kind === "text" || origin === "reply" || threadKey)
       await this.persistTextThreadMemory(threadKey || character.key, anchor);
@@ -1289,25 +2091,38 @@ export const messages = {
     return record;
   },
 
-
   async editVoiceMessage(item) {
     const mine = item.role === "user";
     const sheet = await this.openLineSheet({
-      title: mine ? "보낸 문자 고치기" : (item.kind || "voice") === "voice" ? "음성 메시지 고치기" : "문자 고치기",
+      title: mine
+        ? "보낸 문자 고치기"
+        : (item.kind || "voice") === "voice"
+          ? "음성 메시지 고치기"
+          : "문자 고치기",
       value: mine ? item.text : item.script || item.text,
       translation: item.translation,
       ...(mine
-        ? { hint: "상대가 이미 받은 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰입니다." }
+        ? {
+            hint: "상대가 이미 한 답은 그대로 두고, 앞으로의 대화와 채팅 기억에는 고친 문장이 쓰입니다.",
+          }
         : {}),
     });
     if (sheet === null) return;
     // My text keeps [brackets] as words; a character's line reads them as tags.
     const typed = String(sheet.value).trim().slice(0, 2000);
     const edit = mine
-      ? { text: typed, language: this.scriptLanguage(typed) || item.language || this.chatLanguage() }
+      ? {
+          text: typed,
+          language:
+            this.scriptLanguage(typed) || item.language || this.chatLanguage(),
+        }
       : this.spokenEdit(sheet.value);
-    if (!edit.text) throw new Error("메시지를 비울 수는 없습니다.");
-    const { changed, words, translation } = this.sheetChanges(mine ? { ...item, script: "" } : item, edit, sheet);
+    if (!edit.text) throw new Error("문자를 비울 수는 없습니다.");
+    const { changed, words, translation } = this.sheetChanges(
+      mine ? { ...item, script: "" } : item,
+      edit,
+      sheet,
+    );
     if (!changed) return;
     const response = await this.request(
       `/api/plugins/scenevoice/voice-messages/${encodeURIComponent(item.id)}`,
@@ -1318,18 +2133,25 @@ export const messages = {
       },
     );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "메시지를 고치지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "문자를 고치지 못했습니다.");
     // Chat memory keeps what was actually sent, so it follows the edit.
     if ((data.item.kind || "voice") === "text" || data.item.origin === "reply")
       await this.persistTextThreadMemory(
         this.messageThreadOf(data.item),
         data.item.anchor_message_id,
       );
-    else await this.persistVoiceMessageToMessage({ ...data.item, type: "voice_message" });
+    else
+      await this.persistVoiceMessageToMessage({
+        ...data.item,
+        type: "voice_message",
+      });
     // The old voice no longer fits the words. Like on arrival, a voice message gets its new one at
     // once; so does a text that had been listened to (its 음성 다시 stays, turning, meanwhile).
     const arriving =
-      words && (data.item.kind || "voice") === "voice" && this.config.voice_message?.auto_generate_audio;
+      words &&
+      (data.item.kind || "voice") === "voice" &&
+      this.config.voice_message?.auto_generate_audio;
     const remake = words && (arriving || Boolean(item.audio_url));
     if (remake) (this.voicePending ||= new Set()).add(data.item.id);
     await this.renderSmartphone();
@@ -1337,7 +2159,12 @@ export const messages = {
     try {
       if (arriving) await this.generateArrivedVoice(data.item);
       else {
-        const url = await this.generateVoiceMessageAudio(data.item, null, false, { play: false });
+        const url = await this.generateVoiceMessageAudio(
+          data.item,
+          null,
+          false,
+          { play: false },
+        );
         if (typeof url === "string") URL.revokeObjectURL(url);
       }
     } finally {
@@ -1352,7 +2179,9 @@ export const messages = {
    */
   async generateArrivedVoice(item) {
     const busy = Boolean(this.currentAudio) || Boolean(this.messageJobs?.size);
-    const url = await this.generateVoiceMessageAudio(item, null, false, { play: !busy });
+    const url = await this.generateVoiceMessageAudio(item, null, false, {
+      play: !busy,
+    });
     if (busy && typeof url === "string") URL.revokeObjectURL(url);
   },
 
@@ -1361,11 +2190,22 @@ export const messages = {
    * or a voice message, for `reason` (a voicemail's says the call went unanswered). Returns the
    * parsed reply (see requestSpokenReply).
    */
-  async writeIncomingMessage(character, kind, reason, profileId) {
-    const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(
-      await this.stateForPrompt(character.key),
-    );
-    const status = kind === "text" ? await this.statusLine?.(character.key).catch(() => "") : undefined;
+  async writeIncomingMessage(
+    character,
+    kind,
+    reason,
+    profileId,
+    { mayPass = false } = {},
+  ) {
+    const {
+      blocks: stateBlocks,
+      absent,
+      unknown,
+    } = this.stateBlocks(await this.stateForPrompt(character.key));
+    const status =
+      kind === "text"
+        ? await this.statusLine?.(character.key).catch(() => "")
+        : undefined;
     const emotions = Array.from(this.analysisEmotionCandidates()).sort();
     const thread =
       kind === "text"
@@ -1396,6 +2236,9 @@ export const messages = {
             unknown,
             canCall: this.canCallAfterText(character.key),
             statusLine: typeof status === "string",
+            style: this.config.prompts?.text_style,
+            mayPass,
+            cards: this.cardKindsOn(),
           })
         : messageSystem({
             emotions,
@@ -1405,6 +2248,7 @@ export const messages = {
             fixedLanguage: this.languageIsFixed(character.key),
             absent,
             unknown,
+            mayPass,
           }),
       [
         dataBlock("user_character", me),
@@ -1416,17 +2260,33 @@ export const messages = {
         ...stateBlocks,
         dataBlock(
           "recent_chat",
-          this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
+          this.buildRecentChatContext(
+            this.config.phone?.context_messages ?? 10,
+          ),
         ),
         ...((await this.statusLinesBlocks?.()) || []),
-        ...((await this.worldInfoBlocks?.([...thread.map((item) => item.text), reason])) || []),
+        ...((await this.worldInfoBlocks?.([
+          ...thread.map((item) => item.text),
+          reason,
+        ])) || []),
         ...this.currentTimeBlocks([character.key]),
-        dataBlock("previous_calls", await this.loadPreviousCalls(character.key)),
+        dataBlock(
+          "previous_calls",
+          await this.loadPreviousCalls(character.key),
+        ),
         ...(kind === "text"
           ? [
+              ...((await this.otherChatsBlocks?.(
+                [character.key],
+                character.key,
+              )) || []),
               dataBlock(
                 "text_thread",
-                this.textThreadData(thread, character.name, this.realtimeFor(character.key)),
+                this.textThreadData(
+                  thread,
+                  character.name,
+                  this.realtimeFor(character.key),
+                ),
               ),
             ]
           : []),
@@ -1443,9 +2303,14 @@ export const messages = {
 
   /** A text that came with a new 상태메시지 (rare): it shows on their profile from now. */
   async textStatusChange(character, parsed, previous) {
-    const line = typeof parsed?.status_message === "string" ? parsed.status_message.trim() : "";
+    const line =
+      typeof parsed?.status_message === "string"
+        ? parsed.status_message.trim()
+        : "";
     if (!line || line === previous || !this.saveStatusLine) return;
-    await this.saveStatusLine(character, line).catch((error) => console.warn("[SceneVoice] 상태메시지 저장 실패", error));
+    await this.saveStatusLine(character, line).catch((error) =>
+      console.warn("[SceneVoice] 상태메시지 저장 실패", error),
+    );
   },
 
   /**
@@ -1466,34 +2331,57 @@ export const messages = {
       candidate?.callerKey || this.getCurrentCharacterProfile().key,
     );
     this.voiceMessageBusy = true;
+    // 랜덤 연락 with 상황에 맞을 때만: the writer may find they wouldn't reach out now, so nothing
+    // shows until the message is there.
+    const mayPass = candidate?.mayPass === true;
     // Typing dots in their conversation, and (a new one, not 답변 재생성) the alert, while it is
     // being written.
-    this.incomingText = {
-      type: kind === "text" ? "text_message" : "voice_message",
-      callerKey: character.key,
-      again: candidate?.again === true,
-    };
-    this.updatePhoneLauncherVisibility();
-    const shell = document.getElementById("sv-smartphone");
-    if (
-      shell &&
-      !shell.classList.contains("hidden") &&
-      this.phoneActiveTab === "message" &&
-      this.messageThreadKey === character.key
-    )
-      await this.renderSmartphone();
+    if (!mayPass) {
+      this.incomingText = {
+        type: kind === "text" ? "text_message" : "voice_message",
+        callerKey: character.key,
+        again: candidate?.again === true,
+      };
+      this.updatePhoneLauncherVisibility();
+      const shell = document.getElementById("sv-smartphone");
+      if (
+        shell &&
+        !shell.classList.contains("hidden") &&
+        this.phoneActiveTab === "message" &&
+        this.messageThreadKey === character.key
+      )
+        await this.renderSmartphone();
+    }
     try {
-      const parsed = await this.writeIncomingMessage(character, kind, candidate?.reason || "", profileId);
+      const parsed = await this.writeIncomingMessage(
+        character,
+        kind,
+        candidate?.reason || "",
+        profileId,
+        { mayPass },
+      );
       this.assertChat(operation);
+      if (
+        mayPass &&
+        (parsed?.pass === true || !String(parsed?.text || "").trim())
+      ) {
+        const decision = (this.lastContactDecisions || []).find(
+          (item) => item.random && item.callerKey === character.key,
+        );
+        if (decision) decision.passed = true;
+        return;
+      }
       const record = await this.saveCharacterMessage({
         character,
         kind,
         origin: "incoming",
         parsed,
         reason: candidate?.reason || "",
-        anchorIndex: this.phoneAnchorFromSource(candidate?.sourceMessageId).index,
+        anchorIndex: this.phoneAnchorFromSource(candidate?.sourceMessageId)
+          .index,
       });
-      if (kind === "text") await this.textStatusChange(character, parsed, parsed?.previousStatus);
+      if (kind === "text")
+        await this.textStatusChange(character, parsed, parsed?.previousStatus);
       this.incomingText = null;
       const shell = document.getElementById("sv-smartphone");
       const viewing =
@@ -1501,14 +2389,27 @@ export const messages = {
         !shell.classList.contains("hidden") &&
         this.phoneActiveTab === "message" &&
         this.messageThreadKey === character.key;
-      if (!viewing) this.announceText(character.key, character.name, record?.text, kind);
+      if (!viewing)
+        this.announceText(character.key, character.name, record?.text, kind);
       else this.updatePhoneLauncherVisibility();
-      if (kind === "text" && parsed?.call_after === true && this.canCallAfterText(character.key))
+      if (
+        kind === "text" &&
+        parsed?.call_after === true &&
+        this.canCallAfterText(character.key)
+      )
         this.callAfterText(character, record?.text);
     } catch (error) {
       if (operation.signal.aborted) return;
-      console.warn("[SceneVoice] 메시지 받기 실패", error);
-      this.notify(error.message || "메시지를 받을 수 없습니다.", "error");
+      console.warn("[SceneVoice] 문자 받기 실패", error);
+      // A text they sent by themselves that couldn't be written (the request refused, a reply
+      // cut off) is tried once more shortly, without a word; failing again it is said.
+      if (candidate && !candidate.again && !candidate.retried) {
+        setTimeout(() => {
+          if (operation.signal.aborted) return;
+          this.incomingTexts.push({ ...candidate, retried: true });
+          this.drainIncomingTexts().catch(() => undefined);
+        }, this.retryWait ?? 45000);
+      } else this.notify(error.message || "문자를 받을 수 없습니다.", "error");
     } finally {
       if (!operation.signal.aborted) {
         this.voiceMessageBusy = false;
@@ -1517,14 +2418,24 @@ export const messages = {
           this.updatePhoneLauncherVisibility();
         }
         const shell = document.getElementById("sv-smartphone");
-        if (shell && !shell.classList.contains("hidden") && this.phoneActiveTab === "message")
+        if (
+          shell &&
+          !shell.classList.contains("hidden") &&
+          this.phoneActiveTab === "message"
+        )
           await this.renderSmartphone();
       }
     }
   },
 
   /** `play: false` makes the voice and returns its URL (the caller plays and frees it). */
-  async generateVoiceMessageAudio(item, button = null, regenerate = false, { play = true } = {}) {
+  async generateVoiceMessageAudio(
+    item,
+    button = null,
+    regenerate = false,
+    // `quiet`: a failure is thrown to the caller (which may try again) instead of being shown.
+    { play = true, quiet = false } = {},
+  ) {
     const operation = this.captureChat();
     if (!item?.text) return;
     this.unlockAudioForMobile();
@@ -1539,9 +2450,12 @@ export const messages = {
       const speakerKey =
         item.role === "user"
           ? this.personaKey()
-          : (item.character_key && this.livePersonKey(item.character_key, item.character_name)) ||
+          : (item.character_key &&
+              this.livePersonKey(item.character_key, item.character_name)) ||
             this.getCurrentCharacterProfile().key;
-      const script = (await this.voiceScript?.(item.script || "", speakerKey)) ?? (item.script || "");
+      const script =
+        (await this.voiceScript?.(item.script || "", speakerKey)) ??
+        (item.script || "");
       const response = await this.fetch(
         this.apiUrl("/api/plugins/scenevoice/generate"),
         {
@@ -1551,12 +2465,15 @@ export const messages = {
             text: item.text,
             // The user's own texts speak with the persona voice.
             speaker_key: speakerKey,
+            card_keys: this.currentCardKeys?.() || [],
             own_voice_only: this.chatVoiceOn?.() === false,
-            ...(this.followsMultiCastEngine?.() ? { engine_settings: this.multicastVoiceSettings() } : {}),
+            ...(this.followsMultiCastEngine?.()
+              ? { engine_settings: this.multicastVoiceSettings() }
+              : {}),
             speaker_name:
               item.role === "user"
                 ? this.config.character_voices?.[this.personaKey()]?.name ||
-                  window.SillyTavern?.getContext?.()?.name1 ||
+                  stOf(this)?.name1 ||
                   "사용자"
                 : item.character_name,
             language:
@@ -1589,7 +2506,9 @@ export const messages = {
       const blob = await response.blob();
       // Its sound effects mixed into the saved voice.
       const mixed =
-        this.config.phone?.sfx_in_file !== false ? await this.mixedLine?.(blob, item.script, generationId) : null;
+        this.config.phone?.sfx_in_file !== false
+          ? await this.mixedLine?.(blob, item.script, generationId)
+          : null;
       const audioUrl = this.createAudioUrl(mixed?.blob || blob);
       const attached = await this.fetch(
         this.apiUrl(
@@ -1615,7 +2534,7 @@ export const messages = {
       }
       if (!attached.ok)
         throw new Error(
-          "음성은 생성되었지만 메시지에 연결하지 못했습니다. 기록 탭에서 확인해 주십시오.",
+          "음성은 생성되었지만 문자에 연결하지 못했습니다. 기록 탭에서 확인해 주십시오.",
         );
       // Played next as it is: its sounds are in the file.
       item.sounds_mixed = Boolean(mixed);
@@ -1627,6 +2546,7 @@ export const messages = {
       if (this.phoneActiveTab === "message") await this.renderSmartphone();
     } catch (error) {
       if (operation.signal.aborted) return;
+      if (quiet) throw error;
       this.notify(
         error.message || "음성 메시지를 생성할 수 없습니다.",
         "error",
@@ -1646,14 +2566,18 @@ export const messages = {
   formatPhoneDate(value) {
     const now = new Date();
     const today = now.toDateString();
-    if (this.phoneDates?.day !== today) this.phoneDates = { day: today, values: new Map() };
+    if (this.phoneDates?.day !== today)
+      this.phoneDates = { day: today, values: new Map() };
     const known = this.phoneDates.values.get(value);
     if (known !== undefined) return known;
     const date = new Date(value);
     let label;
     if (Number.isNaN(date.getTime())) label = String(value ?? "");
     else if (date.toDateString() === today)
-      label = date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+      label = date.toLocaleTimeString("ko-KR", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
     else {
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
@@ -1672,7 +2596,8 @@ export const messages = {
   /** Decorative waveform whose shape is stable for the same message. */
   voiceWaveBars(text = "") {
     let seed = 7;
-    for (const char of String(text)) seed = (seed * 31 + char.charCodeAt(0)) % 9973;
+    for (const char of String(text))
+      seed = (seed * 31 + char.charCodeAt(0)) % 9973;
     return Array.from({ length: 24 }, (_, index) => {
       seed = (seed * 73 + 41 + index) % 9973;
       return `<i style="--h:${(0.25 + (seed % 75) / 100).toFixed(2)}"></i>`;

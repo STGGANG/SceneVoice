@@ -3,7 +3,12 @@
 // anything. A few minutes later they get back to me by text or call, unless I call again first
 // (then they pick up).
 import { escapeHtml, mergeConfig } from "./common.js";
-import { dataBlock, phoneMessages, voicemailGreetingFinal, voicemailGreetingSystem } from "./prompts.js";
+import {
+  dataBlock,
+  phoneMessages,
+  voicemailGreetingFinal,
+  voicemailGreetingSystem,
+} from "./prompts.js";
 import { wavBlob } from "./wav.js";
 
 // They get back to me this long after the call (a random point in it).
@@ -12,7 +17,7 @@ const ANSWER_AFTER_MS = [120000, 300000];
 export const voicemail = {
   /**
    * A call to this person goes to voicemail now: their saved state says busy. The state counts
-   * however it was kept up (상태 추적 사용 off, its updates still run for 먼저 연락), as calls and
+   * however it was kept up (상태 추적 사용 off, its updates still run for 선연락), as calls and
    * texts use it.
    */
   async callGoesToVoicemail(contact) {
@@ -28,14 +33,24 @@ export const voicemail = {
     if (!found?.unknown) return found?.state?.contact?.availability === "busy";
     // 행방 모름 (out of the scene, nowhere named): the availability last saved, as the state tab
     // shows it (a hand-set 바쁨 included), still counts.
-    const person = this.statePeople?.().find((item) => item.key === contact.key);
-    const record = person ? await this.loadPersonState(person).catch(() => null) : null;
+    const person = this.statePeople?.().find(
+      (item) => item.key === contact.key,
+    );
+    const record = person
+      ? await this.loadPersonState(person).catch(() => null)
+      : null;
     return record?.state?.contact?.availability === "busy";
   },
 
   /** Opens their voicemail on the call screen: greeting, beep, then what I may leave. */
   async openVoicemailBox(contact) {
-    const box = (this.voicemailBox = { contact, stage: "connecting", greeting: null, text: "", saving: false });
+    const box = (this.voicemailBox = {
+      contact,
+      stage: "connecting",
+      greeting: null,
+      text: "",
+      saving: false,
+    });
     this.phoneActiveTab = "call";
     await this.renderSmartphone();
     try {
@@ -59,9 +74,13 @@ export const voicemail = {
 
   /** Their greeting: kept with the person once written; written now only the first time. */
   async voicemailGreeting(contact) {
-    const saved = this.config.character_voices?.[contact.key]?.voicemail_greeting;
+    const saved =
+      this.config.character_voices?.[contact.key]?.voicemail_greeting;
     if (saved?.text) return saved;
-    const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
+    const profileId =
+      this.config.phone?.connection_profile_id ||
+      this.config.connection_profile_id ||
+      "";
     if (!profileId || !this.connectionService) return null;
     const language = this.conversationLanguage([], "", contact.key);
     const translation = this.wantsTranslation(language);
@@ -74,11 +93,15 @@ export const voicemail = {
       [
         dataBlock("target_character", contact.name),
         dataBlock("profile", this.phoneRoleplayProfile()),
-        dataBlock("performance_note", contact.note || "", { range: this.emotionalRange(contact.key) }),
+        dataBlock("performance_note", contact.note || "", {
+          range: this.emotionalRange(contact.key),
+        }),
       ],
       voicemailGreetingFinal(contact.name, language),
     );
-    const draft = this.normalizePhoneDraft(await this.requestSpokenReply(profileId, messages, 400));
+    const draft = this.normalizePhoneDraft(
+      await this.requestSpokenReply(profileId, messages, 400),
+    );
     if (!draft.text) return null;
     const greeting = {
       text: draft.text,
@@ -92,17 +115,22 @@ export const voicemail = {
 
   async keepVoicemailGreeting(contact, greeting) {
     const voices = structuredClone(this.config.character_voices || {});
-    voices[contact.key] = { ...(voices[contact.key] || { name: contact.name }), voicemail_greeting: greeting };
+    voices[contact.key] = {
+      ...(voices[contact.key] || { name: contact.name }),
+      voicemail_greeting: greeting,
+    };
     const response = await this.request("/api/plugins/scenevoice/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ character_voices: voices }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `인사말 저장 실패 (${response.status})`);
+    if (!response.ok)
+      throw new Error(data.detail || `인사말 저장 실패 (${response.status})`);
     this.config = mergeConfig(data.settings || {});
     // An open settings window saving its drafts later keeps it too.
-    if (this.voiceDraft?.[contact.key]) this.voiceDraft[contact.key].voicemail_greeting = greeting;
+    if (this.voiceDraft?.[contact.key])
+      this.voiceDraft[contact.key].voicemail_greeting = greeting;
   },
 
   /** The greeting in their voice, through the phone sound; done when it ends (or can't be made). */
@@ -115,7 +143,14 @@ export const voicemail = {
       character_key: contact.key,
       character_name: contact.name,
     };
-    const line = { role: "character", text: greeting.text, script: greeting.script, language: greeting.language, turn_index: 0, intensity: 0.4 };
+    const line = {
+      role: "character",
+      text: greeting.text,
+      script: greeting.script,
+      language: greeting.language,
+      turn_index: 0,
+      intensity: 0.4,
+    };
     let voice;
     try {
       voice = await this.speakPhoneLine(session, line);
@@ -145,7 +180,10 @@ export const voicemail = {
     }
     const url = this.createAudioUrl(wavBlob(samples, rate));
     return new Promise((resolve) => {
-      this.playWithSounds(url, "", null, true, { onEnded: resolve, onStop: resolve });
+      this.playWithSounds(url, "", null, true, {
+        onEnded: resolve,
+        onStop: resolve,
+      });
       // A beep that never sounds (blocked audio) doesn't hold the recording back.
       setTimeout(resolve, 1500);
     });
@@ -186,11 +224,17 @@ export const voicemail = {
       box.text = field.value;
     });
     field?.focus({ preventScroll: true });
-    body.querySelector(".sv-voicemail-compose")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      this.run(() => this.closeVoicemailBox(box.text));
-    });
-    body.querySelector("[data-voicemail-end]")?.addEventListener("click", () => this.run(() => this.closeVoicemailBox("")));
+    body
+      .querySelector(".sv-voicemail-compose")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.run(() => this.closeVoicemailBox(box.text));
+      });
+    body
+      .querySelector("[data-voicemail-end]")
+      ?.addEventListener("click", () =>
+        this.run(() => this.closeVoicemailBox("")),
+      );
   },
 
   /**
@@ -203,25 +247,33 @@ export const voicemail = {
     if (box.stage !== "record") this.stopPlayback?.();
     box.saving = true;
     await this.renderSmartphone();
-    const text = String(left || "").trim().slice(0, 2000);
+    const text = String(left || "")
+      .trim()
+      .slice(0, 2000);
     let session = null;
     try {
       const anchor = this.currentPhoneAnchor();
-      const response = await this.request("/api/plugins/scenevoice/phone/voicemail-left", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: this.getStateIdentity().chatId,
-          anchor_message_id: String(anchor.index),
-          ...this.anchorStamp(anchor.index),
-          character_key: box.contact.key,
-          character_name: box.contact.name,
-          text,
-          language: this.scriptLanguage(text) || this.chatLanguage(),
-        }),
-      });
+      const response = await this.request(
+        "/api/plugins/scenevoice/phone/voicemail-left",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: this.getStateIdentity().chatId,
+            anchor_message_id: String(anchor.index),
+            ...this.anchorStamp(anchor.index),
+            character_key: box.contact.key,
+            character_name: box.contact.name,
+            text,
+            language: this.scriptLanguage(text) || this.chatLanguage(),
+          }),
+        },
+      );
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || `음성사서함 저장 실패 (${response.status})`);
+      if (!response.ok)
+        throw new Error(
+          data.detail || `음성사서함 저장 실패 (${response.status})`,
+        );
       session = data.session;
       await this.persistPhoneSessionToMessage(session);
     } finally {
@@ -232,7 +284,9 @@ export const voicemail = {
     // My message in my persona's voice, made now so it's ready in 통화 기록.
     const mine = session?.turns?.[0];
     if (mine && this.personaVoiceReady())
-      this.makePhoneTurnAudio(session, mine).catch((error) => console.warn("[SceneVoice] voicemail voice failed", error));
+      this.makePhoneTurnAudio(session, mine).catch((error) =>
+        console.warn("[SceneVoice] voicemail voice failed", error),
+      );
     this.answerVoicemailLater(box.contact, text);
   },
 
@@ -242,12 +296,15 @@ export const voicemail = {
     this.cancelVoicemailAnswer(contact.key);
     const operation = this.captureChat();
     const [least, most] = ANSWER_AFTER_MS;
-    const timer = setTimeout(() => {
-      if (this.voicemailAnswers.get(contact.key) !== timer) return;
-      this.voicemailAnswers.delete(contact.key);
-      if (operation.signal.aborted) return;
-      this.run(() => this.answerVoicemail(contact, left));
-    }, least + Math.random() * (most - least));
+    const timer = setTimeout(
+      () => {
+        if (this.voicemailAnswers.get(contact.key) !== timer) return;
+        this.voicemailAnswers.delete(contact.key);
+        if (operation.signal.aborted) return;
+        this.run(() => this.answerVoicemail(contact, left));
+      },
+      least + Math.random() * (most - least),
+    );
     this.voicemailAnswers.set(contact.key, timer);
   },
 
@@ -264,10 +321,15 @@ export const voicemail = {
     const reason = left
       ? `${me} called while they were busy and couldn't pick up, and left a voicemail: "${left.replace(/\s+/g, " ").slice(0, 300)}". Now they get back to ${me} about it.`
       : `${me} called while they were busy and couldn't pick up (no message left). Now they get back to ${me}.`;
-    const free = !this.phoneSession && !this.phonePendingEvent && !this.voicemailBox;
+    const free =
+      !this.phoneSession && !this.phonePendingEvent && !this.voicemailBox;
     if (this.autoCallOn() && free && Math.random() < 0.5) {
       await this.ringIncomingCall(
-        { candidate: { type: "incoming_call", urgency: "normal", reason }, callerKey: contact.key, caller: contact.name },
+        {
+          candidate: { type: "incoming_call", urgency: "normal", reason },
+          callerKey: contact.key,
+          caller: contact.name,
+        },
         "",
       );
       return;

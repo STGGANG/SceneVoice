@@ -3,7 +3,12 @@
 // and then on their own when the state update suggests someone would (no extra request for that).
 // Each is one line voiced on demand. Kept out of the chat memory: it doesn't steer the story.
 import { escapeHtml } from "./common.js";
-import { dataBlock, phoneMessages, voiceMemoFinal, voiceMemoSystem } from "./prompts.js";
+import {
+  dataBlock,
+  phoneMessages,
+  voiceMemoFinal,
+  voiceMemoSystem,
+} from "./prompts.js";
 
 // A suggested memo really gets recorded this often, at most one a state update.
 const MEMO_CHANCE = 0.3;
@@ -13,16 +18,35 @@ export const memos = {
     return this.phoneOn() && this.config.phone?.memo_app !== false;
   },
 
-  /** Memos on their own: the app on, and state updates running (they suggest them). */
+  /**
+   * Memos on their own: the app and 음성 메모 자동 on, and either dice (랜덤) or state updates
+   * running (they suggest them).
+   */
   autoMemosOn() {
-    return this.memoAppOn() && Boolean(this.stateTrackingRuns?.());
+    if (
+      !this.memoAppOn() ||
+      this.config.phone?.memo_auto === false ||
+      this.outreachOn?.() === false
+    )
+      return false;
+    return (
+      ["random", "time"].includes(this.outreachMode?.()) ||
+      Boolean(this.stateTrackingRuns?.())
+    );
   },
 
   /** The memo the state update suggests (voice_memo), or null. */
   normalizeVoiceMemo(raw) {
     const source = raw?.voice_memo;
     const key = String(source?.key || "").trim();
-    return key ? { key, about: String(source?.about || "").trim().slice(0, 300) } : null;
+    return key
+      ? {
+          key,
+          about: String(source?.about || "")
+            .trim()
+            .slice(0, 300),
+        }
+      : null;
   },
 
   /** A suggested memo, rolled: not while asleep (with the user's character is fine). */
@@ -33,7 +57,11 @@ export const memos = {
     const sheet = sheets.get(person.key) || {};
     if (sheet.availability === "asleep") return;
     if (Math.random() >= MEMO_CHANCE) return;
-    await this.writeVoiceMemo(person, memo.about, sourceMessageId, { origin: "auto" });
+    const write = () =>
+      this.writeVoiceMemo(person, memo.about, sourceMessageId, {
+        origin: "auto",
+      });
+    await (this.twice ? this.twice(write) : write());
   },
 
   async loadMemos() {
@@ -42,7 +70,10 @@ export const memos = {
       { cache: "no-store" },
     );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `음성 메모를 불러오지 못했습니다 (${response.status})`);
+    if (!response.ok)
+      throw new Error(
+        data.detail || `음성 메모를 불러오지 못했습니다 (${response.status})`,
+      );
     return data.items || [];
   },
 
@@ -51,12 +82,25 @@ export const memos = {
    * it, the user's character doesn't). `about`: what it is about, or empty to leave it to them.
    * Returns it.
    */
-  async writeVoiceMemo(contact, about = "", sourceMessageId = "", { origin = "asked" } = {}) {
+  async writeVoiceMemo(
+    contact,
+    about = "",
+    sourceMessageId = "",
+    { origin = "asked", length = "normal" } = {},
+  ) {
     const operation = this.captureChat();
-    const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService) throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주십시오.");
+    const profileId =
+      this.config.phone?.connection_profile_id ||
+      this.config.connection_profile_id ||
+      "";
+    if (!profileId || !this.connectionService)
+      throw new Error("전화·문자에 쓸 연결 프로필을 설정해 주십시오.");
     const person = this.phoneContact(contact.key);
-    const { blocks: stateBlocks, absent, unknown } = this.stateBlocks(await this.stateForPrompt(person.key));
+    const {
+      blocks: stateBlocks,
+      absent,
+      unknown,
+    } = this.stateBlocks(await this.stateForPrompt(person.key));
     const language = this.conversationLanguage([], "", person.key);
     const before = (await this.loadMemos().catch(() => []))
       .filter((memo) => memo.character_key === person.key)
@@ -71,14 +115,22 @@ export const memos = {
         fixedLanguage: this.languageIsFixed(person.key),
         absent,
         unknown,
+        length,
       }),
       [
         dataBlock("user_character", this.userCharacterName()),
         dataBlock("target_character", person.name),
         dataBlock("profile", this.phoneRoleplayProfile()),
-        dataBlock("performance_note", person.note || "", { range: this.emotionalRange(person.key) }),
+        dataBlock("performance_note", person.note || "", {
+          range: this.emotionalRange(person.key),
+        }),
         ...stateBlocks,
-        dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        dataBlock(
+          "recent_chat",
+          this.buildRecentChatContext(
+            this.config.phone?.context_messages ?? 10,
+          ),
+        ),
         ...((await this.statusLinesBlocks?.()) || []),
         ...((await this.worldInfoBlocks?.([about])) || []),
         ...this.currentTimeBlocks([person.key]),
@@ -88,9 +140,18 @@ export const memos = {
       voiceMemoFinal(person.name, language),
     );
     this.assertChat(operation);
-    const draft = this.normalizePhoneDraft(await this.requestSpokenReply(profileId, messages, 700));
+    const draft = this.normalizePhoneDraft(
+      await this.requestSpokenReply(
+        profileId,
+        messages,
+        length === "long" ? 2400 : 700,
+      ),
+    );
     this.assertChat(operation);
-    if (!draft.text) throw new Error("보조모델이 메모를 돌려주지 않았습니다. 다시 시도해 주십시오.");
+    if (!draft.text)
+      throw new Error(
+        "보조모델이 메모를 돌려주지 않았습니다. 다시 시도해 주십시오.",
+      );
     const anchor = String(this.phoneAnchorFromSource(sourceMessageId).index);
     const response = await this.request("/api/plugins/scenevoice/phone/memos", {
       method: "POST",
@@ -112,7 +173,10 @@ export const memos = {
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `음성 메모 저장 실패 (${response.status})`);
+    if (!response.ok)
+      throw new Error(
+        data.detail || `음성 메모 저장 실패 (${response.status})`,
+      );
     if (origin === "auto") this.announceMemo(data.item);
     return data.item;
   },
@@ -123,7 +187,9 @@ export const memos = {
     this.textAlert = {
       key: memo.character_key,
       name: String(memo.character_name || ""),
-      text: String(memo.text || "").split("\n")[0].slice(0, 70),
+      text: String(memo.text || "")
+        .split("\n")[0]
+        .slice(0, 70),
       kind: "memo",
       at: Date.now(),
     };
@@ -146,7 +212,8 @@ export const memos = {
     this.unlockAudioForMobile();
     const icon = button.innerHTML;
     button.disabled = true;
-    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+    button.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
     try {
       const session = {
         chat_id: memo.chat_id,
@@ -154,27 +221,45 @@ export const memos = {
         character_key: memo.character_key,
         character_name: memo.character_name,
       };
-      const voice = await this.speakPhoneLine(session, { ...memo, role: "character", turn_index: 0 }, regenerate);
-      const attach = await this.request(`/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}/audio`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: memo.chat_id,
-          generation_id: voice.mixed?.id || voice.historyId,
-          audio_filename: voice.mixed?.filename || voice.filename,
-          mime_type: voice.mixed ? "audio/wav" : voice.mimeType,
-          applied_control: voice.applied,
-        }),
-      });
+      const voice = await this.speakPhoneLine(
+        session,
+        { ...memo, role: "character", turn_index: 0 },
+        regenerate,
+      );
+      const attach = await this.request(
+        `/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}/audio`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: memo.chat_id,
+            generation_id: voice.mixed?.id || voice.historyId,
+            audio_filename: voice.mixed?.filename || voice.filename,
+            mime_type: voice.mixed ? "audio/wav" : voice.mimeType,
+            applied_control: voice.applied,
+          }),
+        },
+      );
       const data = await attach.json();
-      if (!attach.ok) throw new Error(data.detail || `음성 연결 실패 (${attach.status})`);
+      if (!attach.ok)
+        throw new Error(data.detail || `음성 연결 실패 (${attach.status})`);
       const url = this.createAudioUrl(voice.mixed?.blob || voice.blob);
       let lit = null;
       if (body.isConnected && this.phoneActiveTab === "memo") {
         await this.renderSmartphone();
         lit = body.querySelector(`[data-memo-play="${CSS.escape(memo.id)}"]`);
       }
-      this.playMessageAudio({ ...memo, ...data.item, sounds_mixed: Boolean(voice.mixed), kind: "voice" }, url, lit, { revoke: true });
+      this.playMessageAudio(
+        {
+          ...memo,
+          ...data.item,
+          sounds_mixed: Boolean(voice.mixed),
+          kind: "voice",
+        },
+        url,
+        lit,
+        { revoke: true },
+      );
     } finally {
       if (button.isConnected) {
         button.disabled = false;
@@ -184,32 +269,50 @@ export const memos = {
   },
 
   async editMemo(memo) {
-    const sheet = await this.openLineSheet({ title: "음성 메모 고치기", value: memo.script || memo.text, translation: memo.translation });
+    const sheet = await this.openLineSheet({
+      title: "음성 메모 고치기",
+      value: memo.script || memo.text,
+      translation: memo.translation,
+    });
     if (sheet === null) return;
     const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("메모를 비울 수는 없습니다.");
     const { changed, translation } = this.sheetChanges(memo, edit, sheet);
     if (!changed) return;
-    const response = await this.request(`/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: memo.chat_id, ...edit, translation }),
-    });
+    const response = await this.request(
+      `/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: memo.chat_id, ...edit, translation }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "메모를 고치지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "메모를 고치지 못했습니다.");
     await this.renderSmartphone();
   },
 
   async deleteMemo(memo) {
-    if (!confirm(`${memo.character_name || "이 인물"}의 음성 메모를 지우시겠습니까?`)) return;
-    const response = await this.request(`/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: memo.chat_id }),
-    });
+    if (
+      !confirm(
+        `${memo.character_name || "이 인물"}의 음성 메모를 지우시겠습니까?`,
+      )
+    )
+      return;
+    const response = await this.request(
+      `/api/plugins/scenevoice/phone/memos/${encodeURIComponent(memo.id)}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: memo.chat_id }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "메모를 지우지 못했습니다.");
-    if (this.anchorShown(memo)) await this.removeChatMemoryEvent(memo.anchor_message_id, memo.id);
+    if (!response.ok)
+      throw new Error(data.detail || "메모를 지우지 못했습니다.");
+    if (this.anchorShown(memo))
+      await this.removeChatMemoryEvent(memo.anchor_message_id, memo.id);
     else await this.forgetSwipeMemory(memo);
     this.unheardMemos?.delete(memo.id);
     this.updatePhoneLauncherVisibility();
@@ -227,21 +330,44 @@ export const memos = {
             <button type="button" class="sv-phone-back" data-memo-cancel><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> 음성 메모</button>
             <strong class="sv-room-editor-title">새 메모</strong>
           </header>
-          <p class="sv-room-hint">고른 인물이 지금 혼자 휴대폰에 남기는 음성 메모입니다. 내 캐릭터는 모릅니다.</p>
+          <p class="sv-room-hint">고른 인물이 지금 혼자 스마트폰에 남기는 음성 메모입니다. 내 캐릭터는 모릅니다.</p>
           <label class="sv-room-name"><span>누가</span><select id="sv-memo-person" ${editor.busy ? "disabled" : ""}>${contacts
-            .map((contact) => `<option value="${escapeHtml(contact.key)}" ${contact.key === editor.key ? "selected" : ""}>${escapeHtml(contact.name)}</option>`)
+            .map(
+              (contact) =>
+                `<option value="${escapeHtml(contact.key)}" ${contact.key === editor.key ? "selected" : ""}>${escapeHtml(contact.name)}</option>`,
+            )
             .join("")}</select></label>
           <label class="sv-room-name"><span>무엇에 대한 메모인지</span><input id="sv-memo-about" maxlength="300" placeholder="비워 두면 지금 상황에 맞게 정합니다" value="${escapeHtml(editor.about)}" autocomplete="off" ${editor.busy ? "disabled" : ""}></label>
+          <label class="sv-room-name"><span>길이</span><select id="sv-memo-length" ${editor.busy ? "disabled" : ""}>${[
+            ["normal", "기본 (2~5문장)"],
+            ["long", "길게 (12~18문장 · 1분 남짓)"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${value === (editor.length || "normal") ? "selected" : ""}>${label}</option>`,
+            )
+            .join("")}</select></label>
+          ${editor.length === "long" ? '<p class="sv-room-hint">길게는 글자 수만큼 음성 생성 비용이 늘어납니다.</p>' : ""}
           <div class="sv-room-actions">
             <button type="button" class="sv-room-save" data-memo-make ${editor.busy ? "disabled" : ""}>${editor.busy ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 메모 받아 오는 중…' : "메모 만들기"}</button>
           </div>
         </div>`;
-      body.querySelector("#sv-memo-person").addEventListener("change", (event) => {
-        editor.key = event.target.value;
-      });
-      body.querySelector("#sv-memo-about").addEventListener("input", (event) => {
-        editor.about = event.target.value;
-      });
+      body
+        .querySelector("#sv-memo-person")
+        .addEventListener("change", (event) => {
+          editor.key = event.target.value;
+        });
+      body
+        .querySelector("#sv-memo-about")
+        .addEventListener("input", (event) => {
+          editor.about = event.target.value;
+        });
+      body
+        .querySelector("#sv-memo-length")
+        .addEventListener("change", (event) => {
+          editor.length = event.target.value;
+          this.renderSmartphone();
+        });
       body.querySelector("[data-memo-cancel]").addEventListener("click", () => {
         this.memoEditor = null;
         this.renderSmartphone();
@@ -252,7 +378,12 @@ export const memos = {
           editor.busy = true;
           await this.renderSmartphone();
           try {
-            await this.writeVoiceMemo(this.phoneContact(editor.key), editor.about.trim());
+            await this.writeVoiceMemo(
+              this.phoneContact(editor.key),
+              editor.about.trim(),
+              "",
+              { length: editor.length },
+            );
             if (this.memoEditor === editor) this.memoEditor = null;
           } finally {
             editor.busy = false;
@@ -276,7 +407,10 @@ export const memos = {
     const add = contacts.length
       ? '<button type="button" class="sv-msg-new-group sv-memo-new" data-memo-new><i class="fa-solid fa-plus" aria-hidden="true"></i><span>새 메모</span></button>'
       : "";
-    const playing = (memo) => (this.playingMessageId === memo.id && this.currentAudio ? " sv-playing" : "");
+    const playing = (memo) =>
+      this.playingMessageId === memo.id && this.currentAudio
+        ? " sv-playing"
+        : "";
     body.innerHTML = `
       <div class="sv-memo-list">
         ${add}
@@ -285,7 +419,8 @@ export const memos = {
             ? items
                 .map((memo, index) => {
                   const fresh = this.unheardMemos?.has(memo.id);
-                  const named = (label) => (index === 0 ? `<span>${label}</span>` : "");
+                  const named = (label) =>
+                    index === 0 ? `<span>${label}</span>` : "";
                   return `
               <article class="sv-memo${playing(memo) ? " sv-msg-reading" : ""}" data-memo="${escapeHtml(memo.id)}">
                 <header>
@@ -323,14 +458,33 @@ export const memos = {
         this.run(() => this.playMemo(body, memo, button));
       }),
     );
-    body.querySelectorAll("[data-memo-reroll]").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.playMemo(body, record(button.dataset.memoReroll), button, true))),
-    );
-    body.querySelectorAll("[data-memo-edit]").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.editMemo(record(button.dataset.memoEdit)))),
-    );
-    body.querySelectorAll("[data-memo-delete]").forEach((button) =>
-      button.addEventListener("click", () => this.run(() => this.deleteMemo(record(button.dataset.memoDelete)))),
-    );
+    body
+      .querySelectorAll("[data-memo-reroll]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.playMemo(
+              body,
+              record(button.dataset.memoReroll),
+              button,
+              true,
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll("[data-memo-edit]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.editMemo(record(button.dataset.memoEdit))),
+        ),
+      );
+    body
+      .querySelectorAll("[data-memo-delete]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() => this.deleteMemo(record(button.dataset.memoDelete))),
+        ),
+      );
   },
 };

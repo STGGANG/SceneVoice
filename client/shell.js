@@ -88,7 +88,7 @@ export const shell = {
           : pending === "overheard"
             ? "엿들을 통화"
             : pending
-              ? "새 메시지"
+              ? "새 문자"
               : "";
     badge.classList.toggle("hidden", !count);
   },
@@ -116,18 +116,24 @@ export const shell = {
   launcherSpot() {
     let spot = this.launcherSpotHere || null;
     try {
-      spot = JSON.parse(localStorage.getItem(LAUNCHER_SPOT_KEY) || "null") || spot;
+      spot =
+        JSON.parse(localStorage.getItem(LAUNCHER_SPOT_KEY) || "null") || spot;
     } catch {
       /* storage blocked: kept for this page only */
     }
-    return spot && ["left", "right"].includes(spot.side) && Number.isFinite(spot.top) ? spot : null;
+    return spot &&
+      ["left", "right"].includes(spot.side) &&
+      Number.isFinite(spot.top)
+      ? spot
+      : null;
   },
 
   placeLauncher(launcher = document.getElementById("sv-phone-launcher")) {
     if (!launcher) return;
     const spot = this.launcherSpot();
     if (!spot) {
-      for (const side of ["left", "top", "right", "bottom"]) launcher.style[side] = "";
+      for (const side of ["left", "top", "right", "bottom"])
+        launcher.style[side] = "";
       return;
     }
     const size = launcher.offsetWidth || 44;
@@ -157,7 +163,8 @@ export const shell = {
     launcher.addEventListener("pointermove", (event) => {
       if (!press || event.pointerId !== press.id) return;
       if (!press.moved) {
-        if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 8) return;
+        if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 8)
+          return;
         press.moved = true;
         launcher.classList.add("sv-dragging");
       }
@@ -179,7 +186,8 @@ export const shell = {
       }, 0);
       const rect = launcher.getBoundingClientRect();
       const spot = {
-        side: rect.left + rect.width / 2 < window.innerWidth / 2 ? "left" : "right",
+        side:
+          rect.left + rect.width / 2 < window.innerWidth / 2 ? "left" : "right",
         top: rect.top / window.innerHeight,
       };
       this.launcherSpotHere = spot;
@@ -205,9 +213,15 @@ export const shell = {
   phoneAlert() {
     return (
       this.phonePendingEvent?.type ||
-      (this.incomingText && !this.incomingText.again ? this.incomingText.type : "") ||
-      (this.unreadThreads?.size ? "text_message" : "") ||
-      ([...(this.unheardCalls?.values() || [])].some((item) => item.kind === "voicemail")
+      (this.incomingText && !this.incomingText.again
+        ? this.incomingText.type
+        : "") ||
+      (this.unreadThreads?.size || this.otherUnread?.size
+        ? "text_message"
+        : "") ||
+      ([...(this.unheardCalls?.values() || [])].some(
+        (item) => item.kind === "voicemail",
+      )
         ? "voicemail"
         : this.unheardCalls?.size
           ? "overheard"
@@ -224,7 +238,10 @@ export const shell = {
   phoneAlertCount() {
     if (this.phonePendingEvent) return 1;
     return (
-      this.unreadThreads.size + (this.unheardCalls?.size || 0) + (this.unheardMemos?.size || 0) ||
+      this.unreadThreads.size +
+        (this.otherUnread?.size || 0) +
+        (this.unheardCalls?.size || 0) +
+        (this.unheardMemos?.size || 0) ||
       (this.incomingText && !this.incomingText.again ? 1 : 0)
     );
   },
@@ -234,14 +251,19 @@ export const shell = {
    * ("overheard"): waiting in 통화 기록, and a banner for a moment.
    */
   announceCallRecord(session, kind = "voicemail") {
-    (this.unheardCalls ||= new Map()).set(session.id, { key: session.character_key, kind });
+    (this.unheardCalls ||= new Map()).set(session.id, {
+      key: session.character_key,
+      kind,
+    });
     this.textAlert = {
       key: session.character_key,
       name:
         kind === "overheard"
           ? `${session.character_name || ""}, ${session.callee_name || ""}`
           : String(session.character_name || ""),
-      text: String(session.turns?.[0]?.text || "").split("\n")[0].slice(0, 70),
+      text: String(session.turns?.[0]?.text || "")
+        .split("\n")[0]
+        .slice(0, 70),
       kind,
       at: Date.now(),
     };
@@ -262,7 +284,9 @@ export const shell = {
     this.textAlert = {
       key,
       name: String(name || ""),
-      text: String(text || "").split("\n")[0].slice(0, 70),
+      text: String(text || "")
+        .split("\n")[0]
+        .slice(0, 70),
       kind,
       at: Date.now(),
     };
@@ -283,21 +307,35 @@ export const shell = {
    */
   updateCallBanner(pending = this.phoneAlert(), phoneShown = false) {
     const id = phoneShown ? "sv-phone-notice" : "sv-call-banner";
-    document.getElementById(phoneShown ? "sv-call-banner" : "sv-phone-notice")?.remove();
+    document
+      .getElementById(phoneShown ? "sv-call-banner" : "sv-phone-notice")
+      ?.remove();
     let banner = document.getElementById(id);
     const call = pending === "incoming_call";
     const text = !call && this.textAlert;
-    const screen = phoneShown ? document.querySelector("#sv-smartphone .sv-phone-screen") : document.body;
-    if ((!call && !text) || !screen || (phoneShown && call && this.phoneActiveTab === "call")) {
+    const screen = phoneShown
+      ? document.querySelector("#sv-smartphone .sv-phone-screen")
+      : document.body;
+    if (
+      (!call && !text) ||
+      !screen ||
+      (phoneShown && call && this.phoneActiveTab === "call")
+    ) {
       banner?.remove();
       return;
     }
-    const key = call ? this.phonePendingEvent?.callerKey || "" : `text:${text.key}:${text.at}`;
+    const key = call
+      ? this.phonePendingEvent?.callerKey || ""
+      : `text:${text.card || ""}:${text.key}:${text.at}`;
     if (banner && banner.dataset.caller === key) return;
     let contact = { name: "알 수 없는 번호", avatarUrl: "" };
     try {
-      if (call && this.phonePendingEvent?.callerKey) contact = this.phoneContact(this.phonePendingEvent.callerKey);
-      else if (text) contact = { ...this.phoneContact(text.key), name: text.name };
+      if (call && this.phonePendingEvent?.callerKey)
+        contact = this.phoneContact(this.phonePendingEvent.callerKey);
+      else if (text?.card)
+        contact = { name: text.name, avatarUrl: text.avatarUrl || "" };
+      else if (text)
+        contact = { ...this.phoneContact(text.key), name: text.name };
     } catch {
       if (text) contact = { name: text.name, avatarUrl: "" };
     }
@@ -315,7 +353,11 @@ export const shell = {
             this.textAlert = null;
             this.memoEditor = null;
             await this.openSmartphone("memo");
+          } else if (banner.dataset.kind === "text" && this.textAlert?.card) {
+            // From a card that isn't open: the phone shows that card's texts, the chat stays.
+            await this.visitCard(this.textAlert.card, this.textAlert.key);
           } else if (banner.dataset.kind === "text" && this.textAlert) {
+            this.leaveVisit({ draw: false });
             this.messageThreadKey = this.textAlert.key;
             this.textAlert = null;
             await this.openSmartphone("message");
@@ -328,7 +370,15 @@ export const shell = {
     const overheard = !call && text.kind === "overheard";
     const memo = !call && text.kind === "memo";
     banner.dataset.caller = key;
-    banner.dataset.kind = call ? "call" : voicemail ? "voicemail" : overheard ? "overheard" : memo ? "memo" : "text";
+    banner.dataset.kind = call
+      ? "call"
+      : voicemail
+        ? "voicemail"
+        : overheard
+          ? "overheard"
+          : memo
+            ? "memo"
+            : "text";
     banner.setAttribute(
       "aria-label",
       call
@@ -339,12 +389,14 @@ export const shell = {
             ? `${contact.name} 통화 엿듣기 · 눌러서 열기`
             : memo
               ? `${contact.name}의 음성 메모 · 눌러서 열기`
-              : `${contact.name}의 새 메시지 · 눌러서 열기`,
+              : `${contact.name}의 새 문자 · 눌러서 열기`,
     );
     const initial = Array.from(String(contact.name || "?").trim())[0] || "?";
     banner.innerHTML = `
       <span class="sv-call-banner-avatar" aria-hidden="true">${
-        contact.avatarUrl ? `<img src="${escapeHtml(contact.avatarUrl)}" alt="">` : escapeHtml(initial)
+        contact.avatarUrl
+          ? `<img src="${escapeHtml(contact.avatarUrl)}" alt="">`
+          : escapeHtml(initial)
       }</span>
       <span class="sv-call-banner-text"><strong>${escapeHtml(contact.name)}</strong><small>${
         call
@@ -355,7 +407,11 @@ export const shell = {
               ? "둘이 통화했습니다 · 눌러서 엿듣기"
               : memo
                 ? "혼자 음성 메모를 남겼습니다 · 눌러서 듣기"
-                : escapeHtml(text.kind === "voice" ? "음성 메시지" : text.text || "새 문자")
+                : escapeHtml(
+                    text.kind === "voice"
+                      ? "음성 메시지"
+                      : text.text || "새 문자",
+                  )
       }</small></span>
       <span class="sv-call-banner-icon" aria-hidden="true"><i class="fa-solid fa-${call ? "phone" : voicemail ? "voicemail" : overheard ? "ear-listen" : memo ? "wave-square" : text.kind === "voice" ? "microphone" : "comment"}"></i></span>`;
   },
@@ -368,14 +424,17 @@ export const shell = {
     if (!launcher) return;
     const pending = this.phoneAlert();
     const mode = this.config.phone?.launcher || "both";
-    let visible = mode !== "menu" && this.config.phone?.launcher_events_only !== true;
+    let visible =
+      mode !== "menu" && this.config.phone?.launcher_events_only !== true;
     // An incoming call or message must stay answerable whatever the placement.
     if (pending) visible = true;
     if (!this.phoneOn()) visible = false;
     // Hidden only while the phone is really on screen, not merely marked open.
     const phone = document.getElementById("sv-smartphone");
     const phoneShown =
-      phone && !phone.classList.contains("hidden") && phone.getClientRects().length > 0;
+      phone &&
+      !phone.classList.contains("hidden") &&
+      phone.getClientRects().length > 0;
     launcher.classList.toggle("hidden", Boolean(phoneShown));
     launcher.classList.toggle("sv-launcher-off", !visible);
     this.updateCallBanner?.(this.phoneOn() ? pending : "", phoneShown);
@@ -410,6 +469,27 @@ export const shell = {
                 ? "fa-ear-listen"
                 : "fa-phone"
       }`;
+    // Only a text of a card that isn't open waits: the button shows who it is from.
+    const other = this.otherAlertOnly?.();
+    let face = launcher.querySelector(".sv-fab-face");
+    if (other?.avatarUrl) {
+      if (!face) {
+        face = document.createElement("img");
+        face.className = "sv-fab-face";
+        face.alt = "";
+        launcher.querySelector(".sv-fab-icon").after(face);
+      }
+      if (face.getAttribute("src") !== other.avatarUrl)
+        face.src = other.avatarUrl;
+      launcher.dataset.face = "1";
+      launcher.setAttribute(
+        "aria-label",
+        `다른 봇카드 ${other.name}의 새 문자 · 스마트폰 열기`,
+      );
+    } else {
+      face?.remove();
+      delete launcher.dataset.face;
+    }
     const badge = launcher.querySelector(".sv-phone-badge");
     if (badge) {
       const count = this.phoneAlertCount();
@@ -431,7 +511,9 @@ export const shell = {
         shell.style.top = `${clamp(saved.top, 8, maxTop)}px`;
         shell.style.right = "auto";
         shell.style.bottom = "auto";
-      } else for (const side of ["left", "top", "right", "bottom"]) shell.style[side] = "";
+      } else
+        for (const side of ["left", "top", "right", "bottom"])
+          shell.style[side] = "";
     } catch (_) {
       /* 손상된 위치값은 기본 위치를 사용한다. */
     }
@@ -462,17 +544,34 @@ export const shell = {
     const shell = document.getElementById("sv-smartphone");
     // A closed phone has no size to measure (it would be pushed to the corner); it is placed
     // again when it opens.
-    if (!shell || !shell.style.left || shell.classList.contains("hidden") || !shell.getClientRects().length)
+    if (
+      !shell ||
+      !shell.style.left ||
+      shell.classList.contains("hidden") ||
+      !shell.getClientRects().length
+    )
       return;
     // The narrow layout fills the screen by itself; a hand-placed spot only applies on wide screens.
     if (this.isMobilePhoneLayout()) {
-      for (const side of ["left", "top", "right", "bottom"]) shell.style[side] = "";
+      for (const side of ["left", "top", "right", "bottom"])
+        shell.style[side] = "";
       return;
     }
     const rect = shell.getBoundingClientRect();
-    const left = clamp(rect.left, 8, Math.max(8, window.innerWidth - rect.width - 8));
-    const top = clamp(rect.top, 8, Math.max(8, window.innerHeight - rect.height - 8));
-    if (Math.round(left) === Math.round(rect.left) && Math.round(top) === Math.round(rect.top))
+    const left = clamp(
+      rect.left,
+      8,
+      Math.max(8, window.innerWidth - rect.width - 8),
+    );
+    const top = clamp(
+      rect.top,
+      8,
+      Math.max(8, window.innerHeight - rect.height - 8),
+    );
+    if (
+      Math.round(left) === Math.round(rect.left) &&
+      Math.round(top) === Math.round(rect.top)
+    )
       return;
     shell.style.left = `${left}px`;
     shell.style.top = `${top}px`;
@@ -536,7 +635,9 @@ export const shell = {
     const tick = () => {
       const text = this.phoneClockText();
       document
-        .querySelectorAll("#sv-smartphone .sv-phone-clock, #sv-smartphone .sv-phone-bigclock")
+        .querySelectorAll(
+          "#sv-smartphone .sv-phone-clock, #sv-smartphone .sv-phone-bigclock",
+        )
         .forEach((node) => {
           if (node.textContent !== text) node.textContent = text;
         });
@@ -576,13 +677,31 @@ export const shell = {
   async openSmartphone(tab = null) {
     await this.syncMultiCastCast?.();
     if (!this.phoneOn()) {
-      this.notify("스마트폰이 꺼져 있습니다. 설정 → 스마트폰에서 ‘스마트폰 사용’을 켜 주십시오.");
+      this.notify(
+        "스마트폰이 꺼져 있습니다. 설정 → 스마트폰에서 ‘스마트폰 사용’을 켜 주십시오.",
+      );
       return;
     }
     if (!this.phoneSession && !this.phonePendingEvent)
       await this.restorePhoneSession();
+    // Opened for a text of a card that isn't open (nothing waits in this chat): that card's.
+    if (
+      !tab &&
+      !this.visiting &&
+      this.otherUnread?.size &&
+      !this.phonePendingEvent &&
+      !this.unreadThreads.size &&
+      !this.incomingText &&
+      !this.unheardCalls?.size &&
+      !this.unheardMemos?.size
+    ) {
+      const [first] = this.otherUnread.values();
+      return this.visitCard(first.card, first.key);
+    }
+    if (tab !== "message") this.leaveVisit({ draw: false });
     const open = document.getElementById("sv-smartphone");
-    const before = open && !open.classList.contains("hidden") ? this.phoneActiveTab : "home";
+    const before =
+      open && !open.classList.contains("hidden") ? this.phoneActiveTab : "home";
     this.phoneActiveTab =
       tab ||
       (this.phoneSession || this.phonePendingEvent?.type === "incoming_call"
@@ -598,7 +717,9 @@ export const shell = {
     // Opened for a message: go straight to that conversation.
     if (!tab && this.phoneActiveTab === "message")
       this.messageThreadKey =
-        [...this.unreadThreads][0] || this.incomingText?.callerKey || this.messageThreadKey;
+        [...this.unreadThreads][0] ||
+        this.incomingText?.callerKey ||
+        this.messageThreadKey;
     let shell = document.getElementById("sv-smartphone");
     if (!shell) {
       shell = document.createElement("section");
@@ -630,19 +751,27 @@ export const shell = {
       document.body.appendChild(shell);
       const goHome = () => {
         // A handed-over call left mid-way waits in the call history (이어 가기), not on screen.
-        if (this.callListenOpen && this.callListenOpen.session.call_direction !== "overheard") this.callListenOpen = null;
+        if (
+          this.callListenOpen &&
+          this.callListenOpen.session.call_direction !== "overheard"
+        )
+          this.callListenOpen = null;
+        this.leaveVisit({ draw: false });
         this.phoneActiveTab = "home";
         this.renderSmartphone();
       };
       shell
         .querySelector(".sv-smartphone-close")
         ?.addEventListener("click", () => this.closeSmartphone());
-      shell.querySelector(".sv-call-return")?.addEventListener("click", (event) => {
-        const before = this.phoneActiveTab;
-        this.phoneActiveTab = event.currentTarget.dataset.target || "call";
-        if (this.phoneActiveTab === "call") this.noteRingReturn(before);
-        this.renderSmartphone();
-      });
+      shell
+        .querySelector(".sv-call-return")
+        ?.addEventListener("click", (event) => {
+          const before = this.phoneActiveTab;
+          this.leaveVisit({ draw: false });
+          this.phoneActiveTab = event.currentTarget.dataset.target || "call";
+          if (this.phoneActiveTab === "call") this.noteRingReturn(before);
+          this.renderSmartphone();
+        });
       shell
         .querySelector(".sv-smartphone-home")
         ?.addEventListener("click", goHome);
@@ -679,7 +808,10 @@ export const shell = {
           }
           if (event.target.closest("[data-group-call]")) {
             const [first, second] = this.phoneContacts();
-            this.groupCallPicker = { people: [first.key, second.key], busy: false };
+            this.groupCallPicker = {
+              people: [first.key, second.key],
+              busy: false,
+            };
             this.renderSmartphone();
             return;
           }
@@ -726,7 +858,8 @@ export const shell = {
    */
   phoneShelfTabs(app, away) {
     this.phoneShelf ||= {};
-    const shown = this.phoneShelf[app] === "unapplied" ? "unapplied" : "applied";
+    const shown =
+      this.phoneShelf[app] === "unapplied" ? "unapplied" : "applied";
     const tab = (value, icon, label, extra = "") =>
       `<button type="button" role="tab" class="sv-shelf-tab" data-shelf="${value}" aria-selected="${shown === value}"><i class="fa-solid ${icon}" aria-hidden="true"></i><span>${label}</span>${extra}</button>`;
     return `<div class="sv-shelf" role="tablist" aria-label="기억 보기">${tab("applied", "fa-circle-check", "적용 기억")}${tab("unapplied", "fa-trash-can", "미적용 기억", away ? `<em class="sv-shelf-count" aria-label="${away}개">${away}</em>` : "")}</div>`;
@@ -734,7 +867,7 @@ export const shell = {
 
   /** 미적용 기억 with nothing in it. */
   phoneShelfEmpty() {
-    return `<div class="sv-phone-list-empty sv-shelf-empty"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><strong>미적용 기억이 없습니다</strong><p>채팅을 되돌리거나 다른 스와이프로 넘기면, 그때 주고받은 통화·문자가 여기로 옮겨 옵니다.</p></div>`;
+    return `<div class="sv-phone-list-empty sv-shelf-empty"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><strong>미적용 기억이 없습니다</strong><p>채팅을 되돌리거나 다른 스와이프로 넘기면, 그때 주고받은 전화·문자가 여기로 옮겨 옵니다.</p></div>`;
   },
 
   /** What 미적용 기억 is, and 모두 지우기 (bound by the app). */
@@ -767,12 +900,17 @@ export const shell = {
    * or rung out): the one seen before it (`before`), or the home screen.
    */
   noteRingReturn(before) {
-    if (this.phoneActiveTab !== "call" || this.phoneSession || this.phonePendingEvent?.type !== "incoming_call")
+    if (
+      this.phoneActiveTab !== "call" ||
+      this.phoneSession ||
+      this.phonePendingEvent?.type !== "incoming_call"
+    )
       return;
     this.ringReturnTab = before && before !== "call" ? before : "home";
   },
 
   closeSmartphone() {
+    this.leaveVisit({ draw: false });
     document.getElementById("sv-smartphone")?.classList.add("hidden");
     this.stopPhoneTimer();
     this.stopPhoneClock();
@@ -785,6 +923,16 @@ export const shell = {
    * always ends on the latest state. Resolves when the screen is up to date.
    */
   renderSmartphone() {
+    // The phone shows a card that isn't open (visit.js): that card's screen is the one drawn,
+    // unless a call of the open chat needs the screen.
+    if (this.visiting && this.visiting !== this) {
+      if (
+        this.phonePendingEvent?.type === "incoming_call" ||
+        ["active", "ringing"].includes(this.phoneSession?.status)
+      )
+        this.leaveVisit({ draw: false });
+      else return this.visiting.renderSmartphone();
+    }
     this.syncMultiCast?.();
     this.syncPublicState?.();
     if (this.phoneDrawing) {
@@ -825,7 +973,7 @@ export const shell = {
     const labels = {
       home: "SceneVoice",
       call: this.phoneSession || this.phoneContactKey ? "전화" : "연락처",
-      message: "메시지",
+      message: "문자",
       history: "통화 기록",
       memo: "음성 메모",
       radio: "라디오",
@@ -846,8 +994,10 @@ export const shell = {
       await this.renderSmartphoneCall(body);
     else if (this.phoneActiveTab === "message")
       await this.renderSmartphoneMessages(body);
-    else if (this.phoneActiveTab === "memo") await this.renderSmartphoneMemos(body);
-    else if (this.phoneActiveTab === "radio") await this.renderSmartphoneRadio(body);
+    else if (this.phoneActiveTab === "memo")
+      await this.renderSmartphoneMemos(body);
+    else if (this.phoneActiveTab === "radio")
+      await this.renderSmartphoneRadio(body);
     else await this.renderSmartphoneHistory(body);
     // The notice inside the phone follows the screen (gone on the call it announces).
     this.updatePhoneLauncherVisibility();
@@ -860,13 +1010,17 @@ export const shell = {
         ? "home"
         : "app";
     this.applyPhoneWallpaper(body);
+    // The phone moved on to another card's texts while this was being drawn (visit.js): that
+    // card's screen goes back over it.
+    if (!this.visitOf && this.visiting) await this.visiting.renderSmartphone();
   },
 
   /** Where in the chat a record was made (a memo, a radio show), for its card: "채팅 #N 무렵". */
   chatSpotLabel(record) {
     const index = String(record?.anchor_message_id ?? "");
     // Made in a chat with no messages yet: there is no place to name.
-    if (index === "0" && !record?.anchor_tag && !record?.anchor_fingerprint) return "";
+    if (index === "0" && !record?.anchor_tag && !record?.anchor_fingerprint)
+      return "";
     return /^\d+$/.test(index) ? `채팅 #${index} 무렵` : "";
   },
 
@@ -879,14 +1033,31 @@ export const shell = {
     const back = shell?.querySelector(".sv-call-return");
     if (!back) return;
     const title = shell.querySelector(".sv-smartphone-title");
-    const ringing = this.phonePendingEvent?.type === "incoming_call" && !this.phoneSession;
-    const live = ["active", "ringing"].includes(this.phoneSession?.status) || ringing;
+    const ringing =
+      this.phonePendingEvent?.type === "incoming_call" && !this.phoneSession;
+    const live =
+      ["active", "ringing"].includes(this.phoneSession?.status) || ringing;
     const listening = this.callPlayback?.playing && this.callPlayback.session;
-    const radio = this.radioPlaying && !this.radioPlaying.ended && !this.radioPlaying.stopped;
+    const radio =
+      this.radioPlaying &&
+      !this.radioPlaying.ended &&
+      !this.radioPlaying.stopped;
     const [target, icon, text] = live
-      ? ["call", "fa-phone", ringing ? "전화가 오고 있습니다" : `${this.phoneSession?.character_name || "상대"}와 통화 중`]
+      ? [
+          "call",
+          "fa-phone",
+          ringing
+            ? "전화가 오고 있습니다"
+            : `${this.phoneSession?.character_name || "상대"}와 통화 중`,
+        ]
       : listening
-        ? ["history", "fa-headphones", listening.call_direction === "overheard" ? "통화 엿듣는 중" : "지난 통화 듣는 중"]
+        ? [
+            "history",
+            "fa-headphones",
+            listening.call_direction === "overheard"
+              ? "통화 엿듣는 중"
+              : "지난 통화 듣는 중",
+          ]
         : radio
           ? ["radio", "fa-radio", "라디오 듣는 중"]
           : [];
@@ -919,7 +1090,7 @@ export const shell = {
                 ? "엿들을 수 있는 통화가 있습니다"
                 : this.phoneSession
                   ? "통화 중"
-                  : "통화와 메시지";
+                  : "전화와 문자";
     // Quick-call widgets: contacts chosen for the home screen (the first one unless switched
     // off), and whoever a call or message is waiting from.
     const alertKey =
@@ -930,34 +1101,66 @@ export const shell = {
       "";
     // Where an alert widget leads: the call, the conversation, or the voicemail in 통화 기록.
     const alertApp =
-      pending === "incoming_call" ? "call" : ["voicemail", "overheard"].includes(pending) ? "history" : "message";
+      pending === "incoming_call"
+        ? "call"
+        : ["voicemail", "overheard"].includes(pending)
+          ? "history"
+          : "message";
     const quick = this.quickCallContacts().slice(0, 4);
     const widgets = quick.map((contact, index) => [
       contact,
       Boolean(pending) && (alertKey ? alertKey === contact.key : index === 0),
     ]);
-    if (pending && alertKey && !quick.some((contact) => contact.key === alertKey))
+    if (
+      pending &&
+      alertKey &&
+      !quick.some((contact) => contact.key === alertKey)
+    )
       widgets.unshift([this.threadContact(alertKey), true]);
     if (pending && !widgets.length)
       widgets.push([{ ...this.getCurrentCharacterProfile(), key: "" }, true]);
     const widget = (contact, alert) => `
                 <button type="button" class="sv-phone-widget ${alert ? "sv-widget-alert" : ""}" data-phone-app="${alert ? alertApp : "call"}" data-contact-key="${escapeHtml(contact.group ? "" : contact.key)}" data-thread-key="${escapeHtml(alert ? alertKey || contact.key : contact.key)}">
                     ${this.threadAvatarMarkup(contact)}
-                    <span class="sv-widget-text"><strong>${escapeHtml(contact.name)}</strong><small>${alert ? status : this.phoneSession?.character_key === contact.key ? "통화 중" : "통화와 메시지"}</small></span>
+                    <span class="sv-widget-text"><strong>${escapeHtml(contact.name)}</strong><small>${alert ? status : this.phoneSession?.character_key === contact.key ? "통화 중" : "전화와 메시지"}</small></span>
                     <span class="sv-widget-call" aria-hidden="true"><i class="fa-solid ${alert && pending === "voice_message" ? "fa-play" : alert && pending === "text_message" ? "fa-comment-dots" : alert && pending === "voicemail" ? "fa-voicemail" : alert && pending === "overheard" ? "fa-ear-listen" : "fa-phone"}"></i></span>
                 </button>`;
     const apps = [
-      ["call", this.phoneContacts().length > 1 ? "연락처" : "전화", "phone", "sv-app-phone", pending === "incoming_call"],
+      [
+        "call",
+        this.phoneContacts().length > 1 ? "연락처" : "전화",
+        "phone",
+        "sv-app-phone",
+        pending === "incoming_call",
+      ],
       [
         "message",
-        "메시지",
+        "문자",
         "comment-dots",
         "sv-app-message",
         ["voice_message", "text_message"].includes(pending),
       ],
-      ["history", "통화 기록", "clock-rotate-left", "sv-app-history", ["voicemail", "overheard"].includes(pending)],
-      ...(this.memoAppOn?.() ? [["memo", "음성 메모", "wave-square", "sv-app-memo", Boolean(this.unheardMemos?.size)]] : []),
-      ...(this.radioAppOn?.() ? [["radio", "라디오", "radio", "sv-app-radio", false]] : []),
+      [
+        "history",
+        "통화 기록",
+        "clock-rotate-left",
+        "sv-app-history",
+        ["voicemail", "overheard"].includes(pending),
+      ],
+      ...(this.memoAppOn?.()
+        ? [
+            [
+              "memo",
+              "음성 메모",
+              "wave-square",
+              "sv-app-memo",
+              Boolean(this.unheardMemos?.size),
+            ],
+          ]
+        : []),
+      ...(this.radioAppOn?.()
+        ? [["radio", "라디오", "radio", "sv-app-radio", false]]
+        : []),
     ];
     body.innerHTML = `
             <div class="sv-smartphone-app-home" data-phone-wallpaper>
@@ -994,7 +1197,10 @@ export const shell = {
     if (!track) return;
     const edges = () => {
       track.classList.toggle("sv-more-left", track.scrollLeft > 2);
-      track.classList.toggle("sv-more-right", track.scrollLeft + track.clientWidth < track.scrollWidth - 2);
+      track.classList.toggle(
+        "sv-more-right",
+        track.scrollLeft + track.clientWidth < track.scrollWidth - 2,
+      );
     };
     track.scrollLeft = this.appTrackScroll || 0;
     track.addEventListener(
@@ -1015,7 +1221,8 @@ export const shell = {
   },
 
   renderPhoneContacts(body, people) {
-    const hidden = this.phoneContacts({ includeHidden: true }).length - people.length;
+    const hidden =
+      this.phoneContacts({ includeHidden: true }).length - people.length;
     body.innerHTML = `
             <div class="sv-contacts">
                 ${people.length > 1 ? '<button type="button" class="sv-msg-new-group sv-group-call-new" data-group-call><i class="fa-solid fa-users" aria-hidden="true"></i><span>단체 통화</span></button>' : ""}
@@ -1046,7 +1253,9 @@ export const shell = {
     const entry = this.config.character_voices?.[key] || {};
     const global = key.startsWith("speaker:") && !entry.card;
     const cards = this.currentCardKeys();
-    const hiddenHere = global ? !this.globalInUse(entry, cards) : Boolean(entry.phone_hidden);
+    const hiddenHere = global
+      ? !this.globalInUse(entry, cards)
+      : Boolean(entry.phone_hidden);
     // undefined: unchanged; "": back to the default picture; a URL: the new picture.
     let avatar;
     body.innerHTML = `
@@ -1075,14 +1284,16 @@ export const shell = {
     this.statusLine?.(key)
       .then((line) => {
         status = line;
-        if (form.isConnected && !form.elements.status.value) form.elements.status.value = line;
+        if (form.isConnected && !form.elements.status.value)
+          form.elements.status.value = line;
       })
       .catch(() => undefined);
     const preview = (url) => {
-      form.querySelector(".sv-contact-photo").innerHTML = this.contactAvatarMarkup({
-        ...person,
-        avatarUrl: url,
-      });
+      form.querySelector(".sv-contact-photo").innerHTML =
+        this.contactAvatarMarkup({
+          ...person,
+          avatarUrl: url,
+        });
     };
     form.elements.photo.addEventListener("change", (event) => {
       const file = event.target.files?.[0];
@@ -1116,19 +1327,26 @@ export const shell = {
         if (avatar === "") delete next.avatar;
         else if (avatar) next.avatar = avatar;
         voices[key] = next;
-        const response = await this.request("/api/plugins/scenevoice/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ character_voices: voices }),
-        });
+        const response = await this.request(
+          "/api/plugins/scenevoice/settings",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ character_voices: voices }),
+          },
+        );
         const data = await response.json();
         if (!response.ok)
-          throw new Error(data.detail || `연락처 저장 실패 (${response.status})`);
+          throw new Error(
+            data.detail || `연락처 저장 실패 (${response.status})`,
+          );
         this.config = mergeConfig(data.settings || {});
         const line = form.elements.status.value.trim();
-        if (line !== status) await this.saveStatusLine?.({ key, name: next.name }, line);
+        if (line !== status)
+          await this.saveStatusLine?.({ key, name: next.name }, line);
         // Keep an open settings panel's speaker drafts in step with the phone edit.
-        if (document.getElementById("sv-casting-settings")) this.renderCastingSettings();
+        if (document.getElementById("sv-casting-settings"))
+          this.renderCastingSettings();
         this.phoneContactKey = form.elements.hidden.checked ? "" : key;
         this.notify("연락처를 저장했습니다.", "success");
         await this.renderSmartphone();

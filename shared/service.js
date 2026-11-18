@@ -10,14 +10,20 @@ import {
   text,
   validModel,
 } from "./settings.js";
-import { buildSpeechRequest, normalizeSpeech, withAlwaysTags } from "./providers.js";
+import {
+  buildSpeechRequest,
+  normalizeSpeech,
+  withAlwaysTags,
+} from "./providers.js";
 import { newId, contentKey, sha256 } from "./hash.js";
 import { WorkQueue, throwIfAborted } from "./queue.js";
-import { validAudioName, audioType } from "./store.js";
+import { validAudioName, audioType, validReaction } from "./store.js";
 export const API = "/api/plugins/scenevoice";
 // How much of the reusable records is kept: analyses of the most recent messages, and each
 // person's latest state changes. Older ones go first.
-const ANALYSIS_KEEP = 70;
+// About 6 KB a message as measured (540 bytes a line): 300 keeps the file under 2 MB. The whole
+// file is sent again each time an analysis is saved, so it must not grow without end.
+const ANALYSIS_KEEP = 300;
 const STATE_HISTORY_KEEP = 20;
 const now = () => new Date().toISOString();
 const required = (value, label, max = 500) => {
@@ -62,38 +68,153 @@ const VERSION_FIELDS = [
   "speaker_key",
   "speaker_name",
   "aside",
+  "space",
+  // A text's card and the message it quotes belong to that answer.
+  "card",
+  "quote",
 ];
 const MAX_VERSIONS = 10;
 // Set aside for at most 10 minutes: if the page was closed before a new answer came, it shows again.
-const stashedNow = (item) => Boolean(item.stashed) && Date.now() - Date.parse(item.stashed) < 600000;
+const stashedNow = (item) =>
+  Boolean(item.stashed) && Date.now() - Date.parse(item.stashed) < 600000;
 const versionOf = (item) =>
-  Object.fromEntries(VERSION_FIELDS.filter((field) => item[field] !== undefined).map((field) => [field, item[field]]));
+  Object.fromEntries(
+    VERSION_FIELDS.filter((field) => item[field] !== undefined).map((field) => [
+      field,
+      item[field],
+    ]),
+  );
 const forwardOf = (value) =>
   value && typeof value === "object"
     ? {
-        type: ["call", "voice", "memo"].includes(value.type) ? value.type : "voice",
+        type: ["call", "voice", "memo"].includes(value.type)
+          ? value.type
+          : "voice",
         title: text(value.title, 200),
         lines: (Array.isArray(value.lines) ? value.lines : [])
           .slice(0, 40)
-          .map((line) => ({ from: text(line?.from, 120), text: text(line?.text, 800) }))
+          .map((line) => ({
+            from: text(line?.from, 120),
+            text: text(line?.text, 800),
+          }))
           .filter((line) => line.text),
         source_id: text(value.source_id, 64),
         ...(value.note ? { note: true } : {}),
       }
     : null;
+// 문자 카드: something sent in the messaging app as a card of its own, by either side.
+// title: what the photo shows, the place, the amount or the gift; detail: an appointment's time,
+// or a note with money or a gift. image: a picture the user attached (a file in ST's user files,
+// or a small inline one where files can't be kept).
+export const CARD_TYPES = [
+  "photo",
+  "location",
+  "appointment",
+  "transfer",
+  "gift",
+  "song",
+  "video",
+  "poll",
+];
+const cardImage = (value) => {
+  const url = String(value || "");
+  return /^\/user\/files\/scenevoice_image_[a-f0-9]{24}\.(webp|jpg|png)$/.test(
+    url,
+  ) ||
+    (/^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(url) &&
+      url.length <= 400000)
+    ? url
+    : "";
+};
+// An answer to the other side's card (accepted or declined), from either side: what it answers
+// (`about`, and `re`: that message), and how. Mine goes out on its own; theirs comes with a text.
+const CARD_ANSWERED = ["appointment", "transfer", "gift"];
+const cardOf = (value, role) => {
+  if (
+    value?.type === "reply" &&
+    CARD_ANSWERED.includes(value.about) &&
+    ["accept", "decline"].includes(value.answer)
+  )
+    return {
+      type: "reply",
+      about: value.about,
+      answer: value.answer,
+      re: text(value.re, 64),
+      title: text(value.title, 240),
+      detail: text(value.detail, 240),
+      ...(role === "user" ? { solo: true } : {}),
+    };
+  if (!value || typeof value !== "object" || !CARD_TYPES.includes(value.type))
+    return null;
+  const card = {
+    type: value.type,
+    title: text(value.title, 240),
+    detail: text(value.detail, 240),
+  };
+  const image =
+    role === "user" && card.type === "photo" ? cardImage(value.image) : "";
+  if (image) card.image = image;
+  // Sent on its own: the message's text only repeats the card.
+  if (value.solo) card.solo = true;
+  // What a card of theirs says in Korean, when it came in another language.
+  if (role !== "user" && text(value.translation, 300))
+    card.translation = text(value.translation, 300);
+  // Mine in a group, split or drawn at random: who got what, as the dice fell.
+  if (
+    role === "user" &&
+    card.type === "transfer" &&
+    Array.isArray(value.shares)
+  ) {
+    const shares = value.shares
+      .slice(0, 12)
+      .map((share) => ({
+        name: text(share?.name, 120),
+        amount: text(share?.amount, 60),
+      }))
+      .filter((share) => share.name && share.amount);
+    if (shares.length > 1) card.shares = shares;
+  }
+  if (role === "user" && card.type === "gift" && text(value.winner, 120))
+    card.winner = text(value.winner, 120);
+  return card.title || card.image ? card : null;
+};
+// 인용 답장: the earlier message this one answers (a copy of its first words, so it still
+// shows after that message is gone).
+const quoteOf = (value) => {
+  if (!value || typeof value !== "object") return null;
+  const quote = {
+    id: text(value.id, 64),
+    from: text(value.from, 120),
+    text: text(value.text, 600),
+  };
+  return quote.text ? quote : null;
+};
 // A live call's line said by someone other than the one called: who, and whether in the
 // background (not into the phone).
 const nearbySpeaker = (body) => ({
   ...(body.role !== "user" && text(body.speaker_key)
-    ? { speaker_key: text(body.speaker_key), speaker_name: text(body.speaker_name, 300) }
+    ? {
+        speaker_key: text(body.speaker_key),
+        speaker_name: text(body.speaker_name, 300),
+      }
     : {}),
   ...(body.role !== "user" && body.aside === true ? { aside: true } : {}),
+  // 공간감: how the voice reaches the phone.
+  ...(body.role !== "user" && ["close", "far", "muffled"].includes(body.space)
+    ? { space: body.space }
+    : {}),
 });
-const radioItem = (show) => ({ ...show, lines: (show.lines || []).map((line) => audioItem(line)) });
+const radioItem = (show) => ({
+  ...show,
+  lines: (show.lines || []).map((line) => audioItem(line)),
+});
 // The extra people on a written call (beyond its first one or two), at most three.
 const callPeople = (value) =>
   (Array.isArray(value) ? value : [])
-    .map((person) => ({ key: text(person?.key), name: text(person?.name, 300) }))
+    .map((person) => ({
+      key: text(person?.key),
+      name: text(person?.name, 300),
+    }))
     .filter((person) => person.key || person.name)
     .slice(0, 3);
 /**
@@ -105,13 +226,24 @@ function rekey(value, swap) {
   if (Array.isArray(value)) return value.map((item) => rekey(item, swap));
   if (!value || typeof value !== "object") return value;
   const out = {};
-  for (const [key, item] of Object.entries(value)) if (!swap.has(key)) out[key] = rekey(item, swap);
   for (const [key, item] of Object.entries(value))
-    if (swap.has(key) && !Object.hasOwn(out, swap.get(key))) out[swap.get(key)] = rekey(item, swap);
+    if (!swap.has(key)) out[key] = rekey(item, swap);
+  for (const [key, item] of Object.entries(value))
+    if (swap.has(key) && !Object.hasOwn(out, swap.get(key)))
+      out[swap.get(key)] = rekey(item, swap);
   return out;
 }
 // Records that belong to a chat (under a bot card) or name a person by key.
-const CARD_LISTS = ["sessions", "messages", "groups", "memos", "radio", "stateHistory", "generations", "favorites"];
+const CARD_LISTS = [
+  "sessions",
+  "messages",
+  "groups",
+  "memos",
+  "radio",
+  "stateHistory",
+  "generations",
+  "favorites",
+];
 // A written call's lines added in order: mine as mine, everyone else's with who said them.
 function writtenLines(session, lines, mine, part, stamp) {
   for (const line of lines) {
@@ -122,7 +254,12 @@ function writtenLines(session, lines, mine, part, stamp) {
       session_id: session.id,
       turn_index: session.turns.length,
       role: user ? "user" : "character",
-      ...(user ? {} : { speaker_key: text(line.speaker_key), speaker_name: text(line.speaker_name, 300) }),
+      ...(user
+        ? {}
+        : {
+            speaker_key: text(line.speaker_key),
+            speaker_name: text(line.speaker_name, 300),
+          }),
       text: speech.text,
       script: speech.script,
       translation: text(line.translation, 5000),
@@ -158,16 +295,23 @@ const identity = (body) => ({
   character_name: text(body.character_name, 300),
   anchor_fingerprint: text(body.anchor_fingerprint, 100),
   // The mark left on that chat message (a later part of the chat taken back loses it).
-  ...(text(body.anchor_tag, 40) ? { anchor_tag: text(body.anchor_tag, 40) } : {}),
+  ...(text(body.anchor_tag, 40)
+    ? { anchor_tag: text(body.anchor_tag, 40) }
+    : {}),
   // The swipe of that message then showing; another swipe doesn't show the record.
-  ...(Number.isInteger(body.anchor_swipe) && body.anchor_swipe >= 0 && body.anchor_swipe < 100000
+  ...(Number.isInteger(body.anchor_swipe) &&
+  body.anchor_swipe >= 0 &&
+  body.anchor_swipe < 100000
     ? { anchor_swipe: body.anchor_swipe }
     : {}),
 });
 // A group conversation's name and people; two to twelve, each once.
 const groupFields = (body) => {
   const members = (Array.isArray(body.members) ? body.members : [])
-    .map((member) => ({ key: text(member?.key, 300), name: text(member?.name, 120) }))
+    .map((member) => ({
+      key: text(member?.key, 300),
+      name: text(member?.name, 120),
+    }))
     .filter(
       (member, index, list) =>
         member.key &&
@@ -177,10 +321,18 @@ const groupFields = (body) => {
     .slice(0, 12);
   if (members.length < 2)
     throw new UserError("단체방에는 두 명 이상이 필요합니다.");
-  // A room without the user: the members talk among themselves, on a button press
-  // (burst_min to burst_max messages) and, if auto_chat, now and then by themselves.
+  // auto_chat: the members write now and then by themselves. A room without the user also goes
+  // on at a button press (burst_min to burst_max messages).
   const whole = (value, min, max, fallback) =>
-    Math.round(Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback)));
+    Math.round(
+      Math.min(
+        max,
+        Math.max(
+          min,
+          Number.isFinite(Number(value)) ? Number(value) : fallback,
+        ),
+      ),
+    );
   const burstMin = whole(body.burst_min, 1, 30, 6);
   return {
     name:
@@ -191,12 +343,17 @@ const groupFields = (body) => {
         .slice(0, 60),
     members,
     without_user: body.without_user === true,
-    auto_chat: body.without_user === true && body.auto_chat === true,
+    auto_chat: body.auto_chat === true,
+    // A room the people opened by themselves (인물끼리 문자 → 스스로 대화하기). self_rule 2: its
+    // auto_chat is what the user chose (rooms from before were all made with it on).
+    ...(body.self_made === true ? { self_made: true, self_rule: 2 } : {}),
     auto_every: whole(body.auto_every, 1, 50, 6),
     // At most this many times a day by itself (0 = no limit).
     auto_daily_max: whole(body.auto_daily_max, 0, 100, 5),
     burst_min: burstMin,
     burst_max: Math.max(burstMin, whole(body.burst_max, 1, 30, 15)),
+    // Numbers of its own (이 방만 따로 정하기); otherwise it goes by the settings' 단체방 기본값.
+    ...(typeof body.custom === "boolean" ? { custom: body.custom } : {}),
   };
 };
 const GROUP_THREAD = /^group:[a-f0-9]{32}$/;
@@ -215,7 +372,8 @@ export class SceneService {
     throwIfAborted(signal);
     if (method === "POST" && path === "/generate")
       return this.generate(body, signal);
-    if (method === "POST" && path === "/audio/mix") return { json: await this.saveMixedAudio(body) };
+    if (method === "POST" && path === "/audio/mix")
+      return { json: await this.saveMixedAudio(body) };
     if (method === "GET" && /^\/(?:favorite-audio|audio)\//.test(path)) {
       const name = path.split("/").at(-1);
       if (!validAudioName(name))
@@ -259,15 +417,50 @@ export class SceneService {
     // A person's phone picture, already shrunk by the browser: a file under ST's user files
     // when the store can keep one, otherwise kept inline as a data URL.
     if (method === "POST" && path === "/avatars") {
-      const type = ["image/webp", "image/jpeg", "image/png"].includes(body.type) ? body.type : "";
+      const type = ["image/webp", "image/jpeg", "image/png"].includes(body.type)
+        ? body.type
+        : "";
       const data = String(body.data || "");
-      if (!type || !data || data.length > 400000 || !/^[A-Za-z0-9+/=]+$/.test(data))
+      if (
+        !type ||
+        !data ||
+        data.length > 400000 ||
+        !/^[A-Za-z0-9+/=]+$/.test(data)
+      )
         throw new UserError("사진 형식이 올바르지 않거나 너무 큽니다.");
       if (!this.store.uploadImage)
         return { json: { url: `data:${type};base64,${data}` } };
-      const extension = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" }[type];
+      const extension = {
+        "image/webp": "webp",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+      }[type];
       const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
       const name = `scenevoice_avatar_${sha256(data).slice(0, 24)}.${extension}`;
+      return { json: { url: await this.store.uploadImage(name, bytes) } };
+    }
+    // A photo attached to a text, already shrunk by the browser (see uploadAvatar's route above).
+    if (method === "POST" && path === "/images") {
+      const type = ["image/webp", "image/jpeg", "image/png"].includes(body.type)
+        ? body.type
+        : "";
+      const data = String(body.data || "");
+      if (
+        !type ||
+        !data ||
+        data.length > 380000 ||
+        !/^[A-Za-z0-9+/=]+$/.test(data)
+      )
+        throw new UserError("사진 형식이 올바르지 않거나 너무 큽니다.");
+      if (!this.store.uploadImage)
+        return { json: { url: `data:${type};base64,${data}` } };
+      const extension = {
+        "image/webp": "webp",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+      }[type];
+      const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
+      const name = `scenevoice_image_${sha256(data).slice(0, 24)}.${extension}`;
       return { json: { url: await this.store.uploadImage(name, bytes) } };
     }
     if (method === "GET" && path === "/engine-check")
@@ -276,7 +469,10 @@ export class SceneService {
           query.engine,
           (await this.store.read()).settings,
           signal,
-        )) || { ok: false, message: "이 환경에서는 연결을 확인할 수 없습니다." },
+        )) || {
+          ok: false,
+          message: "이 환경에서는 연결을 확인할 수 없습니다.",
+        },
       };
     if (method === "GET" && path === "/voices")
       return {
@@ -338,7 +534,9 @@ export class SceneService {
         entry.name ||= label;
         found.set(key, entry);
       };
-      for (const [key, entry] of Object.entries(data.settings.character_voices || {})) {
+      for (const [key, entry] of Object.entries(
+        data.settings.character_voices || {},
+      )) {
         note(key, key.startsWith("character:") ? entry?.name : "");
         note(entry?.card);
       }
@@ -356,16 +554,17 @@ export class SceneService {
         ),
       );
       const audio = {};
-      // Each line's edit key once (lines can have many voices made over time).
+      // A line's voice is the one made last for it, whatever the settings were then (it stays
+      // until it is made again). Each line's edit key once: a line can have many voices.
       const editKeys = new Map();
       const editKey = (lineKey) => {
-        if (!editKeys.has(lineKey)) editKeys.set(lineKey, contentKey(edits[lineKey]?.value || {}));
+        if (!editKeys.has(lineKey))
+          editKeys.set(lineKey, contentKey(edits[lineKey]?.value || {}));
         return editKeys.get(lineKey);
       };
       for (const item of data.generations) {
         if (
           item.chat_id !== query.chat_id ||
-          (item.config_key || "") !== (query.config_key || "") ||
           !item.line_key ||
           !item.audio_filename
         )
@@ -377,7 +576,12 @@ export class SceneService {
         )
           audio[item.line_key] = audioItem(item);
       }
-      return { edits, audio };
+      // The analyses kept for this chat, by their keys (a key names a message as it is written,
+      // so another swipe of the same message is not among them).
+      const analysed = Object.entries(data.analyses || {})
+        .filter(([, item]) => item.chat_id === query.chat_id)
+        .map(([key]) => key);
+      return { edits, audio, analysed };
     }
     if (path === "/message-analysis") {
       const item = Object.hasOwn(data.analyses, query.analysis_key)
@@ -396,7 +600,11 @@ export class SceneService {
     if (path === "/states")
       return {
         items: Object.values(data.states)
-          .filter((item) => item.chat_id === query.chat_id && !/^state-(round|status)-/.test(String(item.state_key)))
+          .filter(
+            (item) =>
+              item.chat_id === query.chat_id &&
+              !/^state-(round|status)-/.test(String(item.state_key)),
+          )
           .map(({ state_key, character_key, character_name, updated_at }) => ({
             state_key,
             character_key,
@@ -421,14 +629,93 @@ export class SceneService {
     if (path === "/voice-messages")
       return {
         items: newest(
-          data.messages.filter((item) => !stashedNow(item) && (query.hidden === "1" || !item.hidden)),
+          data.messages.filter(
+            (item) =>
+              !stashedNow(item) && (query.hidden === "1" || !item.hidden),
+          ),
           query,
         ).map((item) => audioItem(item)),
       };
+    // The phone records of a bot card's people kept under other chats than this one: by chat,
+    // with the marks and a few words that tell which chat they were made in.
+    if (path === "/chats/others") {
+      const voices = data.settings.character_voices || {};
+      const card = String(query.card || "");
+      const ofCard = (key) => key === card || voices[key]?.card === card;
+      const found = new Map();
+      const note = (row, words = []) => {
+        if (!row?.chat_id || row.chat_id === query.chat_id) return;
+        const entry = found.get(row.chat_id) || {
+          chat_id: row.chat_id,
+          count: 0,
+          tags: [],
+          texts: [],
+        };
+        entry.count++;
+        if (row.anchor_tag && !entry.tags.includes(row.anchor_tag))
+          entry.tags.push(row.anchor_tag);
+        for (const line of words)
+          if (line && entry.texts.length < 30) entry.texts.push(line);
+        found.set(row.chat_id, entry);
+      };
+      const first = (value) =>
+        String(value || "")
+          .split("\n")[0]
+          .trim()
+          .slice(0, 200);
+      for (const row of data.messages)
+        if (ofCard(row.character_key)) note(row, [first(row.text)]);
+      for (const row of data.sessions)
+        if (ofCard(row.character_key))
+          note(
+            row,
+            (row.turns || []).slice(0, 3).map((turn) => first(turn.text)),
+          );
+      for (const row of data.memos || [])
+        if (ofCard(row.character_key)) note(row);
+      return { items: [...found.values()].slice(0, 200) };
+    }
+    // One-to-one conversations of every chat but this one: the last text of each, and whether
+    // one of theirs is still unread (다른 봇카드 in the texts list).
+    if (path === "/voice-messages/threads") {
+      const threads = new Map();
+      for (const item of data.messages) {
+        if (
+          item.chat_id === query.chat_id ||
+          item.thread_key ||
+          item.hidden ||
+          stashedNow(item) ||
+          !item.character_key
+        )
+          continue;
+        const id = `${item.chat_id}\u0000${item.character_key}`;
+        const thread = threads.get(id) || {
+          chat_id: item.chat_id,
+          key: item.character_key,
+          name: "",
+          unread: false,
+          last: null,
+        };
+        if (item.role !== "user" && item.character_name)
+          thread.name = item.character_name;
+        // New here means it came while its chat wasn't open (away); what was left unread in
+        // that chat's own time is that chat's business.
+        if (item.unread && item.away) thread.unread = true;
+        if (
+          !thread.last ||
+          String(thread.last.created_at) <= String(item.created_at)
+        )
+          thread.last = audioItem(item);
+        threads.set(id, thread);
+      }
+      return { items: [...threads.values()].slice(0, 500) };
+    }
     if (path === "/message-groups")
       return { items: newest(data.groups, query) };
     if (path === "/phone/memos")
-      return { items: newest(data.memos || [], query).map((item) => audioItem(item)) };
+      return {
+        items: newest(data.memos || [], query).map((item) => audioItem(item)),
+      };
     if (path === "/phone/radio")
       return { items: newest(data.radio || [], query).map(radioItem) };
     if (path === "/history") {
@@ -436,7 +723,7 @@ export class SceneService {
         ...new Map(
           data.generations.map((x) => [
             x.speaker_key || "",
-            { key: x.speaker_key || "", name: x.speaker_name || "기본 화자" },
+            { key: x.speaker_key || "", name: x.speaker_name || "기본 목소리" },
           ]),
         ).values(),
       ];
@@ -531,9 +818,19 @@ export class SceneService {
           speaker_confidence: Number(item.speaker_confidence) || 0,
           needs_confirmation: Boolean(item.needs_confirmation),
           index: Number(item.index ?? index),
+          // Which default voice a speaker without one gets, and where the line sounds from.
+          ...(["male", "female"].includes(item.gender)
+            ? { gender: item.gender }
+            : {}),
+          ...(["left", "right"].includes(item.side) ? { side: item.side } : {}),
+          ...(["close", "far", "muffled"].includes(item.space)
+            ? { space: item.space }
+            : {}),
         })),
         updated_at: stamp,
         profile_id: text(body.profile_id),
+        chat_id: text(body.chat_id),
+        message_id: text(body.message_id, 40),
       };
       // Bound only the reusable analysis cache (the most recent messages stay; a voice
       // already made doesn't need its analysis again); never trim saved conversations here.
@@ -554,18 +851,31 @@ export class SceneService {
     if (path === "/cards/relink" && method === "POST") {
       const from = required(body.from, "이전 봇카드");
       const to = required(body.to, "봇카드");
-      if (!from.startsWith("character:") || !to.startsWith("character:") || from === to)
+      if (
+        !from.startsWith("character:") ||
+        !to.startsWith("character:") ||
+        from === to
+      )
         throw new UserError("옮길 봇카드가 올바르지 않습니다.");
-      const chats = (Array.isArray(body.chats) ? body.chats : []).map((id) => text(id, 500)).filter(Boolean).slice(0, 5000);
+      const chats = (Array.isArray(body.chats) ? body.chats : [])
+        .map((id) => text(id, 500))
+        .filter(Boolean)
+        .slice(0, 5000);
       const chatSwap = new Map(
-        chats.map((chatId) => [contentKey({ chatId, character: from }), contentKey({ chatId, character: to })]),
+        chats.map((chatId) => [
+          contentKey({ chatId, character: from }),
+          contentKey({ chatId, character: to }),
+        ]),
       );
       const swap = new Map([[from, to], ...chatSwap]);
       const name = text(body.name, 300);
       const renamed = (row) => {
         // The card's own lines and calls take its new name.
         if (!name || !row || typeof row !== "object") return row;
-        for (const [keyField, nameField] of [["character_key", "character_name"], ["speaker_key", "speaker_name"]])
+        for (const [keyField, nameField] of [
+          ["character_key", "character_name"],
+          ["speaker_key", "speaker_name"],
+        ])
           if (row[keyField] === to && row[nameField]) row[nameField] = name;
         return row;
       };
@@ -589,15 +899,65 @@ export class SceneService {
           stateMoves.set(key, target);
         }
         const kept = states[target];
-        if (kept && String(kept.updated_at || "") > String(moved.updated_at || "")) continue;
+        if (
+          kept &&
+          String(kept.updated_at || "") > String(moved.updated_at || "")
+        )
+          continue;
         states[target] = moved;
       }
       data.states = states;
-      for (const item of data.stateHistory || []) if (stateMoves.has(item.state_key)) item.state_key = stateMoves.get(item.state_key);
+      for (const item of data.stateHistory || [])
+        if (stateMoves.has(item.state_key))
+          item.state_key = stateMoves.get(item.state_key);
       data.lineEdits = rekey(data.lineEdits || {}, swap);
-      const people = Object.values(data.settings.character_voices || {}).filter((entry) => entry?.card === from).length;
+      const people = Object.values(data.settings.character_voices || {}).filter(
+        (entry) => entry?.card === from,
+      ).length;
       data.settings = rekey(data.settings, swap);
-      return { status: "success", moved: { records, states: stateMoves.size, people } };
+      return {
+        status: "success",
+        moved: { records, states: stateMoves.size, people },
+      };
+    }
+    // A chat renamed in 실리태번 gets another id here: what was kept under the old one moves.
+    if (path === "/chats/move" && method === "POST") {
+      const from = required(body.from, "이전 채팅");
+      const to = required(body.to, "채팅");
+      if (from === to) throw new UserError("옮길 채팅이 올바르지 않습니다.");
+      const swap = new Map([[from, to]]);
+      let records = 0;
+      for (const list of CARD_LISTS) {
+        const rows = data[list] || [];
+        records += rows.filter((row) => row?.chat_id === from).length;
+        data[list] = rekey(rows, swap);
+      }
+      const stateMoves = new Map();
+      const states = {};
+      for (const [key, item] of Object.entries(data.states || {})) {
+        const moved = rekey(item, swap);
+        let target = key;
+        if (item?.chat_id === from) {
+          target = key.startsWith("state-round-")
+            ? `state-round-${sha256(to)}`
+            : `${key.startsWith("state-status-") ? "state-status-" : "state-"}${sha256(`${to}|${moved.character_key || ""}`)}`;
+          if (moved.state_key) moved.state_key = target;
+          stateMoves.set(key, target);
+        }
+        const kept = states[target];
+        if (
+          kept &&
+          String(kept.updated_at || "") > String(moved.updated_at || "")
+        )
+          continue;
+        states[target] = moved;
+      }
+      data.states = states;
+      for (const item of data.stateHistory || [])
+        if (stateMoves.has(item.state_key))
+          item.state_key = stateMoves.get(item.state_key);
+      data.lineEdits = rekey(data.lineEdits || {}, swap);
+      return { status: "success", moved: { records, states: stateMoves.size } };
     }
     // A person made again (a new key): the state and its history saved under the old key move to
     // the new one.
@@ -605,12 +965,21 @@ export class SceneService {
       const from = required(body.from, "상태 ID");
       const to = required(body.to, "상태 ID");
       const old = Object.hasOwn(data.states, from) ? data.states[from] : null;
-      if (!old || old.chat_id !== body.chat_id || Object.hasOwn(data.states, to))
+      if (
+        !old ||
+        old.chat_id !== body.chat_id ||
+        Object.hasOwn(data.states, to)
+      )
         throw new UserError("옮길 상태가 없습니다.", 409);
-      const moved = { character_key: text(body.character_key), character_name: text(body.character_name, 300), state_key: to };
+      const moved = {
+        character_key: text(body.character_key),
+        character_name: text(body.character_name, 300),
+        state_key: to,
+      };
       data.states[to] = { ...old, ...moved };
       delete data.states[from];
-      for (const item of data.stateHistory) if (item.state_key === from) Object.assign(item, moved);
+      for (const item of data.stateHistory)
+        if (item.state_key === from) Object.assign(item, moved);
       return { status: "success" };
     }
     if (path === "/state" && method === "POST") {
@@ -657,7 +1026,9 @@ export class SceneService {
       );
       const latest = data.stateHistory
         .filter((x) => x.state_key === key)
-        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+        .sort((a, b) =>
+          String(b.created_at).localeCompare(String(a.created_at)),
+        )[0];
       if (latest) {
         const { id: ignored, ...item } = latest;
         data.states[key] = item;
@@ -712,7 +1083,11 @@ export class SceneService {
         turns: [],
       };
       const said = text(body.text, 2000)
-        ? normalizeSpeech({ text: body.text, script: body.script, language: body.language })
+        ? normalizeSpeech({
+            text: body.text,
+            script: body.script,
+            language: body.language,
+          })
         : null;
       if (said?.text)
         session.turns.push({
@@ -780,8 +1155,17 @@ export class SceneService {
         ...who,
         id: newId(),
         status: "ended",
-        call_direction: mine ? (body.user_side === "caller" ? "outgoing" : "incoming") : "overheard",
-        ...(mine ? {} : { callee_key: text(body.callee_key), callee_name: text(body.callee_name, 300) }),
+        call_direction: mine
+          ? body.user_side === "caller"
+            ? "outgoing"
+            : "incoming"
+          : "overheard",
+        ...(mine
+          ? {}
+          : {
+              callee_key: text(body.callee_key),
+              callee_name: text(body.callee_name, 300),
+            }),
         ...(others.length ? { others } : {}),
         ...(body.open ? { continuing: true } : {}),
         situation: text(body.situation, 4000),
@@ -800,11 +1184,19 @@ export class SceneService {
     if (callPart && method === "POST") {
       const session = find(data.sessions, callPart[1]);
       checkChat(session, body);
-      if (!session.continuing) throw new UserError("이미 끝난 통화입니다.", 409);
+      if (!session.continuing)
+        throw new UserError("이미 끝난 통화입니다.", 409);
       const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 30);
       const last = Math.max(0, ...session.turns.map((turn) => turn.part || 0));
-      if (body.replace) session.turns = session.turns.filter((turn) => (turn.part || 0) !== last);
-      if (session.turns.length + lines.length > 400) throw new UserError("통화가 너무 길어졌습니다. 마무리해 주십시오.", 409);
+      if (body.replace)
+        session.turns = session.turns.filter(
+          (turn) => (turn.part || 0) !== last,
+        );
+      if (session.turns.length + lines.length > 400)
+        throw new UserError(
+          "통화가 너무 길어졌습니다. 마무리해 주십시오.",
+          409,
+        );
       const mine = session.call_direction !== "overheard";
       writtenLines(session, lines, mine, body.replace ? last : last + 1, stamp);
       if (body.close) delete session.continuing;
@@ -822,7 +1214,10 @@ export class SceneService {
         !["rejected", "missed"].includes(session.status) ||
         session.turns.length
       )
-        throw new UserError("받지 않은 수신 전화에만 음성 사서함을 남길 수 있습니다.", 409);
+        throw new UserError(
+          "받지 않은 수신 전화에만 음성 사서함을 남길 수 있습니다.",
+          409,
+        );
       const speech = normalizeSpeech(body);
       session.turns.push({
         id: newId(),
@@ -886,11 +1281,19 @@ export class SceneService {
       // 음성 전달: a call, voice message or memo I pass on, with what was said in it (its voice
       // file shared when it has one).
       const forward = role === "user" ? forwardOf(body.forward) : null;
+      const card = forward ? null : cardOf(body.card, role);
+      const quote = quoteOf(body.quote);
       const item = {
         ...identity(body),
         ...(thread ? { thread_key: thread } : {}),
         ...(forward ? { forward } : {}),
-        ...(forward && validAudioName(body.audio_filename) ? { audio_filename: body.audio_filename } : {}),
+        ...(card ? { card } : {}),
+        ...(quote ? { quote } : {}),
+        // Theirs stays unread until its conversation is opened (/voice-messages/read).
+        ...(role === "character" ? { unread: true } : {}),
+        ...(forward && validAudioName(body.audio_filename)
+          ? { audio_filename: body.audio_filename }
+          : {}),
         id: newId(),
         role,
         kind,
@@ -908,6 +1311,8 @@ export class SceneService {
         // A group's round of answers, and the answers asked for in its place (답변 재생성).
         ...(text(body.round, 64) ? { round: text(body.round, 64) } : {}),
         ...(text(body.family, 64) ? { family: text(body.family, 64) } : {}),
+        // Exchanged while its chat wasn't open: its chat memory is written when the chat is.
+        ...(body.away === true ? { away: true } : {}),
         created_at: stamp,
       };
       // A new answer for a message set aside (답변 재생성): the earlier answers come along as
@@ -918,14 +1323,21 @@ export class SceneService {
       if (old) {
         checkChat(old, body);
         const earlier = old.versions?.length
-          ? old.versions.map((version, index) => (index === old.version ? versionOf(old) : version))
+          ? old.versions.map((version, index) =>
+              index === old.version ? versionOf(old) : version,
+            )
           : [versionOf(old)];
         item.versions = [...earlier, versionOf(item)].slice(-MAX_VERSIONS);
         item.version = item.versions.length - 1;
         data.messages = data.messages.filter((x) => x.id !== old.id);
       }
       data.messages.push(item);
-      return { status: "success", id: item.id, created_at: stamp, ...(old ? { versions: item.versions.length } : {}) };
+      return {
+        status: "success",
+        id: item.id,
+        created_at: stamp,
+        ...(old ? { versions: item.versions.length } : {}),
+      };
     }
     const attach = path.match(
       /^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)\/audio$/,
@@ -935,7 +1347,11 @@ export class SceneService {
         attach[1] === "phone/turns"
           ? data.sessions.find((s) => s.turns.some((t) => t.id === attach[2]))
           : null;
-      const item = find(parent?.turns || (attach[1] === "phone/memos" ? data.memos : data.messages), attach[2]);
+      const item = find(
+        parent?.turns ||
+          (attach[1] === "phone/memos" ? data.memos : data.messages),
+        attach[2],
+      );
       checkChat(parent || item, body);
       const generation = find(data.generations, body.generation_id);
       if (
@@ -954,7 +1370,9 @@ export class SceneService {
       });
       return {
         status: "success",
-        ...(parent ? { session: sessionItem(parent) } : { item: audioItem(item) }),
+        ...(parent
+          ? { session: sessionItem(parent) }
+          : { item: audioItem(item) }),
       };
     }
     // Group conversations: made, renamed or given other members, and left (with their messages).
@@ -972,7 +1390,10 @@ export class SceneService {
     if (groupPath && method === "PUT") {
       const group = find(data.groups, groupPath[1]);
       checkChat(group, body);
-      Object.assign(group, groupFields(body), { updated_at: stamp });
+      Object.assign(group, groupFields(body), {
+        ...(group.self_made ? { self_rule: 2 } : {}),
+        updated_at: stamp,
+      });
       return { status: "success", group };
     }
     // A room without the user talking by itself counts its runs per day (the user's day).
@@ -981,9 +1402,16 @@ export class SceneService {
       const group = find(data.groups, autoRun[1]);
       checkChat(group, body);
       const day = text(body.day, 10);
-      if (group.auto_day !== day) Object.assign(group, { auto_day: day, auto_runs: 0 });
-      const cap = Number(group.auto_daily_max ?? 5);
-      if (cap > 0 && group.auto_runs >= cap) return { status: "success", allowed: false };
+      if (group.auto_day !== day)
+        Object.assign(group, { auto_day: day, auto_runs: 0 });
+      // The limit it goes by now: the settings' when the room has none of its own.
+      const given = Number(body.daily_max);
+      const cap =
+        Number.isFinite(given) && given >= 0 && body.daily_max !== undefined
+          ? Math.min(100, Math.round(given))
+          : Number(group.auto_daily_max ?? 5);
+      if (cap > 0 && group.auto_runs >= cap)
+        return { status: "success", allowed: false };
       group.auto_runs += 1;
       return { status: "success", allowed: true, runs: group.auto_runs };
     }
@@ -993,13 +1421,70 @@ export class SceneService {
       data.groups = data.groups.filter((x) => x.id !== group.id);
       // Voice files of its messages stay in the audio history.
       data.messages = data.messages.filter(
-        (x) => !(x.thread_key === `group:${group.id}` && x.chat_id === group.chat_id),
+        (x) =>
+          !(
+            x.thread_key === `group:${group.id}` && x.chat_id === group.chat_id
+          ),
       );
       return { status: "success" };
     }
     // 미적용 기억 → 모두 지우기: several messages at once; their voice files stay in the audio history.
+    // What the model saw in a photo I attached, noted once so the photo still means something
+    // after the picture itself is no longer sent along.
+    const seen = path.match(/^\/voice-messages\/([^/]+)\/seen$/);
+    if (seen && method === "PUT") {
+      const item = find(data.messages, seen[1]);
+      checkChat(item, body);
+      const note = text(body.seen, 300);
+      if (item.card?.image && note) item.card.seen = note;
+      return { status: "success" };
+    }
+    // The conversation was opened: its messages are read.
+    if (path === "/voice-messages/read" && method === "POST") {
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
+      for (const item of data.messages.filter((x) => ids.has(x.id))) {
+        checkChat(item, body);
+        delete item.unread;
+      }
+      return { status: "success" };
+    }
+    // An emoji left on a text: one a person, the same one again takes it back.
+    if (path === "/voice-messages/react" && method === "POST") {
+      const item = find(data.messages, String(body.id || ""));
+      checkChat(item, body);
+      if (!validReaction(body.emoji))
+        throw new UserError("쓸 수 없는 반응입니다.");
+      const by = text(body.by, 160) || "user";
+      const had = (item.reactions || []).find((entry) => entry.by === by);
+      item.reactions = (item.reactions || []).filter(
+        (entry) => entry.by !== by,
+      );
+      if (had?.emoji !== body.emoji)
+        item.reactions.push({
+          by,
+          emoji: body.emoji,
+          ...(by === "user" ? {} : { name: text(body.name, 160) }),
+        });
+      item.reactions = item.reactions.slice(-12);
+      if (!item.reactions.length) delete item.reactions;
+      return { status: "success" };
+    }
+    if (path === "/voice-messages/settled" && method === "POST") {
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
+      for (const item of data.messages.filter((x) => ids.has(x.id))) {
+        checkChat(item, body);
+        delete item.away;
+      }
+      return { status: "success" };
+    }
     if (path === "/voice-messages/delete" && method === "POST") {
-      const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)));
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
       const items = data.messages.filter((x) => ids.has(x.id));
       items.forEach((item) => checkChat(item, body));
       data.messages = data.messages.filter((x) => !ids.has(x.id));
@@ -1077,7 +1562,9 @@ export class SceneService {
     // 고치기 on a show's line: its words change and its old voice no longer goes with it.
     const radioEdit = path.match(/^\/phone\/radio-lines\/([^/]+)$/);
     if (radioEdit && method === "PUT") {
-      const show = (data.radio || []).find((x) => x.lines.some((line) => line.id === radioEdit[1]));
+      const show = (data.radio || []).find((x) =>
+        x.lines.some((line) => line.id === radioEdit[1]),
+      );
       if (!show) throw new UserError("기록을 찾을 수 없습니다.", 404);
       checkChat(show, body);
       const line = show.lines.find((x) => x.id === radioEdit[1]);
@@ -1089,7 +1576,13 @@ export class SceneService {
         intensity: line.intensity,
       });
       if (speech.text !== line.text || speech.script !== (line.script || ""))
-        for (const field of ["generation_id", "audio_filename", "mime_type", "sounds_mixed"]) delete line[field];
+        for (const field of [
+          "generation_id",
+          "audio_filename",
+          "mime_type",
+          "sounds_mixed",
+        ])
+          delete line[field];
       Object.assign(line, {
         text: speech.text,
         script: speech.script,
@@ -1103,7 +1596,9 @@ export class SceneService {
     }
     const radioLine = path.match(/^\/phone\/radio-lines\/([^/]+)\/audio$/);
     if (radioLine && method === "PUT") {
-      const show = (data.radio || []).find((x) => x.lines.some((line) => line.id === radioLine[1]));
+      const show = (data.radio || []).find((x) =>
+        x.lines.some((line) => line.id === radioLine[1]),
+      );
       if (!show) throw new UserError("기록을 찾을 수 없습니다.", 404);
       checkChat(show, body);
       const line = show.lines.find((x) => x.id === radioLine[1]);
@@ -1135,19 +1630,25 @@ export class SceneService {
     }
     // A group's rounds: one hidden while another of its versions is shown (답변 재생성, ‹ ›).
     if (path === "/voice-messages/visibility" && method === "PUT") {
-      const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)));
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
       for (const item of data.messages.filter((x) => ids.has(x.id))) {
         checkChat(item, body);
         if (body.hidden) item.hidden = true;
         else delete item.hidden;
-        if (text(body.round, 64) && !item.round) item.round = text(body.round, 64);
-        if (text(body.family, 64) && !item.family) item.family = text(body.family, 64);
+        if (text(body.round, 64) && !item.round)
+          item.round = text(body.round, 64);
+        if (text(body.family, 64) && !item.family)
+          item.family = text(body.family, 64);
       }
       return { status: "success" };
     }
     // 답변 재생성: the message is set aside (hidden) until its new answer replaces it, or comes
     // back if none came. 버전 넘기기: another of its answers becomes the one shown.
-    const versioned = path.match(/^\/voice-messages\/([^/]+)\/(stash|version)$/);
+    const versioned = path.match(
+      /^\/voice-messages\/([^/]+)\/(stash|version)$/,
+    );
     if (versioned && method === "PUT") {
       const item = find(data.messages, versioned[1]);
       checkChat(item, body);
@@ -1161,7 +1662,8 @@ export class SceneService {
       if (!Number.isInteger(index) || index < 0 || index >= list.length)
         throw new UserError("그 답을 찾을 수 없습니다.", 404);
       // The one shown now keeps what it gained meanwhile (a voice made, an edit).
-      list[Number.isInteger(item.version) ? item.version : list.length - 1] = versionOf(item);
+      list[Number.isInteger(item.version) ? item.version : list.length - 1] =
+        versionOf(item);
       for (const field of VERSION_FIELDS) delete item[field];
       Object.assign(item, list[index]);
       item.version = index;
@@ -1169,7 +1671,9 @@ export class SceneService {
     }
     // 미적용 기억 → 모두 지우기: several finished calls at once (one going on stays).
     if (path === "/phone/sessions/delete" && method === "POST") {
-      const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)));
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
       const sessions = data.sessions.filter(
         (x) => ids.has(x.id) && !["active", "ringing"].includes(x.status),
       );
@@ -1184,22 +1688,40 @@ export class SceneService {
       const session = find(data.sessions, removeSession[1]);
       checkChat(session, body);
       if (["active", "ringing"].includes(session.status))
-        throw new UserError("진행 중인 통화는 지울 수 없습니다. 먼저 끊어 주십시오.", 409);
+        throw new UserError(
+          "진행 중인 통화는 지울 수 없습니다. 먼저 끊어 주십시오.",
+          409,
+        );
       data.sessions = data.sessions.filter((x) => x.id !== session.id);
       return { status: "success" };
     }
     // 답변 재생성 on a call: the new answer takes the last line's place and the earlier ones stay
     // as versions to page through (‹ 1/2 ›); `version` shows another one.
-    const callAnswer = path.match(/^\/phone\/turns\/([^/]+)\/(answer|version)$/);
+    const callAnswer = path.match(
+      /^\/phone\/turns\/([^/]+)\/(answer|version)$/,
+    );
     if (callAnswer && method === "PUT") {
-      const session = data.sessions.find((s) => s.turns.some((x) => x.id === callAnswer[1]));
+      const session = data.sessions.find((s) =>
+        s.turns.some((x) => x.id === callAnswer[1]),
+      );
       if (!session) throw new UserError("기록을 찾을 수 없습니다.", 404);
       checkChat(session, body);
       const turn = session.turns.at(-1);
-      if (session.status !== "active" || turn?.id !== callAnswer[1] || turn.role !== "character")
-        throw new UserError("진행 중인 통화의 마지막 대사만 바꿀 수 있습니다.", 409);
-      const list = Array.isArray(turn.versions) && turn.versions.length ? turn.versions : [versionOf(turn)];
-      list[Number.isInteger(turn.version) ? turn.version : list.length - 1] = versionOf(turn);
+      if (
+        session.status !== "active" ||
+        turn?.id !== callAnswer[1] ||
+        turn.role !== "character"
+      )
+        throw new UserError(
+          "진행 중인 통화의 마지막 대사만 바꿀 수 있습니다.",
+          409,
+        );
+      const list =
+        Array.isArray(turn.versions) && turn.versions.length
+          ? turn.versions
+          : [versionOf(turn)];
+      list[Number.isInteger(turn.version) ? turn.version : list.length - 1] =
+        versionOf(turn);
       let index = Number(body.index);
       if (callAnswer[2] === "answer") {
         const speech = normalizeSpeech(body);
@@ -1229,26 +1751,44 @@ export class SceneService {
     // The last line of an active call is taken back to be written again.
     const removeTurn = path.match(/^\/phone\/turns\/([^/]+)$/);
     if (removeTurn && method === "DELETE") {
-      const session = data.sessions.find((s) => s.turns.some((x) => x.id === removeTurn[1]));
+      const session = data.sessions.find((s) =>
+        s.turns.some((x) => x.id === removeTurn[1]),
+      );
       if (!session) throw new UserError("기록을 찾을 수 없습니다.", 404);
       checkChat(session, body);
-      if (session.status !== "active" || session.turns.at(-1)?.id !== removeTurn[1])
-        throw new UserError("진행 중인 통화의 마지막 대사만 다시 쓸 수 있습니다.", 409);
+      if (
+        session.status !== "active" ||
+        session.turns.at(-1)?.id !== removeTurn[1]
+      )
+        throw new UserError(
+          "진행 중인 통화의 마지막 대사만 다시 쓸 수 있습니다.",
+          409,
+        );
       session.turns.pop();
       return { status: "success", session: sessionItem(session) };
     }
     // The user rewrites a call line or voice message; its old voice no longer fits new words (a
     // translation alone keeps it). In a call still going only the other side's lines; in a past
     // one (a call written whole) mine too.
-    const rewrite = path.match(/^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)$/);
+    const rewrite = path.match(
+      /^\/(phone\/turns|voice-messages|phone\/memos)\/([^/]+)$/,
+    );
     if (rewrite && method === "PUT") {
       const parent =
         rewrite[1] === "phone/turns"
           ? data.sessions.find((s) => s.turns.some((t) => t.id === rewrite[2]))
           : null;
-      const item = find(parent?.turns || (rewrite[1] === "phone/memos" ? data.memos : data.messages), rewrite[2]);
+      const item = find(
+        parent?.turns ||
+          (rewrite[1] === "phone/memos" ? data.memos : data.messages),
+        rewrite[2],
+      );
       checkChat(parent || item, body);
-      if (parent && item.role === "user" && ["active", "ringing"].includes(parent.status))
+      if (
+        parent &&
+        item.role === "user" &&
+        ["active", "ringing"].includes(parent.status)
+      )
         throw new UserError("통화 중에는 상대의 대사만 고칠 수 있습니다.", 409);
       const speech = normalizeSpeech({
         text: body.text,
@@ -1257,7 +1797,8 @@ export class SceneService {
         language: body.language || item.language,
         intensity: item.intensity,
       });
-      const words = speech.text !== item.text || speech.script !== (item.script || "");
+      const words =
+        speech.text !== item.text || speech.script !== (item.script || "");
       if (words)
         for (const field of [
           "generation_id",
@@ -1278,7 +1819,9 @@ export class SceneService {
       });
       return {
         status: "success",
-        ...(parent ? { session: sessionItem(parent) } : { item: audioItem(item) }),
+        ...(parent
+          ? { session: sessionItem(parent) }
+          : { item: audioItem(item) }),
       };
     }
     throw new UserError("지원하지 않는 기능입니다.", 404);
@@ -1302,19 +1845,32 @@ export class SceneService {
       .map((name) => text(name, 60))
       .filter(Boolean)
       .slice(0, 8);
-    const key = contentKey({ base: base.cache_key, sounds, overlay: Boolean(raw.overlay) });
+    const key = contentKey({
+      base: base.cache_key,
+      sounds,
+      overlay: Boolean(raw.overlay),
+    });
     const filename = `${key}.wav`;
     let audioMetadata;
     if (!(await this.store.getAudio(filename))) {
-      if (this.store.stageAudio) audioMetadata = await this.store.stageAudio(filename, bytes);
+      if (this.store.stageAudio)
+        audioMetadata = await this.store.stageAudio(filename, bytes);
       else await this.store.writeAudio(filename, bytes);
     }
     const record = await this.store.transaction((db) => {
       if (audioMetadata) db.audioFiles[filename] = audioMetadata;
       else if (db.audioFiles && !db.audioFiles[filename])
-        db.audioFiles[filename] = { name: filename, size: bytes.byteLength, created: Date.now() };
+        db.audioFiles[filename] = {
+          name: filename,
+          size: bytes.byteLength,
+          created: Date.now(),
+        };
       const item = find(db.generations, base.id);
-      Object.assign(item, { audio_filename: filename, mime_type: "audio/wav", sounds });
+      Object.assign(item, {
+        audio_filename: filename,
+        mime_type: "audio/wav",
+        sounds,
+      });
       return item;
     });
     return { status: "success", id: record.id, audio_filename: filename };
@@ -1324,13 +1880,21 @@ export class SceneService {
     const data = await this.store.read();
     const base = settingsWithDefaults(data.settings);
     // MultiCast 확장's voice settings, when the phone follows it (채팅 대사 읽기 off).
-    const borrowed = raw.engine_settings && typeof raw.engine_settings === "object" ? raw.engine_settings : null;
+    const borrowed =
+      raw.engine_settings && typeof raw.engine_settings === "object"
+        ? raw.engine_settings
+        : null;
     if (borrowed) {
-      const unit = (value, min, max) => (Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : undefined);
+      const unit = (value, min, max) =>
+        Number.isFinite(Number(value))
+          ? Math.min(max, Math.max(min, Number(value)))
+          : undefined;
       base.engine = "elevenlabs";
       base.elevenlabs = {
         ...base.elevenlabs,
-        ...(validModel("elevenlabs", borrowed.model) ? { model: borrowed.model } : {}),
+        ...(validModel("elevenlabs", borrowed.model)
+          ? { model: borrowed.model }
+          : {}),
         ...Object.fromEntries(
           [
             ["stability", unit(borrowed.stability, 0, 1)],
@@ -1356,7 +1920,10 @@ export class SceneService {
         "선택한 음성 엔진을 현재 연결에서 사용할 수 없습니다.",
         409,
       );
-    const request = buildSpeechRequest(settings, withAlwaysTags(raw, resolved.always_tags));
+    const request = buildSpeechRequest(
+      settings,
+      withAlwaysTags(raw, resolved.always_tags),
+    );
     const key = contentKey({
       version: 1,
       engine: request.engine,
@@ -1421,6 +1988,11 @@ export class SceneService {
           line_key: text(raw.line_key, 64),
           config_key: text(raw.config_key, 64),
           edit_key: text(raw.edit_key, 64),
+          // 공간감: where the line is heard from (a playback effect; the file is plain).
+          side: ["left", "right"].includes(raw.side) ? raw.side : "",
+          space: ["close", "far", "muffled"].includes(raw.space)
+            ? raw.space
+            : "",
           audio_filename: filename,
           mime_type: "audio/mpeg",
           // Made again: plain voice until its sounds are mixed in once more.
@@ -1445,7 +2017,11 @@ export class SceneService {
       let usage = "";
       if (!hit) {
         const pruned = await this.prune(false, filename);
-        usage = String(Math.round((pruned.size_bytes / (pruned.max_size_mb * 1048576)) * 100) / 100);
+        usage = String(
+          Math.round(
+            (pruned.size_bytes / (pruned.max_size_mb * 1048576)) * 100,
+          ) / 100,
+        );
       }
       return {
         bytes,
@@ -1474,9 +2050,11 @@ export class SceneService {
   }
   /** Deletes audio files, then drops them from the records in one write. */
   async removeFiles(names) {
-    for (const name of names) await this.store.deleteAudio(name, { listed: false });
+    for (const name of names)
+      await this.store.deleteAudio(name, { listed: false });
     await this.store.transaction((data) => {
-      if (data.audioFiles) for (const name of names) delete data.audioFiles[name];
+      if (data.audioFiles)
+        for (const name of names) delete data.audioFiles[name];
       data.generations = data.generations.filter(
         (x) => !names.has(x.audio_filename),
       );
@@ -1510,7 +2088,8 @@ export class SceneService {
         file.name !== protect &&
         (all ||
           (settings.cache.max_age_days > 0 &&
-            Date.now() - file.created > settings.cache.max_age_days * 86400000) ||
+            Date.now() - file.created >
+              settings.cache.max_age_days * 86400000) ||
           total > settings.cache.max_size_mb * 1048576)
       ) {
         remove.add(file.name);
@@ -1558,12 +2137,21 @@ export class SceneService {
     if (path === "/history/speaker" && method === "POST") {
       const key = String(body?.speaker_key || "");
       if (!key) throw new UserError("지울 화자를 골라 주십시오.");
-      const ids = new Set(data.generations.filter((x) => (x.speaker_key || "") === key).map((x) => x.id));
+      const ids = new Set(
+        data.generations
+          .filter((x) => (x.speaker_key || "") === key)
+          .map((x) => x.id),
+      );
       const files = new Set(
         data.generations
           .filter((x) => ids.has(x.id) && x.audio_filename)
           .map((x) => x.audio_filename)
-          .filter((name) => !data.generations.some((x) => !ids.has(x.id) && x.audio_filename === name)),
+          .filter(
+            (name) =>
+              !data.generations.some(
+                (x) => !ids.has(x.id) && x.audio_filename === name,
+              ),
+          ),
       );
       if (files.size) await this.removeFiles(files);
       await this.store.transaction((db) => {

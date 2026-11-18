@@ -1,9 +1,6 @@
 // Settings: defaults, validation and the engines' models.
 import { validateVoices } from "./casting.js";
-import {
-  DEFAULT_READING_RULES,
-  READING_KINDS,
-} from "./segments.js";
+import { DEFAULT_READING_RULES, READING_KINDS } from "./segments.js";
 export const EMOTIONS = [
   "default",
   "calm",
@@ -45,7 +42,9 @@ export const MODELS = {
 /** A model this engine can be asked for: one of the list, or (ElevenLabs) a typed-in ID. */
 export function validModel(engine, model) {
   if (MODELS[engine]?.includes(model)) return true;
-  return engine === "elevenlabs" && /^[a-z0-9_]{3,64}$/.test(String(model || ""));
+  return (
+    engine === "elevenlabs" && /^[a-z0-9_]{3,64}$/.test(String(model || ""))
+  );
 }
 /**
  * What an ElevenLabs model takes. v3 and later (v3, v4 and their variants) perform audio tags;
@@ -61,17 +60,33 @@ export function elevenModelTraits(model) {
     v3: generation === 3,
     style: generation === 3 || id === "eleven_multilingual_v2",
     // v4 has no speed control; the v2-generation models have one.
-    speed: /^eleven_(multilingual_v2|flash_v2|flash_v2_5|turbo_v2|turbo_v2_5)$/.test(id),
+    speed:
+      /^eleven_(multilingual_v2|flash_v2|flash_v2_5|turbo_v2|turbo_v2_5)$/.test(
+        id,
+      ),
     languageCode: tags || /_v2_5$/.test(id),
     maxChars: generation === 3 ? 5000 : /flash/.test(id) ? 30000 : 10000,
   };
 }
 export const PHONE_LAUNCHERS = ["floating", "menu", "both"];
 // Languages a person can speak on the phone and that lines are tagged with (ISO 639-1).
-export const SPEECH_LANGUAGES = ["ko", "ja", "en", "zh", "fr", "es", "de", "it", "pt", "ru"];
+export const SPEECH_LANGUAGES = [
+  "ko",
+  "ja",
+  "en",
+  "zh",
+  "fr",
+  "es",
+  "de",
+  "it",
+  "pt",
+  "ru",
+];
 // Smartphone colors: the dark default, or one of the light themes with a white body.
 export const PHONE_THEMES = ["default", "white", "pink", "blue"];
 export const OVERHEARD_LENGTHS = ["short", "normal", "long"];
+// 랜덤 연락: the chance per new AI reply for a person of average habit (contact_rate 50).
+export const RANDOM_OUTREACH_BASE = { low: 0.08, normal: 0.15, high: 0.3 };
 export const DEFAULT_SETTINGS = {
   // 씬보이스 사용: off, nothing runs (line buttons, phone, analysis, chat memory); records stay.
   active: true,
@@ -84,26 +99,45 @@ export const DEFAULT_SETTINGS = {
   character_notes: {},
   character_voices: {},
   // Marked regions that get a play button (quotes, *…*, (…), or the user's own marks).
-  // thought_effect: thoughts play a little softer and more inward (playback only).
+  // thought_effect: no longer a choice (thoughts always play a little softer and more inward).
   // version 2 added the straight single quote.
-  reading: { rules: structuredClone(DEFAULT_READING_RULES), thought_effect: true, version: 2 },
+  reading: {
+    rules: structuredClone(DEFAULT_READING_RULES),
+    thought_effect: true,
+    version: 2,
+  },
   // auto_new: a new AI reply is voiced and read through at once (its 음성 준비 is pressed).
   // caption: the line being read shown under 실리태번's top bar: "off", "auto" (only for lines
   // read from the original while a translation is on screen) or "always". caption_at: "top"
   // (under the top bar) or "bottom" (above the input bar).
   // line_buttons: the play buttons beside the lines (off: hidden, 음성 준비 still reads them).
   // prepare: the message's 음성 준비 / 이어 듣기 button.
-  playback: { auto_new: false, caption: "always", caption_at: "top", line_buttons: true, prepare: true },
+  // spatial: where a line is heard from (side, distance), as a playback effect only.
+  playback: {
+    auto_new: false,
+    caption: "always",
+    caption_at: "bottom",
+    line_buttons: true,
+    prepare: true,
+    spatial: true,
+    level: true,
+  },
   // uncertain: what 음성 준비 does with a line whose speaker is unclear: "skip" it, or read it
   // with the default voice (the male or female one when the analysis tells).
   // multicast_sync: MultiCast TTS's cast kept in step with the people here (when it is installed).
-  casting: { auto_enabled: true, uncertain: "skip", multicast_sync: true },
+  // global_folders: the folders of the global people list, in their order (an empty one too).
+  casting: {
+    auto_enabled: true,
+    uncertain: "skip",
+    multicast_sync: true,
+    global_folders: [],
+  },
   // "auto": each person's own language, otherwise the conversation's. A language set here is
   // used by everyone.
   default_language: "auto",
   llm: {
     include_preset: true,
-    analysis_include_persona: false,
+    analysis_include_persona: true,
     // Card descriptions go to the line analysis.
     analysis_include_character: true,
     // A new AI message is analysed as soon as it arrives (speakers and tags; no audio).
@@ -111,23 +145,60 @@ export const DEFAULT_SETTINGS = {
     // On: line analysis and state tracking go at a low temperature so their JSON stays intact.
     // Calls and texts always use the connection preset's temperature.
     task_temperature: true,
-    // 0 = follow the connection profile's preset.
-    max_input_tokens: 0,
-    max_output_tokens: 0,
+    // Replies a slash command put in the chat (QR scripts) aren't read or counted as replies.
+    skip_command_replies: true,
+    // Messages hidden in SillyTavern: "read" = read like any other; "summary" = left out, and the
+    // text other extensions inject into the chat (picked in injected_prompts) is read instead.
+    hidden_messages: "read",
+    // Injected prompt key -> read it or not. A key not listed goes by its name (see character.js).
+    injected_prompts: {},
+    // 추가 지침: the user's own words, put at the very end of every helper-model request.
+    extra_instructions: "",
   },
   state_tracking: {
     enabled: false,
     connection_profile_id: "",
-    context_messages: 8,
+    context_messages: 6,
     // Update the state after every N new AI replies.
-    every_messages: 2,
+    every_messages: 3,
+  },
+  // 선연락: how people come to call or text first.
+  // mode "state": the state update judges who would reach out now (a request every update).
+  // mode "random": dice after each new AI reply, no request until someone gets through.
+  // random_level: how often the dice hit (see RANDOM_OUTREACH_BASE). random_gap: no longer used (kept so
+  // saved settings still read). random_fit: a contact that got through is
+  // still dropped when it would make no sense in the story right now.
+  // enabled: the one switch over all of it (off: nobody reaches out, the choices below kept).
+  outreach: {
+    enabled: false,
+    mode: "state",
+    random_level: "normal",
+    random_gap: 3,
+    random_fit: false,
+    // mode "time": something happens after a random wait between time_min and time_max minutes
+    // of real time; at most time_daily_max calls or texts to the user a day (0 = no limit).
+    time_min: 30,
+    time_max: 120,
+    time_daily_max: 6,
+  },
+  // The user's own wording for how calls and texts are written (the style part of the prompt
+  // only); empty = the built-in one.
+  prompts: {
+    call_style: "",
+    text_style: "",
+    group_call_style: "",
+    group_text_style: "",
   },
   phone: {
     // 스마트폰 사용: off removes the phone, its buttons and everyone reaching out first.
     app_enabled: true,
     connection_profile_id: "",
     context_messages: 10,
+    // 먼저 전화하기: the switch over calls made first, to me (call_me) or between two other
+    // people (overheard_calls).
     auto_enabled: false,
+    call_me: true,
+    // No longer used.
     auto_cooldown_messages: 0,
     ringtone: true,
     vibration: true,
@@ -144,13 +215,15 @@ export const DEFAULT_SETTINGS = {
     // The other side's reply is voiced and played as soon as it arrives.
     auto_voice: true,
     // A call of theirs declined or not picked up within a minute: they leave a voicemail.
-    voicemail: true,
+    voicemail: false,
     // 엿듣는 통화: now and then two people phone each other, written out for the user to hear.
     overheard_calls: false,
     // 엿듣는 통화 길이 (lines asked for: see overheardCallSystem).
     overheard_length: "normal",
-    // 음성 메모: the app on the home screen, and memos on their own (with state tracking).
+    // 음성 메모: the app on the home screen.
     memo_app: true,
+    // People leave memos on their own now and then (선연락).
+    memo_auto: false,
     // 라디오: the radio app on the home screen (a fourth-wall extra).
     radio_app: true,
     theme: "default",
@@ -167,8 +240,44 @@ export const DEFAULT_SETTINGS = {
     reply_voice: true,
     // Short tones when a text is sent or arrives.
     sounds: true,
+    // 문자 카드 kinds in use (switched in the messaging app's + menu): off, neither side sends it.
+    cards: {
+      photo: true,
+      location: true,
+      appointment: true,
+      transfer: true,
+      gift: true,
+      song: true,
+      video: true,
+      poll: true,
+    },
+    // Under 먼저 문자 보내기. text_me: people text me first (and start talking in rooms I am
+    // in). overheard_texts (엿보는 문자): rooms without me talk by themselves. rooms_self: they
+    // may open such rooms on their own. room_defaults: what a new room starts with.
+    // The people writing a text also know the other conversations they are in.
+    other_chats: true,
+    // 참고할 문자 수: a conversation's latest texts sent with a request (the open one and the
+    // others alike; 0 = all). other_calls: how many of their other calls, each whole (0 = all).
+    thread_messages: 40,
+    other_calls: 3,
+    text_me: true,
+    overheard_texts: false,
+    rooms_self: false,
+    room_defaults: {
+      auto_every: 8,
+      auto_daily_max: 4,
+      burst_min: 6,
+      burst_max: 15,
+    },
   },
-  chat_memory: { enabled: false },
+  // view: how a kept call or text shows under its chat message: "text" (as the AI reads it) or
+  // "bubble" (chat bubbles).
+  chat_memory: { enabled: false, view: "bubble" },
+  // 발음 사전: words written one way and said another, respelled in what the engine reads only:
+  // [{from, to, auto, card}]. card: the bot card a word is for (none: every card). auto: the
+  // line analysis adds the names whose reading it can settle (marked auto: true, for the card of
+  // that chat). skipped: found words the user removed, not found again.
+  pronunciation: { words: [], auto: true, skipped: [] },
   // max_age_days 0 = keep until the size limit needs the room.
   cache: { max_size_mb: 1024, max_age_days: 0 },
   fish: {
@@ -188,14 +297,14 @@ export const DEFAULT_SETTINGS = {
     voice_id_male: "",
     voice_id_female: "",
     model: "eleven_v4",
-    stability: 0.5,
+    stability: 0.65,
     similarity_boost: 0.75,
     style: 0.2,
     // 0.7–1.2; 1 is not sent.
     speed: 1,
     use_audio_tags: true,
     // Short scene sound effects ([knocking], [applause]) between lines; Eleven v4 performs them.
-    sound_effects: false,
+    sound_effects: true,
   },
 };
 
@@ -229,6 +338,35 @@ export function settingsWithDefaults(source = {}) {
         Object.assign(result[key], source[key]);
     } else result[key] = source[key];
   }
+  // Settings saved before 선연락 had a switch of its own (or memos one of theirs) go on as
+  // they did: reaching out stays on where a call, a text or an overheard call was, and memos
+  // keep coming where they came.
+  // 엿듣는 통화 used to stand beside 먼저 전화하기; now it is under it.
+  if (source.phone && source.phone.call_me === undefined) {
+    if (source.phone.overheard_calls && !source.phone.auto_enabled) {
+      result.phone.auto_enabled = true;
+      result.phone.call_me = false;
+    }
+    // Rooms without me talked by themselves whatever the switches said: they go on doing so.
+    if (
+      source.voice_message?.enabled &&
+      source.voice_message.overheard_texts === undefined
+    )
+      result.voice_message.overheard_texts = true;
+  }
+  const was =
+    source.phone?.auto_enabled ||
+    source.voice_message?.enabled ||
+    source.phone?.overheard_calls;
+  if (source.outreach?.enabled === undefined && was)
+    result.outreach.enabled = true;
+  if (
+    source.phone &&
+    source.phone.memo_auto === undefined &&
+    source.phone.memo_app !== false &&
+    (was || source.state_tracking?.enabled)
+  )
+    result.phone.memo_auto = true;
   return result;
 }
 export function validateSettings(current, patch) {
@@ -270,7 +408,10 @@ export function validateSettings(current, patch) {
   for (const key of ["active", "enabled", "analysis_enabled"])
     next[key] = Boolean(next[key]);
   next.connection_profile_id = text(next.connection_profile_id);
-  next.context_messages = bounded(next.context_messages, 0, 12, 4);
+  // Chat messages sent along; 0 = all of them (also for the phone and the state update below).
+  next.context_messages = Math.round(
+    bounded(next.context_messages, 0, 100000, 4),
+  );
   for (const key of [
     "state_tracking",
     "phone",
@@ -290,7 +431,7 @@ export function validateSettings(current, patch) {
     // from its oldest messages when sent).
     if ("context_messages" in next[key])
       next[key].context_messages = Math.round(
-        bounded(next[key].context_messages, 1, key === "phone" ? 100000 : 20, 8),
+        bounded(next[key].context_messages, 0, 100000, 8),
       );
   }
   next.reading = {
@@ -298,13 +439,43 @@ export function validateSettings(current, patch) {
     thought_effect: next.reading?.thought_effect !== false,
     version: 2,
   };
+  {
+    const words = cleanPronunciation(next.pronunciation?.words);
+    const listed = new Set(words.map((word) => word.from.toLowerCase()));
+    next.pronunciation = {
+      words,
+      auto: next.pronunciation?.auto !== false,
+      skipped: cleanPronunciation(
+        (Array.isArray(next.pronunciation?.skipped)
+          ? next.pronunciation.skipped
+          : []
+        ).map((from) => ({ from, to: "-" })),
+      )
+        .map((word) => word.from)
+        .filter((from) => !listed.has(from.toLowerCase())),
+    };
+  }
+  if (!["text", "bubble"].includes(next.chat_memory.view))
+    next.chat_memory.view = "bubble";
   next.phone.world_info_choice = cleanLoreChoice(next.phone.world_info_choice);
   if (!["off", "auto", "always"].includes(next.playback.caption))
     next.playback.caption = DEFAULT_SETTINGS.playback.caption;
   if (!["top", "bottom"].includes(next.playback.caption_at))
     next.playback.caption_at = DEFAULT_SETTINGS.playback.caption_at;
+  next.playback.spatial = next.playback.spatial !== false;
+  next.playback.level = next.playback.level !== false;
   if (!["skip", "default"].includes(next.casting.uncertain))
     next.casting.uncertain = DEFAULT_SETTINGS.casting.uncertain;
+  next.casting.global_folders = [
+    ...new Set(
+      (Array.isArray(next.casting.global_folders)
+        ? next.casting.global_folders
+        : []
+      )
+        .map((name) => text(name, 40))
+        .filter(Boolean),
+    ),
+  ].slice(0, 50);
   if (!PHONE_LAUNCHERS.includes(next.phone.launcher))
     next.phone.launcher = DEFAULT_SETTINGS.phone.launcher;
   if (!PHONE_THEMES.includes(next.phone.theme))
@@ -317,27 +488,113 @@ export function validateSettings(current, patch) {
     100,
     6,
   );
-  next.llm.max_input_tokens = Math.round(
-    bounded(next.llm.max_input_tokens, 0, 2000000, 0),
+  next.llm.skip_command_replies = next.llm.skip_command_replies !== false;
+  next.llm.extra_instructions = String(next.llm.extra_instructions ?? "")
+    .replace(/\r\n?/g, "\n")
+    .slice(0, 6000);
+  next.llm.hidden_messages =
+    next.llm.hidden_messages === "summary" ? "summary" : "read";
+  const picks = next.llm.injected_prompts;
+  next.llm.injected_prompts =
+    picks && typeof picks === "object" && !Array.isArray(picks)
+      ? Object.fromEntries(
+          Object.entries(picks)
+            .filter(([key, on]) => key.length <= 200 && typeof on === "boolean")
+            .slice(0, 100),
+        )
+      : {};
+  // Removed settings: the connection profile's preset decides both sizes.
+  delete next.llm.max_input_tokens;
+  delete next.llm.max_output_tokens;
+  next.phone.call_me = next.phone.call_me !== false;
+  next.voice_message.text_me = next.voice_message.text_me !== false;
+  next.voice_message.other_chats = next.voice_message.other_chats !== false;
+  next.voice_message.thread_messages = Math.round(
+    bounded(next.voice_message.thread_messages, 0, 1000, 40),
   );
-  next.llm.max_output_tokens = Math.round(
-    bounded(next.llm.max_output_tokens, 0, 200000, 0),
+  next.voice_message.other_calls = Math.round(
+    bounded(next.voice_message.other_calls, 0, 30, 3),
   );
+  next.voice_message.overheard_texts =
+    next.voice_message.overheard_texts === true;
+  next.voice_message.rooms_self = next.voice_message.rooms_self === true;
+  {
+    const base = DEFAULT_SETTINGS.voice_message.room_defaults;
+    const room = next.voice_message.room_defaults || {};
+    const whole = (value, min, max, fallback) =>
+      Math.round(
+        Math.min(
+          max,
+          Math.max(
+            min,
+            Number.isFinite(Number(value)) ? Number(value) : fallback,
+          ),
+        ),
+      );
+    const burstMin = whole(room.burst_min, 1, 30, base.burst_min);
+    next.voice_message.room_defaults = {
+      auto_every: whole(room.auto_every, 1, 50, base.auto_every),
+      auto_daily_max: whole(room.auto_daily_max, 0, 100, base.auto_daily_max),
+      burst_min: burstMin,
+      burst_max: Math.max(
+        burstMin,
+        whole(room.burst_max, 1, 30, base.burst_max),
+      ),
+    };
+  }
+  next.voice_message.cards = Object.fromEntries(
+    Object.keys(DEFAULT_SETTINGS.voice_message.cards).map((type) => [
+      type,
+      next.voice_message.cards?.[type] !== false,
+    ]),
+  );
+  if (!["random", "time"].includes(next.outreach.mode))
+    next.outreach.mode = "state";
+  next.outreach.time_min = Math.round(
+    bounded(next.outreach.time_min, 1, 1440, 30),
+  );
+  next.outreach.time_max = Math.max(
+    next.outreach.time_min,
+    Math.round(bounded(next.outreach.time_max, 1, 1440, 120)),
+  );
+  next.outreach.time_daily_max = Math.round(
+    bounded(next.outreach.time_daily_max, 0, 50, 6),
+  );
+  if (!Object.hasOwn(RANDOM_OUTREACH_BASE, next.outreach.random_level))
+    next.outreach.random_level = DEFAULT_SETTINGS.outreach.random_level;
+  next.outreach.enabled = next.outreach.enabled === true;
+  next.outreach.random_gap = Math.round(
+    bounded(next.outreach.random_gap, 0, 100, 3),
+  );
+  next.outreach.random_fit = next.outreach.random_fit !== false;
+  for (const field of Object.keys(DEFAULT_SETTINGS.prompts))
+    next.prompts[field] = String(next.prompts[field] ?? "")
+      .replace(/\r\n?/g, "\n")
+      .trim()
+      .slice(0, 6000);
   next.state_tracking.every_messages = Math.round(
-    bounded(next.state_tracking.every_messages, 1, 20, 2),
+    bounded(next.state_tracking.every_messages, 1, 20, 3),
   );
   next.cache.max_size_mb = bounded(next.cache.max_size_mb, 128, 20480, 1024);
-  next.cache.max_age_days = Math.round(bounded(next.cache.max_age_days, 0, 3650, 0));
+  next.cache.max_age_days = Math.round(
+    bounded(next.cache.max_age_days, 0, 3650, 0),
+  );
   for (const engine of Object.keys(MODELS)) {
     const section = next[engine];
     if (!validModel(engine, section.model))
       throw new UserError(`${engine}: 지원하지 않는 모델입니다.`);
     section.api_key = text(section.api_key, 1000);
     const voiceField = engine === "fish" ? "reference_id" : "voice_id";
-    for (const field of [voiceField, `${voiceField}_male`, `${voiceField}_female`]) {
+    for (const field of [
+      voiceField,
+      `${voiceField}_male`,
+      `${voiceField}_female`,
+    ]) {
       section[field] = text(section[field], 200);
       if (section[field] && !/^[a-zA-Z0-9_-]+$/.test(section[field]))
-        throw new UserError("Voice ID에는 영문·숫자·밑줄·하이픈만 사용할 수 있습니다.");
+        throw new UserError(
+          "Voice ID에는 영문·숫자·밑줄·하이픈만 사용할 수 있습니다.",
+        );
     }
   }
   next.elevenlabs.use_audio_tags = Boolean(next.elevenlabs.use_audio_tags);
@@ -354,9 +611,39 @@ export function validateSettings(current, patch) {
   next.elevenlabs.speed = bounded(next.elevenlabs.speed, 0.7, 1.2, 1);
   return next;
 }
+/** 발음 사전 rows: a written form and how it is said, one row per written form and bot card. */
+export function cleanPronunciation(words) {
+  const seen = new Set();
+  const result = [];
+  const line = (value, max) =>
+    text(
+      String(value ?? "")
+        .replace(/[\[\]\r\n]+/g, " ")
+        .replace(/\s+/g, " "),
+      max,
+    );
+  for (const word of Array.isArray(words) ? words : []) {
+    const from = line(word?.from, 60);
+    const to = line(word?.to, 120);
+    const card = text(word?.card, 300);
+    const scope = card.startsWith("character:") ? card : "";
+    const key = `${scope}\u0000${from.toLowerCase()}`;
+    if (!from || !to || from === to || seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      from,
+      to,
+      ...(word.auto === true ? { auto: true } : {}),
+      ...(scope ? { card: scope } : {}),
+    });
+    if (result.length >= 300) break;
+  }
+  return result;
+}
 /** The lorebook choice, kept to booleans under short keys. */
 function cleanLoreChoice(value) {
-  const object = (item) => item && typeof item === "object" && !Array.isArray(item);
+  const object = (item) =>
+    item && typeof item === "object" && !Array.isArray(item);
   if (!object(value)) return {};
   const flags = (item, limit) =>
     Object.fromEntries(

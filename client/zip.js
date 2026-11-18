@@ -20,7 +20,9 @@ export function makeZip(entries, now = new Date()) {
   const time =
     (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
   const date =
-    ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    ((now.getFullYear() - 1980) << 9) |
+    ((now.getMonth() + 1) << 5) |
+    now.getDate();
   const parts = [];
   const central = [];
   let offset = 0;
@@ -99,7 +101,10 @@ export function readZip(buffer) {
         "다시 압축된 zip은 읽을 수 없습니다. 씬보이스에서 받은 백업 파일을 그대로 선택해 주십시오.",
       );
     const start =
-      offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true);
+      offset +
+      30 +
+      view.getUint16(offset + 26, true) +
+      view.getUint16(offset + 28, true);
     files.set(name, bytes.subarray(start, start + size));
     position += 46 + nameLength + extraLength + commentLength;
   }

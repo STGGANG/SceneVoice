@@ -9,20 +9,31 @@ import {
   simpleHash,
   contentKey,
   withoutVoiceTags,
+  stOf,
 } from "./common.js";
 
-const memoryChatKey = (context) => simpleHash(JSON.stringify([
-  context.chatId ?? null, context.characterId ?? null, context.groupId ?? null,
-]));
+import { memoryBubblesHtml } from "./memory-view.js";
+
+const memoryChatKey = (context) =>
+  simpleHash(
+    JSON.stringify([
+      context.chatId ?? null,
+      context.characterId ?? null,
+      context.groupId ?? null,
+    ]),
+  );
 
 function memoryScrollPosition(container) {
   if (!container) return null;
   const top = container.getBoundingClientRect().top;
-  const anchor = [...container.querySelectorAll(":scope > .mes[mesid]")]
-    .find((node) => node.getBoundingClientRect().bottom > top);
+  const anchor = [...container.querySelectorAll(":scope > .mes[mesid]")].find(
+    (node) => node.getBoundingClientRect().bottom > top,
+  );
   return {
     container,
-    bottom: container.scrollHeight - container.clientHeight - container.scrollTop <= 2,
+    bottom:
+      container.scrollHeight - container.clientHeight - container.scrollTop <=
+      2,
     anchor,
     top: anchor?.getBoundingClientRect().top,
   };
@@ -41,20 +52,26 @@ function placeMemoryAfterText(details, text) {
   const textStyle = getComputedStyle(text);
   details.style.order = textStyle.order === "0" ? "" : textStyle.order;
   let host = text.parentElement;
-  while (host && getComputedStyle(host).display === "contents") host = host.parentElement;
+  while (host && getComputedStyle(host).display === "contents")
+    host = host.parentElement;
   details.style.gridRow = "";
   details.style.gridColumn = "";
   if (!host || !/grid/.test(getComputedStyle(host).display)) return;
 
   // A theme can flatten message wrappers into a grid. Use the rendered row boundaries so
   // named areas, numeric rows, and other records below the text all keep their own space.
-  details.style.gridColumn = textStyle.gridColumn === "auto / auto" ? "1 / -1" : textStyle.gridColumn;
+  details.style.gridColumn =
+    textStyle.gridColumn === "auto / auto" ? "1 / -1" : textStyle.gridColumn;
   const items = [];
   const collect = (parent) => {
     for (const child of parent.children) {
       const style = getComputedStyle(child);
       if (style.display === "contents") collect(child);
-      else if (child !== details && style.display !== "none" && !["absolute", "fixed"].includes(style.position))
+      else if (
+        child !== details &&
+        style.display !== "none" &&
+        !["absolute", "fixed"].includes(style.position)
+      )
         items.push(child);
     }
   };
@@ -62,8 +79,14 @@ function placeMemoryAfterText(details, text) {
   const hostStyle = getComputedStyle(host);
   const tracks = hostStyle.gridTemplateRows.match(/\d+(?:\.\d+)?px/g);
   if (!tracks?.length) return;
-  const bottom = Math.max(text.getBoundingClientRect().bottom, ...items.map((node) => node.getBoundingClientRect().bottom));
-  let edge = host.getBoundingClientRect().top + (parseFloat(hostStyle.borderTopWidth) || 0) + (parseFloat(hostStyle.paddingTop) || 0);
+  const bottom = Math.max(
+    text.getBoundingClientRect().bottom,
+    ...items.map((node) => node.getBoundingClientRect().bottom),
+  );
+  let edge =
+    host.getBoundingClientRect().top +
+    (parseFloat(hostStyle.borderTopWidth) || 0) +
+    (parseFloat(hostStyle.paddingTop) || 0);
   const gap = parseFloat(hostStyle.rowGap) || 0;
   let row = 1;
   for (const track of tracks) {
@@ -98,19 +121,27 @@ export const memory = {
   },
 
   formatCallMemoryText(session) {
-    if (session?.call_direction === "overheard") return this.formatOverheardMemoryText(session);
+    if (session?.call_direction === "overheard")
+      return this.formatOverheardMemoryText(session);
     const outcome = FINAL_CALL_STATUSES.has(session?.status)
       ? session.status
       : "ended";
-    const name = session?.character_name || this.getStateIdentity().characterName;
+    const name =
+      session?.character_name || this.getStateIdentity().characterName;
     const me = this.memoryUserName();
-    const [caller, callee] = session?.call_direction === "incoming" ? [name, me] : [me, name];
+    const [caller, callee] =
+      session?.call_direction === "incoming" ? [name, me] : [me, name];
     // More people on the same call (통화 맡기기 with several): all of them by name.
-    const characterName = this.memoryAttribute([name, ...(session?.others || []).map((other) => other.name)].join(", "));
-    const contextLine = this.memoryContext(session?.situation, `${caller} called ${callee}`);
+    const characterName = this.memoryAttribute(
+      [name, ...(session?.others || []).map((other) => other.name)].join(", "),
+    );
+    const contextLine = this.memoryContext(
+      session?.situation,
+      `${caller} called ${callee}`,
+    );
     // With real-time awareness, the call keeps when it happened.
     const time = this.realtimeFor(session?.character_key)
-      ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at))}"`
+      ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at, this.timeZoneFor(session?.character_key)))}"`
       : "";
     const lines = [
       `<CALL character="${characterName}" initiated_by="${this.memoryAttribute(caller)}" outcome="${outcome}"${time}>`,
@@ -120,7 +151,11 @@ export const memory = {
       const text = String(turn?.text || "").trim();
       if (!text) continue;
       const who = turn.role === "user" ? me : turn.speaker_name || name;
-      const label = turn.voicemail ? `${who} (voicemail)` : turn.aside ? `${who} (in the background)` : who;
+      const label = turn.voicemail
+        ? `${who} (voicemail)`
+        : turn.aside
+          ? `${who} (in the background)`
+          : who;
       lines.push(`${label}: ${text}`);
     }
     lines.push("</CALL>");
@@ -130,11 +165,17 @@ export const memory = {
   /** 엿듣는 통화: a call between two people the user's character didn't hear (and doesn't know of). */
   formatOverheardMemoryText(session) {
     const others = session?.others || [];
-    const names = [session?.character_name, session?.callee_name, ...others.map((other) => other.name)].map((name) =>
-      this.memoryAttribute(name),
-    );
-    const time = [session?.character_key, session?.callee_key, ...others.map((other) => other.key)].some((key) => this.realtimeFor(key))
-      ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at))}"`
+    const names = [
+      session?.character_name,
+      session?.callee_name,
+      ...others.map((other) => other.name),
+    ].map((name) => this.memoryAttribute(name));
+    const time = [
+      session?.character_key,
+      session?.callee_key,
+      ...others.map((other) => other.key),
+    ].some((key) => this.realtimeFor(key))
+      ? ` time="${this.memoryAttribute(this.realTimeLabel(session?.started_at, this.timeZoneFor(session?.character_key)))}"`
       : "";
     const lines = [
       `<CALL between="${names.join(", ")}" caller="${names[0]}" user_present="false"${time}>`,
@@ -157,7 +198,7 @@ export const memory = {
       "asynchronous_personal_message",
     );
     const time = this.realtimeFor(item?.character_key)
-      ? ` time="${this.memoryAttribute(this.realTimeLabel(item?.created_at))}"`
+      ? ` time="${this.memoryAttribute(this.realTimeLabel(item?.created_at, this.timeZoneFor(item?.character_key)))}"`
       : "";
     return [
       `<VOICE_MESSAGE character="${characterName}"${time}>`,
@@ -179,14 +220,16 @@ export const memory = {
     // Voice memos kept here before they were taken out of the chat memory stay out of it.
     return events.filter(
       (item) =>
-        item?.llm_text && item.type !== "memo" && (typeof item.swipe_id !== "number" || item.swipe_id === swipe),
+        item?.llm_text &&
+        item.type !== "memo" &&
+        (typeof item.swipe_id !== "number" || item.swipe_id === swipe),
     );
   },
 
   async persistChatMemoryEvent(anchorMessageId, event) {
     if (!event?.id || !event?.llm_text) return false;
     if (event.chat_id !== this.currentChatId()) return false;
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const chat = Array.isArray(context.chat) ? context.chat : [];
     const match = String(anchorMessageId ?? "").match(/^\d+/);
     const index = match ? Number(match[0]) : -1;
@@ -202,8 +245,12 @@ export const memory = {
         }) !== false
       : !event.anchor_fingerprint ||
         event.anchor_fingerprint ===
-          contentKey({ text: withoutVoiceTags(message.mes), swipe: message.swipe_id }) ||
-        event.anchor_fingerprint === contentKey({ text: message.mes, swipe: message.swipe_id });
+          contentKey({
+            text: withoutVoiceTags(message.mes),
+            swipe: message.swipe_id,
+          }) ||
+        event.anchor_fingerprint ===
+          contentKey({ text: message.mes, swipe: message.swipe_id });
     if (!stillThere) return false;
     if (!message.extra || typeof message.extra !== "object") message.extra = {};
     if (!Array.isArray(message.extra[CHAT_MEMORY_KEY]))
@@ -211,7 +258,9 @@ export const memory = {
     const normalized = {
       version: 1,
       id: String(event.id),
-      type: ["voice_message", "texts", "memo"].includes(event.type) ? event.type : "call",
+      type: ["voice_message", "texts", "memo"].includes(event.type)
+        ? event.type
+        : "call",
       character_name: String(event.character_name || "").slice(0, 300),
       llm_text: String(event.llm_text).trim(),
       // The swipe it was made on; another swipe of the same message doesn't show it.
@@ -219,8 +268,11 @@ export const memory = {
     };
     const events = message.extra[CHAT_MEMORY_KEY];
     // Records this one takes the place of (the same conversation under an older key).
-    const replaced = new Set(Array.isArray(event.replaces) ? event.replaces : []);
-    for (let at = events.length - 1; at >= 0; at--) if (replaced.has(events[at]?.id)) events.splice(at, 1);
+    const replaced = new Set(
+      Array.isArray(event.replaces) ? event.replaces : [],
+    );
+    for (let at = events.length - 1; at >= 0; at--)
+      if (replaced.has(events[at]?.id)) events.splice(at, 1);
     const existingIndex = events.findIndex(
       (item) => item?.id === normalized.id,
     );
@@ -240,11 +292,19 @@ export const memory = {
    * `members`: a group's people. `alone`: a group the user isn't in (they never saw it). `left`:
    * the user left the group, and that is its last line.
    */
-  formatTextThreadMemoryText(name, items, members = null, timed = false, { alone = false, left = false } = {}) {
+  formatTextThreadMemoryText(
+    name,
+    items,
+    members = null,
+    timed = false,
+    { alone = false, left = false } = {},
+  ) {
     const me = this.memoryUserName();
     const lines = items.map((item) => {
       // With real-time awareness each text keeps when it was sent.
-      const text = `${timed ? `(${this.realTimeLabel(item.created_at)}) ` : ""}${String(this.messageWords?.(item) ?? item.text ?? "")
+      const text = `${timed ? `(${this.realTimeLabel(item.created_at, this.timeZoneFor(item.character_key))}) ` : ""}${String(
+        this.messageWords?.(item) ?? item.text ?? "",
+      )
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
@@ -260,7 +320,9 @@ export const memory = {
       : `<TEXT_MESSAGES character="${this.memoryAttribute(name)}">`;
     return [
       open,
-      ...(alone ? [`(${me} is not in this group chat and has not seen it.)`] : []),
+      ...(alone
+        ? [`(${me} is not in this group chat and has not seen it.)`]
+        : []),
       ...lines,
       ...(left ? [`(${me} left the group chat.)`] : []),
       "</TEXT_MESSAGES>",
@@ -273,32 +335,48 @@ export const memory = {
    * another swipe of that message (in 미적용 기억), written into the memory kept with that swipe
    * instead.
    */
-  async persistTextThreadMemory(key, anchorIndex, { left = false, swipe = null } = {}) {
+  async persistTextThreadMemory(
+    key,
+    anchorIndex,
+    { left = false, swipe = null } = {},
+  ) {
     const anchor = String(anchorIndex ?? "");
     const away = swipe !== null;
     const chatId = this.currentChatId();
-    const sourceMessage = window.SillyTavern?.getContext?.()?.chat?.[Number(anchor)];
+    const sourceMessage = stOf(this)?.chat?.[Number(anchor)];
     const sourceSwipe = sourceMessage?.swipe_id;
-    const stillCurrent = () => chatId === this.currentChatId() &&
-      window.SillyTavern?.getContext?.()?.chat?.[Number(anchor)] === sourceMessage &&
+    const stillCurrent = () =>
+      chatId === this.currentChatId() &&
+      stOf(this)?.chat?.[Number(anchor)] === sourceMessage &&
       (away || sourceMessage?.swipe_id === sourceSwipe);
     // A group keeps every message of its room; a one-to-one thread its texts and replies.
     const items = (await this.loadMessages({ all: away })).filter(
       (item) =>
         this.messageThreadOf(item) === key &&
         String(item.anchor_message_id) === anchor &&
-        (!away || (item.anchor_swipe === swipe && this.anchorPlace(item) === "swipe")) &&
-        (this.isGroupThread(key) || (item.kind || "voice") === "text" || item.origin === "reply"),
+        (!away ||
+          (item.anchor_swipe === swipe &&
+            this.anchorPlace(item) === "swipe")) &&
+        (this.isGroupThread(key) ||
+          (item.kind || "voice") === "text" ||
+          item.origin === "reply"),
     );
     if (!stillCurrent()) return false;
-    const idOf = (thread) => `texts-${simpleHash(thread).slice(0, 12)}-${anchor}`;
+    const idOf = (thread) =>
+      `texts-${simpleHash(thread).slice(0, 12)}-${anchor}`;
     const id = idOf(key);
     if (!items.length)
-      return away ? this.rewriteSwipeMemory(anchor, swipe, id, null) : this.removeChatMemoryEvent(anchor, id);
+      return away
+        ? this.rewriteSwipeMemory(anchor, swipe, id, null)
+        : this.removeChatMemoryEvent(anchor, id);
     // Texts kept under a person's old key (made again since) are this conversation too: the
     // record written under that key gives way to this one instead of staying beside it.
     const former = [
-      ...new Set(items.map((item) => item.thread_key || item.character_key).filter((raw) => raw && raw !== key)),
+      ...new Set(
+        items
+          .map((item) => item.thread_key || item.character_key)
+          .filter((raw) => raw && raw !== key),
+      ),
     ].map(idOf);
     if (this.isGroupThread(key) && !this.messageGroup(key))
       await this.loadMessageGroups().catch(() => []);
@@ -330,14 +408,16 @@ export const memory = {
    * becomes `text`, or it is taken out when `text` is null. Only one already there changes.
    */
   async rewriteSwipeMemory(anchorMessageId, swipe, id, text = null) {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const match = String(anchorMessageId ?? "").match(/^\d+/);
     const message = match ? context.chat?.[Number(match[0])] : null;
     if (!message) return false;
     // That swipe's own copy, and the copies later swipes carried over from it (hidden there).
     const extras = [
       message.extra,
-      ...(Array.isArray(message.swipe_info) ? message.swipe_info.map((info) => info?.extra) : []),
+      ...(Array.isArray(message.swipe_info)
+        ? message.swipe_info.map((info) => info?.extra)
+        : []),
     ];
     let changed = false;
     for (const extra of extras) {
@@ -370,13 +450,20 @@ export const memory = {
   async forgetSwipeMemory(record, thread = "") {
     if (this.anchorPlace(record) !== "swipe") return false;
     if (thread)
-      return this.persistTextThreadMemory(thread, record.anchor_message_id, { swipe: record.anchor_swipe });
-    return this.rewriteSwipeMemory(record.anchor_message_id, record.anchor_swipe, record.id, null);
+      return this.persistTextThreadMemory(thread, record.anchor_message_id, {
+        swipe: record.anchor_swipe,
+      });
+    return this.rewriteSwipeMemory(
+      record.anchor_message_id,
+      record.anchor_swipe,
+      record.id,
+      null,
+    );
   },
 
   /** Removes one call or message record from the chat message it was attached to. */
   async removeChatMemoryEvent(anchorMessageId, id) {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const match = String(anchorMessageId ?? "").match(/^\d+/);
     const message = match ? context.chat?.[Number(match[0])] : null;
     const events = message?.extra?.[CHAT_MEMORY_KEY];
@@ -409,7 +496,7 @@ export const memory = {
   },
 
   clearChatMemoryPrompts() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     if (typeof context.setExtensionPrompt !== "function") {
       this.chatMemoryPromptKeys.clear();
       return;
@@ -421,7 +508,7 @@ export const memory = {
   },
 
   syncChatMemoryPrompts() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     this.clearChatMemoryPrompts();
     if (
       !this.chatMemoryOn() ||
@@ -451,7 +538,16 @@ export const memory = {
    * 연동), while 씬보이스 is on.
    */
   chatMemoryOn() {
-    return this.config?.active !== false && Boolean(this.config?.chat_memory?.enabled);
+    if (this.config?.active === false) return false;
+    // Each bot card's own switch; a card that never set it follows the switch there was before.
+    const voices = this.config?.character_voices || {};
+    const before = Boolean(this.config?.chat_memory?.enabled);
+    const cards = (this.currentCardKeys?.() || []).filter((key) =>
+      key.startsWith("character:"),
+    );
+    return cards.length
+      ? cards.some((key) => voices[key]?.chat_memory ?? before)
+      : before;
   },
 
   /** The record boxes under chat messages: `messages` (elements) or, by default, all of them. */
@@ -466,66 +562,100 @@ export const memory = {
     }
     if (!this.chatMemoryLayoutBound && window.addEventListener) {
       const signal = this.lifetimeController?.signal;
-      window.addEventListener("resize", () => this.scheduleChatMemoryRefresh(), { signal });
-      signal?.addEventListener("abort", () => { this.chatMemoryLayoutBound = false; }, { once: true });
+      window.addEventListener(
+        "resize",
+        () => this.scheduleChatMemoryRefresh(),
+        { signal },
+      );
+      signal?.addEventListener(
+        "abort",
+        () => {
+          this.chatMemoryLayoutBound = false;
+        },
+        { once: true },
+      );
       this.chatMemoryLayoutBound = true;
     }
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const chat = Array.isArray(context.chat) ? context.chat : [];
     const chatKey = memoryChatKey(context);
-    if (this.chatMemoryRenderedChat !== chat || this.chatMemoryRenderedKey !== chatKey) {
-      document.querySelectorAll(".sv-chat-memory").forEach((item) => item.remove());
+    if (
+      this.chatMemoryRenderedChat !== chat ||
+      this.chatMemoryRenderedKey !== chatKey
+    ) {
+      document
+        .querySelectorAll(".sv-chat-memory")
+        .forEach((item) => item.remove());
       this.chatMemoryRenderedChat = chat;
       this.chatMemoryRenderedKey = chatKey;
       messages = null;
     }
-    (messages || document.querySelectorAll("#chat .mes[mesid]")).forEach((messageElement) => {
-      if (!messageElement.matches?.("#chat .mes[mesid]")) return;
-      const messageId = messageElement.getAttribute("mesid");
-      const index = /^\d+$/.test(messageId || "") ? Number(messageId) : -1;
-      const events = this.chatMemoryEventsOf(chat[index]);
-      const text = messageElement.querySelector(":scope > .mes_block > .mes_text");
-      const boxes = [...messageElement.querySelectorAll(":scope > .mes_block > .sv-chat-memory")];
-      const existing = boxes.shift();
-      boxes.forEach((item) => item.remove());
-      if (!events.length || !text) {
-        existing?.remove();
-        return;
-      }
-      const signature = simpleHash(JSON.stringify(events));
-      if (existing?.dataset.signature === signature && existing.dataset.chatKey === chatKey) {
-        existing.dataset.messageId = String(index);
-        placeMemoryAfterText(existing, text);
-        return;
-      }
-      const wasOpen = Boolean(existing?.open);
-      const details = document.createElement("details");
-      details.className = "sv-chat-memory";
-      details.dataset.messageId = String(index);
-      details.dataset.signature = signature;
-      details.dataset.chatKey = chatKey;
-      details.open = wasOpen;
-      const hasCall = events.some((item) => item.type === "call");
-      const hasVoice = events.some((item) => item.type === "voice_message");
-      const hasTexts = events.some((item) => item.type === "texts");
-      const hasMemo = events.some((item) => item.type === "memo");
-      const icon = [
-        hasCall ? '<i class="fa-solid fa-phone" aria-hidden="true"></i>' : "",
-        hasVoice
-          ? '<i class="fa-solid fa-microphone-lines" aria-hidden="true"></i>'
-          : "",
-        hasTexts ? '<i class="fa-solid fa-comment-dots" aria-hidden="true"></i>' : "",
-        hasMemo ? '<i class="fa-solid fa-wave-square" aria-hidden="true"></i>' : "",
-      ].join("");
-      details.innerHTML = `
-                <summary><span class="sv-memory-icons">${icon}</span>통화·메시지 채팅 기억 <span class="sv-memory-count">${events.length}</span></summary>
+    (messages || document.querySelectorAll("#chat .mes[mesid]")).forEach(
+      (messageElement) => {
+        if (!messageElement.matches?.("#chat .mes[mesid]")) return;
+        const messageId = messageElement.getAttribute("mesid");
+        const index = /^\d+$/.test(messageId || "") ? Number(messageId) : -1;
+        const events = this.chatMemoryEventsOf(chat[index]);
+        const text = messageElement.querySelector(
+          ":scope > .mes_block > .mes_text",
+        );
+        const boxes = [
+          ...messageElement.querySelectorAll(
+            ":scope > .mes_block > .sv-chat-memory",
+          ),
+        ];
+        const existing = boxes.shift();
+        boxes.forEach((item) => item.remove());
+        if (!events.length || !text) {
+          existing?.remove();
+          return;
+        }
+        // 말풍선 보기: the same memory drawn as bubbles (the text itself is what 편집 changes).
+        const bubbles = this.config?.chat_memory?.view === "bubble";
+        const me = this.memoryUserName();
+        const signature = simpleHash(
+          JSON.stringify([events, bubbles ? me : null]),
+        );
+        if (
+          existing?.dataset.signature === signature &&
+          existing.dataset.chatKey === chatKey
+        ) {
+          existing.dataset.messageId = String(index);
+          placeMemoryAfterText(existing, text);
+          return;
+        }
+        const wasOpen = Boolean(existing?.open);
+        const details = document.createElement("details");
+        details.className = "sv-chat-memory";
+        details.dataset.messageId = String(index);
+        details.dataset.signature = signature;
+        details.dataset.chatKey = chatKey;
+        details.open = wasOpen;
+        const hasCall = events.some((item) => item.type === "call");
+        const hasVoice = events.some((item) => item.type === "voice_message");
+        const hasTexts = events.some((item) => item.type === "texts");
+        const hasMemo = events.some((item) => item.type === "memo");
+        const icon = [
+          hasCall ? '<i class="fa-solid fa-phone" aria-hidden="true"></i>' : "",
+          hasVoice
+            ? '<i class="fa-solid fa-microphone-lines" aria-hidden="true"></i>'
+            : "",
+          hasTexts
+            ? '<i class="fa-solid fa-comment-dots" aria-hidden="true"></i>'
+            : "",
+          hasMemo
+            ? '<i class="fa-solid fa-wave-square" aria-hidden="true"></i>'
+            : "",
+        ].join("");
+        details.innerHTML = `
+                <summary><span class="sv-memory-icons">${icon}</span>전화·문자 채팅 기억 <span class="sv-memory-count">${events.length}</span></summary>
                 <div class="sv-memory-records">
                     ${events
                       .map(
                         (item) => `
                         <article class="sv-memory-record" data-event-id="${escapeHtml(item.id)}">
                             <small>${item.type === "call" ? "통화" : item.type === "texts" ? "문자" : "음성 메시지"} · ${escapeHtml(item.character_name || "")}</small>
-                            <pre>${escapeHtml(item.llm_text)}</pre>
+                            ${(bubbles && memoryBubblesHtml(item.llm_text, me)) || `<pre class="sv-memory-body">${escapeHtml(item.llm_text)}</pre>`}
                             <textarea class="sv-memory-editor hidden" spellcheck="false">${escapeHtml(item.llm_text)}</textarea>
                             <div class="sv-memory-actions">
                                 <button type="button" data-sv-memory-action="edit">편집</button>
@@ -537,9 +667,10 @@ export const memory = {
                       )
                       .join("")}
                 </div>`;
-      existing?.replaceWith(details);
-      placeMemoryAfterText(details, text);
-    });
+        existing?.replaceWith(details);
+        placeMemoryAfterText(details, text);
+      },
+    );
     restoreMemoryScroll(scroll);
   },
 
@@ -560,15 +691,22 @@ export const memory = {
     const action = button?.dataset?.svMemoryAction;
     const record = button?.closest(".sv-memory-record");
     const details = button?.closest(".sv-chat-memory");
-    const context = window.SillyTavern?.getContext?.() || {};
-    const messageId = details?.closest("#chat .mes[mesid]")?.getAttribute("mesid");
-    if (!/^\d+$/.test(messageId || "") || details.dataset.chatKey !== memoryChatKey(context)) return;
+    const context = stOf(this) || {};
+    const messageId = details
+      ?.closest("#chat .mes[mesid]")
+      ?.getAttribute("mesid");
+    if (
+      !/^\d+$/.test(messageId || "") ||
+      details.dataset.chatKey !== memoryChatKey(context)
+    )
+      return;
     const messageIndex = Number(messageId);
     const events = context.chat?.[messageIndex]?.extra?.[CHAT_MEMORY_KEY];
-    const event = this.chatMemoryEventsOf(context.chat?.[messageIndex])
-      .find((item) => item?.id === record?.dataset?.eventId);
+    const event = this.chatMemoryEventsOf(context.chat?.[messageIndex]).find(
+      (item) => item?.id === record?.dataset?.eventId,
+    );
     if (!event || !record) return;
-    const pre = record.querySelector("pre");
+    const pre = record.querySelector(".sv-memory-body");
     const editor = record.querySelector(".sv-memory-editor");
     const editButton = record.querySelector('[data-sv-memory-action="edit"]');
     const saveButton = record.querySelector('[data-sv-memory-action="save"]');
@@ -593,7 +731,7 @@ export const memory = {
       return;
     }
     if (action === "delete") {
-      if (!confirm("이 통화·음성 채팅 기억을 삭제하시겠습니까?")) return;
+      if (!confirm("이 전화·음성 채팅 기억을 삭제하시겠습니까?")) return;
       const index = events.findIndex((item) => item?.id === event.id);
       if (index >= 0) events.splice(index, 1);
       if (!events.length)
@@ -613,24 +751,5 @@ export const memory = {
     }
     await context.saveChat?.();
     await this.refreshChatMemory();
-  },
-
-  async clearCurrentChatMemory() {
-    const context = window.SillyTavern?.getContext?.() || {};
-    const chat = Array.isArray(context.chat) ? context.chat : [];
-    let removed = 0;
-    for (const message of chat) {
-      const events = message?.extra?.[CHAT_MEMORY_KEY];
-      if (!Array.isArray(events) || !events.length) continue;
-      removed += events.length;
-      delete message.extra[CHAT_MEMORY_KEY];
-    }
-    if (!removed) {
-      this.notify("현재 채팅에 연동된 통화·음성 기억이 없습니다.", "info");
-      return;
-    }
-    await context.saveChat?.();
-    await this.refreshChatMemory();
-    this.notify(`${removed}개의 채팅 연동 기억을 삭제했습니다.`, "success");
   },
 };

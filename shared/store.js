@@ -54,8 +54,16 @@ export function checkDatabase(data) {
   data.radio ||= [];
   return data;
 }
+/** One emoji (with its skin tone, joined parts or flag pair), as a reaction on a text. */
+export const validReaction = (value) =>
+  typeof value === "string" &&
+  value.length <= 24 &&
+  /^(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\ufe0f|\p{Emoji_Modifier})*(?:\u200d\p{Extended_Pictographic}(?:\ufe0f|\p{Emoji_Modifier})*)*)$/u.test(
+    value,
+  );
 export const validAudioName = (name) =>
   typeof name === "string" &&
   /^(?:[a-f0-9]{64}|fav_[a-f0-9]{32})\.(?:mp3|wav)$/.test(name);
 /** A saved voice's type: mp3 from the engines, WAV for a phone line with its sounds mixed in. */
-export const audioType = (name) => (String(name).endsWith(".wav") ? "audio/wav" : "audio/mpeg");
+export const audioType = (name) =>
+  String(name).endsWith(".wav") ? "audio/wav" : "audio/mpeg";

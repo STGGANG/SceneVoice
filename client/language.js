@@ -1,17 +1,102 @@
 // Which language a line, a conversation or a chat is in: the script of the text, common words
 // for Latin-script languages, the person's or the global language setting, then the chat.
 
+import { stOf } from "./common.js";
 import { SPEECH_LANGUAGES } from "../shared/settings.js";
 
 const LATIN_WORDS = {
-  en: ["the", "and", "you", "is", "are", "what", "this", "that", "to", "of", "it's", "i'm"],
-  fr: ["le", "la", "les", "des", "est", "je", "tu", "pas", "vous", "et", "c'est", "une", "suis"],
-  es: ["el", "los", "las", "que", "es", "por", "para", "está", "pero", "yo", "estoy", "muy"],
-  de: ["der", "die", "das", "und", "ich", "nicht", "ist", "du", "ein", "eine", "mit", "bin"],
-  it: ["il", "che", "non", "sono", "gli", "della", "per", "ciao", "mi", "ti", "è", "sei"],
-  pt: ["não", "você", "está", "os", "uma", "eu", "com", "isso", "muito", "sou", "tudo", "obrigado"],
+  en: [
+    "the",
+    "and",
+    "you",
+    "is",
+    "are",
+    "what",
+    "this",
+    "that",
+    "to",
+    "of",
+    "it's",
+    "i'm",
+  ],
+  fr: [
+    "le",
+    "la",
+    "les",
+    "des",
+    "est",
+    "je",
+    "tu",
+    "pas",
+    "vous",
+    "et",
+    "c'est",
+    "une",
+    "suis",
+  ],
+  es: [
+    "el",
+    "los",
+    "las",
+    "que",
+    "es",
+    "por",
+    "para",
+    "está",
+    "pero",
+    "yo",
+    "estoy",
+    "muy",
+  ],
+  de: [
+    "der",
+    "die",
+    "das",
+    "und",
+    "ich",
+    "nicht",
+    "ist",
+    "du",
+    "ein",
+    "eine",
+    "mit",
+    "bin",
+  ],
+  it: [
+    "il",
+    "che",
+    "non",
+    "sono",
+    "gli",
+    "della",
+    "per",
+    "ciao",
+    "mi",
+    "ti",
+    "è",
+    "sei",
+  ],
+  pt: [
+    "não",
+    "você",
+    "está",
+    "os",
+    "uma",
+    "eu",
+    "com",
+    "isso",
+    "muito",
+    "sou",
+    "tudo",
+    "obrigado",
+  ],
 };
-const LATIN_LETTERS = { fr: /[çœàèêâîûù]/g, es: /[ñ¿¡áíóú]/g, de: /[äöüß]/g, pt: /[ãõ]/g };
+const LATIN_LETTERS = {
+  fr: /[çœàèêâîûù]/g,
+  es: /[ñ¿¡áíóú]/g,
+  de: /[äöüß]/g,
+  pt: /[ãõ]/g,
+};
 
 export const language = {
   /** Language that the text's own script proves, or "" when the script is ambiguous. */
@@ -25,13 +110,17 @@ export const language = {
 
   /** Which Latin-script language a text is in, by common words and letters; English when unsure. */
   latinLanguage(text) {
-    const value = ` ${String(text || "").toLowerCase().replace(/[^\p{L}']+/gu, " ")} `;
+    const value = ` ${String(text || "")
+      .toLowerCase()
+      .replace(/[^\p{L}']+/gu, " ")} `;
     let best = "en",
       top = 0;
     for (const [language, words] of Object.entries(LATIN_WORDS)) {
       const score =
-        words.reduce((sum, word) => sum + value.split(` ${word} `).length - 1, 0) +
-        (value.match(LATIN_LETTERS[language] || /$^/g) || []).length;
+        words.reduce(
+          (sum, word) => sum + value.split(` ${word} `).length - 1,
+          0,
+        ) + (value.match(LATIN_LETTERS[language] || /$^/g) || []).length;
       if (score > top) [best, top] = [language, score];
     }
     return best;
@@ -57,7 +146,10 @@ export const language = {
     const value = String(text || "");
     const script = this.scriptLanguage(value);
     if (script) return script;
-    if (!/[一-鿿]/.test(value) && (value.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4)
+    if (
+      !/[一-鿿]/.test(value) &&
+      (value.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4
+    )
       return this.latinLanguage(value);
     return "";
   },
@@ -75,7 +167,7 @@ export const language = {
   chatLanguage() {
     const fixed = this.fixedLanguage();
     if (fixed) return fixed;
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const chat = context.chat || [];
     const fromChat = this.scoreLanguage(
       chat

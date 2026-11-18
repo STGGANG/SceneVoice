@@ -1,5 +1,6 @@
 // Playback: two reusable audio players (see audioPlayer), the call filter and the thought
 // effect, short message tones, and voices joined into files to save.
+import { stOf } from "./common.js";
 import { pcm16, wavFromParts } from "./wav.js";
 
 // A saved file is cut every 30 minutes, so a long conversation stays within a phone's memory.
@@ -15,26 +16,173 @@ export const playback = {
     return record?.audio_filtered !== true && record?.audio_filtered !== 1;
   },
 
-  /** `aside`: a remark in the background on a call (someone near the phone): fainter, duller. */
-  connectCommunicationAudioFilter(audio, { aside = false, filter = true, radio = false } = {}) {
+  /** The page's audio context for effects, made on first use. */
+  effectContext() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
     if (
       !this.communicationAudioContext ||
       this.communicationAudioContext.state === "closed"
-    ) {
+    )
       this.communicationAudioContext = new AudioContextClass();
-    }
-    const context = this.communicationAudioContext;
+    return this.communicationAudioContext;
+  },
+
+  /**
+   * Wires the player through each group of nodes in turn, then to the speakers. A group is
+   * already connected inside: its first node takes the sound in, its last gives it out.
+   */
+  wireEffects(audio, context, groups) {
     const source = this.mediaSource(audio, context);
-    const nodes = [
-      ...(filter ? (radio ? this.radioNodes(context) : this.communicationNodes(context)) : []),
-      ...(aside ? this.asideNodes(context) : []),
-    ];
-    source.connect(nodes[0]);
-    nodes.at(-1).connect(context.destination);
-    this.currentAudioNodes = [source, ...nodes];
+    const wired = [source];
+    let tail = source;
+    for (const nodes of groups) {
+      if (!nodes.length) continue;
+      tail.connect(nodes[0]);
+      tail = nodes.at(-1);
+      wired.push(...nodes);
+    }
+    this.currentAudioNodes = [...wired, ...this.toSpeakers(context, tail)];
     return context;
+  },
+
+  /**
+   * The end of every chain: to the speakers, through a gain when this play is turned down
+   * (음량 맞춤). Returns the node it added, if any.
+   */
+  toSpeakers(context, ...tails) {
+    const level = this.playLevel ?? 1;
+    const gain = level < 0.99 ? context.createGain() : null;
+    if (gain) {
+      gain.gain.value = level;
+      gain.connect(context.destination);
+    }
+    for (const tail of tails) tail.connect(gain || context.destination);
+    return gain ? [gain] : [];
+  },
+
+  /**
+   * `aside`: a remark in the background on a call (someone near the phone): fainter, duller.
+   * `place`: how the voice reaches the phone (before the line), or a seat on the radio (after it).
+   */
+  connectCommunicationAudioFilter(
+    audio,
+    { aside = false, filter = true, radio = false, place = null } = {},
+  ) {
+    const context = this.effectContext();
+    if (!context) return null;
+    const placed = place ? this.placeNodes(context, place) : [];
+    return this.wireEffects(audio, context, [
+      radio ? [] : placed,
+      filter
+        ? radio
+          ? this.radioNodes(context)
+          : this.communicationNodes(context)
+        : [],
+      aside ? this.asideNodes(context) : [],
+      radio ? placed : [],
+    ]);
+  },
+
+  /** 공간감 on a chat line. Playback only; the saved file stays clean. */
+  connectPlaceEffect(audio, place) {
+    const context = this.effectContext();
+    return (
+      context &&
+      this.wireEffects(audio, context, [this.placeNodes(context, place)])
+    );
+  },
+
+  /** A 0.9 s decaying noise tail: a small, soft room. */
+  roomImpulse(context) {
+    if (
+      !this.thoughtImpulse ||
+      this.thoughtImpulse.sampleRate !== context.sampleRate
+    ) {
+      const length = Math.round(context.sampleRate * 0.9);
+      const impulse = context.createBuffer(2, length, context.sampleRate);
+      for (let channel = 0; channel < 2; channel++) {
+        const data = impulse.getChannelData(channel);
+        for (let i = 0; i < length; i++)
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3.2);
+      }
+      this.thoughtImpulse = impulse;
+    }
+    return this.thoughtImpulse;
+  },
+
+  /**
+   * 공간감: where a voice is heard from. `side` leans it a little to the left or right (never
+   * all the way: a wrong guess must not grate); `pan` sets the lean itself (a seat on the radio).
+   * `space`: close (fuller, a touch louder), far (thin, quiet, in a room) or muffled (dull, as
+   * through a door).
+   */
+  placeNodes(context, { side = "", space = "", pan = null } = {}) {
+    const input = context.createGain();
+    const nodes = [input];
+    let tail = input;
+    const add = (node) => {
+      tail.connect(node);
+      nodes.push(node);
+      tail = node;
+      return node;
+    };
+    const filter = (type, frequency, gain = 0) => {
+      const node = add(context.createBiquadFilter());
+      node.type = type;
+      node.frequency.value = frequency;
+      node.gain.value = gain;
+    };
+    const level = (value) => {
+      add(context.createGain()).gain.value = value;
+    };
+    if (space === "close") {
+      filter("lowshelf", 220, 4);
+      filter("highshelf", 5000, 2);
+      level(1.1);
+    } else if (space === "muffled") {
+      filter("lowpass", 900);
+      level(0.8);
+    } else if (space === "far") {
+      filter("highpass", 260);
+      filter("lowpass", 3400);
+      level(0.5);
+    }
+    const lean =
+      pan ??
+      (side === "left" ? -1 : side === "right" ? 1 : 0) *
+        (space === "close" ? 0.5 : 0.35);
+    if (lean && context.createStereoPanner)
+      add(context.createStereoPanner()).pan.value = lean;
+    const output = context.createGain();
+    tail.connect(output);
+    if (space === "far") {
+      // The room it carries across, beside the voice itself.
+      const room = context.createConvolver();
+      const wet = context.createGain();
+      room.buffer = this.roomImpulse(context);
+      wet.gain.value = 0.3;
+      tail.connect(room).connect(wet).connect(output);
+      nodes.push(room, wet);
+    }
+    nodes.push(output);
+    return nodes;
+  },
+
+  /** A call line's place: how the voice reaches the phone. */
+  turnPlace(turn) {
+    return turn?.space ? { space: turn.space } : null;
+  },
+
+  /** A chat line's place, when 공간감 is on and the line has one. Thoughts stay where they are. */
+  linePlace(button) {
+    if (
+      this.config.playback?.spatial === false ||
+      button?.dataset?.kind === "thought"
+    )
+      return null;
+    const { side = "", space = "" } = button?.dataset || {};
+    return side || space ? { side, space } : null;
   },
 
   /** 라디오: a clean broadcast voice (fuller than the phone, warm low end, gently compressed). */
@@ -59,7 +207,11 @@ export const playback = {
     compressor.ratio.value = 3;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.2;
-    highpass.connect(lowpass).connect(warmth).connect(presence).connect(compressor);
+    highpass
+      .connect(lowpass)
+      .connect(warmth)
+      .connect(presence)
+      .connect(compressor);
     return [highpass, lowpass, warmth, presence, compressor];
   },
 
@@ -95,10 +247,13 @@ export const playback = {
   },
 
   async renderCommunicationFilter(buffer, { radio = false } = {}) {
-    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const Offline =
+      window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const context = new Offline(1, buffer.length, buffer.sampleRate);
     const source = context.createBufferSource();
-    const nodes = radio ? this.radioNodes(context) : this.communicationNodes(context);
+    const nodes = radio
+      ? this.radioNodes(context)
+      : this.communicationNodes(context);
     source.buffer = buffer;
     source.connect(nodes[0]);
     nodes.at(-1).connect(context.destination);
@@ -115,7 +270,8 @@ export const playback = {
 
   /** Joins clips into WAV files and saves them. `clips`: [{ url, filter, radio }]; returns the file count. */
   async downloadJoinedAudio(clips, name, { gap = 0.5, rate = 24000 } = {}) {
-    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const Offline =
+      window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const decoder = new Offline(1, 1, rate);
     const files = [];
     let parts = [];
@@ -127,13 +283,18 @@ export const playback = {
     };
     for (const clip of clips) {
       const response = await fetch(clip.url);
-      if (!response.ok) throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
+      if (!response.ok)
+        throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
       let buffer = await decoder.decodeAudioData(await response.arrayBuffer());
-      if (clip.filter) buffer = await this.renderCommunicationFilter(buffer, { radio: clip.radio });
+      if (clip.filter)
+        buffer = await this.renderCommunicationFilter(buffer, {
+          radio: clip.radio,
+        });
       const mono = new Float32Array(buffer.length);
       for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
         const data = buffer.getChannelData(channel);
-        for (let i = 0; i < data.length; i++) mono[i] += data[i] / buffer.numberOfChannels;
+        for (let i = 0; i < data.length; i++)
+          mono[i] += data[i] / buffer.numberOfChannels;
       }
       if (length && length + mono.length > rate * FILE_SECONDS) close();
       if (length) {
@@ -147,7 +308,10 @@ export const playback = {
     close();
     for (const [index, blob] of files.entries()) {
       if (index) await new Promise((resolve) => setTimeout(resolve, 600));
-      this.saveFile(blob, files.length > 1 ? `${name}-${index + 1}.wav` : `${name}.wav`);
+      this.saveFile(
+        blob,
+        files.length > 1 ? `${name}-${index + 1}.wav` : `${name}.wav`,
+      );
     }
     return files.length;
   },
@@ -155,7 +319,10 @@ export const playback = {
   saveFile(blob, name) {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = String(name).replace(/[\\/:*?"<>|]+/g, "").trim() || "scenevoice";
+    link.download =
+      String(name)
+        .replace(/[\\/:*?"<>|]+/g, "")
+        .trim() || "scenevoice";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -167,25 +334,8 @@ export const playback = {
    * Playback only; the saved file stays clean.
    */
   connectThoughtAudioEffect(audio) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    if (
-      !this.communicationAudioContext ||
-      this.communicationAudioContext.state === "closed"
-    )
-      this.communicationAudioContext = new AudioContextClass();
-    const context = this.communicationAudioContext;
-    if (!this.thoughtImpulse || this.thoughtImpulse.sampleRate !== context.sampleRate) {
-      // A 0.9 s decaying noise tail: a small, soft room.
-      const length = Math.round(context.sampleRate * 0.9);
-      const impulse = context.createBuffer(2, length, context.sampleRate);
-      for (let channel = 0; channel < 2; channel++) {
-        const data = impulse.getChannelData(channel);
-        for (let i = 0; i < length; i++)
-          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3.2);
-      }
-      this.thoughtImpulse = impulse;
-    }
+    const context = this.effectContext();
+    if (!context) return null;
     const source = this.mediaSource(audio, context);
     const soften = context.createBiquadFilter();
     const dry = context.createGain();
@@ -194,18 +344,25 @@ export const playback = {
     soften.type = "lowpass";
     soften.frequency.value = 5200;
     dry.gain.value = 0.78;
-    room.buffer = this.thoughtImpulse;
+    room.buffer = this.roomImpulse(context);
     wet.gain.value = 0.22;
     source.connect(soften);
-    soften.connect(dry).connect(context.destination);
-    soften.connect(room).connect(wet).connect(context.destination);
-    this.currentAudioNodes = [source, soften, dry, room, wet];
+    soften.connect(dry);
+    soften.connect(room).connect(wet);
+    this.currentAudioNodes = [
+      source,
+      soften,
+      dry,
+      room,
+      wet,
+      ...this.toSpeakers(context, dry, wet),
+    ];
     return context;
   },
 
   /** Thought lines get the inner-voice effect unless it is switched off. */
   wantsThoughtEffect(button) {
-    return button?.dataset?.kind === "thought" && this.config.reading?.thought_effect !== false;
+    return button?.dataset?.kind === "thought";
   },
 
   /**
@@ -218,7 +375,8 @@ export const playback = {
     const key = effect ? "effectAudioElement" : "plainAudioElement";
     const context = this.communicationAudioContext;
     // Wired to an audio context that was closed since: that element can't sound any more.
-    if (effect && this[key]?.svSource && this[key].svSource.context !== context) this[key] = null;
+    if (effect && this[key]?.svSource && this[key].svSource.context !== context)
+      this[key] = null;
     if (!this[key]) {
       const audio = new Audio();
       audio.preload = "auto";
@@ -238,10 +396,24 @@ export const playback = {
     url,
     button = null,
     revokeObjectUrl = false,
-    { communicationFilter = false, thoughtEffect = false, aside = false, radio = false, onEnded = null, onStop = null } = {},
+    {
+      communicationFilter = false,
+      thoughtEffect = false,
+      aside = false,
+      radio = false,
+      place = null,
+      level = 1,
+      onEnded = null,
+      onStop = null,
+    } = {},
   ) {
     if (!url) return;
-    if (this.playbackPaused && button && this.currentPlayButton === button && this.currentAudio) {
+    if (
+      this.playbackPaused &&
+      button &&
+      this.currentPlayButton === button &&
+      this.currentAudio
+    ) {
       this.resumePlayback();
       return;
     }
@@ -277,7 +449,20 @@ export const playback = {
         return;
       }
     }
-    const effect = communicationFilter || thoughtEffect || aside;
+    // 공간감 off: nothing is placed, whoever asks.
+    if (this.config.playback?.spatial === false) place = null;
+    // 음량 맞춤: this play turned down by `level` (never up).
+    this.playLevel =
+      this.config.playback?.level === false
+        ? 1
+        : Math.min(1, Math.max(0.4, Number(level) || 1));
+    const leveled = this.playLevel < 0.99;
+    const effect =
+      communicationFilter ||
+      thoughtEffect ||
+      aside ||
+      Boolean(place) ||
+      leveled;
     if (effect) this.ensureAudioContext();
     const audio = this.audioPlayer(effect);
     const token = (this.playToken = (this.playToken || 0) + 1);
@@ -292,11 +477,19 @@ export const playback = {
     const chatLine = Boolean(button?.classList?.contains("sv-play-btn"));
     if (chatLine) this.showNowReading(button, audio);
     else this.hideNowReading(true);
-    this.syncPublicState?.({ playing: true, kind: chatLine ? "chat" : "phone" });
+    this.syncPublicState?.({
+      playing: true,
+      kind: chatLine ? "chat" : "phone",
+    });
     let audioContext = null;
-    if (communicationFilter || aside) {
+    if (communicationFilter || aside || (place && !thoughtEffect && radio)) {
       try {
-        audioContext = this.connectCommunicationAudioFilter(audio, { aside, filter: communicationFilter, radio });
+        audioContext = this.connectCommunicationAudioFilter(audio, {
+          aside,
+          filter: communicationFilter,
+          radio,
+          place,
+        });
       } catch (error) {
         console.warn(
           "[SceneVoice] playback-only communication filter unavailable; using clean audio",
@@ -308,12 +501,41 @@ export const playback = {
       try {
         audioContext = this.connectThoughtAudioEffect(audio);
       } catch (error) {
-        console.warn("[SceneVoice] thought effect unavailable; using clean audio", error);
+        console.warn(
+          "[SceneVoice] thought effect unavailable; using clean audio",
+          error,
+        );
+        this.currentAudioNodes = [];
+      }
+    } else if (place) {
+      try {
+        audioContext = this.connectPlaceEffect(audio, place);
+      } catch (error) {
+        console.warn(
+          "[SceneVoice] place effect unavailable; using clean audio",
+          error,
+        );
+        this.currentAudioNodes = [];
+      }
+    } else if (leveled) {
+      try {
+        const context = this.effectContext();
+        audioContext = context && this.wireEffects(audio, context, []);
+      } catch (error) {
+        console.warn(
+          "[SceneVoice] level unavailable; using clean audio",
+          error,
+        );
         this.currentAudioNodes = [];
       }
     }
     // The effect player sounds only through Web Audio; with no effect wired, route it straight.
-    if (effect && !this.currentAudioNodes.length && audio.svSource && this.communicationAudioContext) {
+    if (
+      effect &&
+      !this.currentAudioNodes.length &&
+      audio.svSource &&
+      this.communicationAudioContext
+    ) {
       audio.svSource.connect(this.communicationAudioContext.destination);
       this.currentAudioNodes = [audio.svSource];
       audioContext = this.communicationAudioContext;
@@ -360,7 +582,10 @@ export const playback = {
     // and its resume() may never settle outside a tap: playing is tried after a moment anyway.
     const resume =
       audioContext && audioContext.state !== "running"
-        ? Promise.race([audioContext.resume(), new Promise((resolve) => setTimeout(resolve, 1500))])
+        ? Promise.race([
+            audioContext.resume(),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+          ])
         : Promise.resolve();
     Promise.resolve(resume)
       .then(() => {
@@ -387,7 +612,8 @@ export const playback = {
   async lineSounds(script) {
     const text = String(script || "");
     const found = [...text.matchAll(/\[sfx:\s*([^\]]+)\]/gi)];
-    if (!found.length || !this.soundFor) return { before: [], after: [], loops: [] };
+    if (!found.length || !this.soundFor)
+      return { before: [], after: [], loops: [] };
     // Tags ahead of the first word: played before the voice; any others after it. 🔁 sounds
     // run under the voice wherever they are.
     const lead = /^(?:\s*\[[^\]]*\])*/.exec(text)[0].length;
@@ -417,7 +643,8 @@ export const playback = {
       result += text.slice(at, match.index);
       at = match.index + match[0].length;
       const file = await this.soundFor?.(match[1]);
-      if (!file && this.soundEffectsFor?.(speakerKey)) result += `[${match[1].trim()}]`;
+      if (!file && this.soundEffectsFor?.(speakerKey))
+        result += `[${match[1].trim()}]`;
     }
     return (result + text.slice(at)).replace(/[ \t]{2,}/g, " ").trim();
   },
@@ -451,7 +678,13 @@ export const playback = {
     }, 40);
   },
 
-  async playWithSounds(url, script, button, revoke, { mixed = false, ...options } = {}) {
+  async playWithSounds(
+    url,
+    script,
+    button,
+    revoke,
+    { mixed = false, ...options } = {},
+  ) {
     const { before, after, loops } = mixed
       ? { before: [], after: [], loops: [] }
       : await this.lineSounds(script);
@@ -462,7 +695,9 @@ export const playback = {
     // the voice and fade out after it.
     const overlay = Boolean(this.soundOverlay?.());
     // Sounds of the line before may still be fading out under this one (as in MultiCast).
-    this.sideSounds = (this.sideSounds || []).filter((sound) => !sound.paused && !sound.ended);
+    this.sideSounds = (this.sideSounds || []).filter(
+      (sound) => !sound.paused && !sound.ended,
+    );
     const side = (src, volume, loop = false) => {
       const sound = new Audio(src);
       sound.volume = loop ? 0 : volume;
@@ -472,7 +707,11 @@ export const playback = {
       this.sideSounds.push(sound);
       return sound;
     };
-    const beds = loops.slice(0, 3).map((src, _, all) => side(src, 0.3 * [1, 0.8, 0.65][all.length - 1], true));
+    const beds = loops
+      .slice(0, 3)
+      .map((src, _, all) =>
+        side(src, 0.3 * [1, 0.8, 0.65][all.length - 1], true),
+      );
     for (const bed of beds) this.fadeSideSound(bed, bed.svVolume, 400);
     if (overlay) for (const src of before) side(src, 0.85);
     const parts = [...(overlay ? [] : before), url, ...(overlay ? [] : after)];
@@ -480,11 +719,15 @@ export const playback = {
     const next = () => {
       if (index >= parts.length) {
         if (overlay) for (const src of after) side(src, 0.85);
-        for (const bed of beds) this.fadeSideSound(bed, 0, 1800, () => bed.pause());
+        for (const bed of beds)
+          this.fadeSideSound(bed, 0, 1800, () => bed.pause());
         return options.onEnded?.();
       }
       const part = parts[index++];
-      this.playAudio(part, button, part === url && revoke, { ...options, onEnded: next });
+      this.playAudio(part, button, part === url && revoke, {
+        ...options,
+        onEnded: next,
+      });
     };
     next();
   },
@@ -500,7 +743,8 @@ export const playback = {
     const text = String(button.dataset.text || "").trim();
     // "auto": a line read off screen, or one whose play buttons are hidden.
     const unseen =
-      !button.isConnected || document.body.classList.contains("sv-hide-line-buttons");
+      !button.isConnected ||
+      document.body.classList.contains("sv-hide-line-buttons");
     if (mode === "off" || (mode === "auto" && !unseen) || !text) {
       this.hideNowReading(true);
       return;
@@ -514,10 +758,16 @@ export const playback = {
       bar.setAttribute("aria-live", "polite");
       bar.title = "누르면 멈춤 · 이어 듣기";
       bar.innerHTML =
-        '<i class="sv-now-reading-icon fa-solid fa-pause" aria-hidden="true"></i><span class="sv-now-reading-who" hidden></span><div class="sv-now-reading-window"><span class="sv-now-reading-text"></span></div>';
-      bar.addEventListener("click", () => this.togglePause());
+        '<i class="sv-now-reading-icon fa-solid fa-pause" aria-hidden="true"></i><span class="sv-now-reading-who" hidden></span><div class="sv-now-reading-window"><span class="sv-now-reading-text"></span></div>' +
+        '<span class="sv-now-steps" hidden><button type="button" data-step="-1" aria-label="앞 대사" title="앞 대사"><i class="fa-solid fa-backward-step" aria-hidden="true"></i></button><button type="button" data-step="1" aria-label="다음 대사" title="다음 대사"><i class="fa-solid fa-forward-step" aria-hidden="true"></i></button></span>';
+      bar.addEventListener("click", (event) => {
+        const step = event.target.closest("[data-step]");
+        if (step) this.stepMessageLine(Number(step.dataset.step));
+        else this.togglePause();
+      });
       document.body.appendChild(bar);
     }
+    this.syncLineSteps();
     const bottom = this.config.playback?.caption_at === "bottom";
     bar.classList.toggle("sv-at-bottom", bottom);
     if (bottom) this.placeNowReading(bar);
@@ -525,8 +775,12 @@ export const playback = {
     const token = (this.nowReadingToken = (this.nowReadingToken || 0) + 1);
     const glide = (overflow) => {
       const spoken = audio?.duration;
-      const seconds = Number.isFinite(spoken) && spoken > 2 ? spoken - 1 : overflow / 30 + 3;
-      label.style.setProperty("--sv-scroll-time", `${Math.max(4, seconds).toFixed(1)}s`);
+      const seconds =
+        Number.isFinite(spoken) && spoken > 2 ? spoken - 1 : overflow / 30 + 3;
+      label.style.setProperty(
+        "--sv-scroll-time",
+        `${Math.max(4, seconds).toFixed(1)}s`,
+      );
     };
     // Who is speaking, in a small tag on the strip's top edge (no room taken from the line).
     const who = bar.querySelector(".sv-now-reading-who");
@@ -543,7 +797,10 @@ export const playback = {
         if (token !== this.nowReadingToken) return;
         const room = label.parentElement;
         // A long line gets soft edges and more room; measured again with them.
-        bar.classList.toggle("sv-long", label.scrollWidth - room.clientWidth > 4);
+        bar.classList.toggle(
+          "sv-long",
+          label.scrollWidth - room.clientWidth > 4,
+        );
         const overflow = label.scrollWidth - room.clientWidth;
         if (overflow > 4) {
           label.style.setProperty("--sv-shift", `${-overflow}px`);
@@ -570,6 +827,17 @@ export const playback = {
     }
   },
 
+  /** The strip's ‹ ›: there while a message's lines play in a row; › is off at the last line. */
+  syncLineSteps() {
+    const steps = document.querySelector("#sv-now-reading .sv-now-steps");
+    if (!steps) return;
+    const run = this.messageRun;
+    steps.hidden = !run || run.buttons.length < 2;
+    if (run)
+      steps.lastElementChild.disabled =
+        run.state.position >= run.buttons.length - 1;
+  },
+
   /** Hides the strip; by default after a moment, so the next line in a row can take over. */
   hideNowReading(now = false) {
     clearTimeout(this.nowReadingTimer);
@@ -594,9 +862,14 @@ export const playback = {
     const rect = form?.getBoundingClientRect();
     // Use one coordinate space: anchor the strip's bottom edge to the input's top.
     // iOS keyboards/browser bars can shrink and move the visible viewport independently.
-    const inputTop = rect?.height > 0 && rect.top > visibleTop && rect.top < visibleBottom
-      ? rect.top : visibleBottom - 90;
-    const edge = Math.max(visibleTop + bar.offsetHeight + 20, Math.min(inputTop - 14, visibleBottom - 20));
+    const inputTop =
+      rect?.height > 0 && rect.top > visibleTop && rect.top < visibleBottom
+        ? rect.top
+        : visibleBottom - 90;
+    const edge = Math.max(
+      visibleTop + bar.offsetHeight + 20,
+      Math.min(inputTop - 14, visibleBottom - 20),
+    );
     bar.style.setProperty("--sv-now-top", `${Math.round(edge)}px`);
     if (this.nowReadingWatch) return;
     // Scrolling fires often: the strip, while shown at the bottom, is placed again at most once a
@@ -604,14 +877,20 @@ export const playback = {
     let queued = false;
     const follow = () => {
       const shown = document.getElementById("sv-now-reading");
-      if (queued || !shown?.classList.contains("sv-at-bottom") || !shown.classList.contains("sv-shown")) return;
+      if (
+        queued ||
+        !shown?.classList.contains("sv-at-bottom") ||
+        !shown.classList.contains("sv-shown")
+      )
+        return;
       queued = true;
       requestAnimationFrame(() => {
         queued = false;
         this.placeNowReading();
       });
     };
-    const watch = typeof ResizeObserver === "function" ? new ResizeObserver(follow) : null;
+    const watch =
+      typeof ResizeObserver === "function" ? new ResizeObserver(follow) : null;
     if (form) watch?.observe(form);
     watch?.observe(bar);
     window.addEventListener("resize", follow);
@@ -662,7 +941,8 @@ export const playback = {
     if (!audio || !this.playbackPaused) return;
     this.markPaused(false);
     const context = this.communicationAudioContext;
-    if (context && context.state !== "running") context.resume().catch(() => undefined);
+    if (context && context.state !== "running")
+      context.resume().catch(() => undefined);
     audio.play().catch(() => undefined);
     for (const sound of this.sideSounds || [])
       if (sound.svHeld) {
@@ -690,8 +970,9 @@ export const playback = {
 
   /** /sv-pause: the same 멈춤 / 이어 듣기, for a QR button (or typed). */
   registerPauseCommand() {
-    const { SlashCommandParser, SlashCommand } = window.SillyTavern?.getContext?.() || {};
-    if (!SlashCommandParser?.addCommandObject || !SlashCommand?.fromProps) return;
+    const { SlashCommandParser, SlashCommand } = stOf(this) || {};
+    if (!SlashCommandParser?.addCommandObject || !SlashCommand?.fromProps)
+      return;
     SlashCommandParser.addCommandObject(
       SlashCommand.fromProps({
         name: "sv-pause",
@@ -699,7 +980,8 @@ export const playback = {
           this.togglePause();
           return "";
         },
-        helpString: "씬보이스: 지금 읽는 음성을 멈추고, 한 번 더 하면 멈춘 곳부터 이어 듣습니다.",
+        helpString:
+          "씬보이스: 지금 읽는 음성을 멈추고, 한 번 더 하면 멈춘 곳부터 이어 듣습니다.",
       }),
     );
   },
@@ -707,7 +989,10 @@ export const playback = {
   /** QR에 추가: a "SceneVoice" quick reply set with the ⏸ button, shown on the QR bar. */
   async addPauseQuickReply() {
     const api = globalThis.quickReplyApi;
-    if (!api?.createQuickReply) throw new Error("실리태번의 빠른 답장(Quick Reply) 확장을 찾을 수 없습니다.");
+    if (!api?.createQuickReply)
+      throw new Error(
+        "실리태번의 빠른 답장(Quick Reply) 확장을 찾을 수 없습니다.",
+      );
     const set = "SceneVoice";
     const label = "씬보이스 멈춤·이어 듣기";
     if (!api.getSetByName(set)) await api.createSet(set);
@@ -793,10 +1078,12 @@ export const playback = {
   /** The shared Web Audio context (call filter, thought effect), made when first needed. */
   ensureAudioContext() {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const AudioContextClass =
+        window.AudioContext || window.webkitAudioContext;
       if (
         AudioContextClass &&
-        (!this.communicationAudioContext || this.communicationAudioContext.state === "closed")
+        (!this.communicationAudioContext ||
+          this.communicationAudioContext.state === "closed")
       )
         this.communicationAudioContext = new AudioContextClass();
     } catch (_) {
@@ -812,7 +1099,8 @@ export const playback = {
    */
   unlockAudioForMobile() {
     const context = this.ensureAudioContext();
-    if (context && context.state !== "running") context.resume().catch(() => undefined);
+    if (context && context.state !== "running")
+      context.resume().catch(() => undefined);
     const silentWav =
       "data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==";
     for (const effect of [false, true]) {

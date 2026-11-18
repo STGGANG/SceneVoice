@@ -14,7 +14,9 @@ export const forward = {
     return `<div class="sv-msg-bubble sv-msg-forward">
         <small><i class="fa-solid fa-share" aria-hidden="true"></i>전달한 ${escapeHtml(KIND_LABEL[sent.type] || "녹음")} · ${escapeHtml(sent.title)}</small>
         ${lines.map((line) => `<p><b>${escapeHtml(line.from)}</b> ${escapeHtml(line.text)}</p>`).join("")}${
-          sent.lines.length > lines.length ? `<p class="sv-msg-forward-more">외 ${sent.lines.length - lines.length}줄</p>` : ""
+          sent.lines.length > lines.length
+            ? `<p class="sv-msg-forward-more">외 ${sent.lines.length - lines.length}줄</p>`
+            : ""
         }
         ${
           item.audio_url
@@ -41,7 +43,10 @@ export const forward = {
       type: "call",
       title: `${this.callNames(session).join(", ")} 통화`,
       lines: (session.turns || []).map((turn) => ({
-        from: turn.role === "user" ? me : turn.speaker_name || session.character_name || "",
+        from:
+          turn.role === "user"
+            ? me
+            : turn.speaker_name || session.character_name || "",
         text: turn.text,
       })),
       source_id: session.id,
@@ -81,7 +86,10 @@ export const forward = {
         <strong>들려주기</strong>
         <p class="sv-share-what"><i class="fa-solid fa-share" aria-hidden="true"></i>${escapeHtml(KIND_LABEL[sent.type] || "녹음")} · ${escapeHtml(sent.title)}</p>
         <label class="sv-room-name"><span>누구에게</span><select name="key">${people
-          .map((person) => `<option value="${escapeHtml(person.key)}" ${person.key === first.key ? "selected" : ""}>${escapeHtml(person.name)}</option>`)
+          .map(
+            (person) =>
+              `<option value="${escapeHtml(person.key)}" ${person.key === first.key ? "selected" : ""}>${escapeHtml(person.name)}</option>`,
+          )
           .join("")}</select></label>
         <textarea name="note" rows="2" maxlength="1000" placeholder="같이 보낼 말 (비워도 됩니다)" aria-label="같이 보낼 말"></textarea>
         <small>그 사람 문자방으로 보내고, 들은 뒤 답장이 옵니다.</small>
@@ -94,7 +102,9 @@ export const forward = {
         sheet.remove();
         resolve(value);
       };
-      sheet.querySelector("[data-share-cancel]").addEventListener("click", () => close(null));
+      sheet
+        .querySelector("[data-share-cancel]")
+        .addEventListener("click", () => close(null));
       sheet.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           event.stopPropagation();

@@ -2,7 +2,10 @@
 import { UserError } from "./settings.js";
 /** `signal.throwIfAborted()`, which Safari before 17.4 lacks. */
 export function throwIfAborted(signal) {
-  if (signal?.aborted) throw signal.reason ?? new DOMException("작업을 취소했습니다.", "AbortError");
+  if (signal?.aborted)
+    throw (
+      signal.reason ?? new DOMException("작업을 취소했습니다.", "AbortError")
+    );
 }
 export class WorkQueue {
   tail = Promise.resolve();

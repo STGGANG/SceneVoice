@@ -8,16 +8,44 @@ import {
   stateSystem,
   userPrompt,
 } from "./prompts.js";
-import { escapeHtml, stripMarkup, clamp, simpleHash } from "./common.js";
+import {
+  escapeHtml,
+  stripMarkup,
+  clamp,
+  simpleHash,
+  stOf,
+  CHAT_MEMORY_PROMPT_PREFIX,
+} from "./common.js";
 import { contentKey } from "../shared/hash.js";
 import { personNames } from "../shared/casting.js";
+
+// What SillyTavern's own injected prompts are, for the list in the settings.
+const INJECTED_NAMES = {
+  "1_memory": "실리태번 기본 요약",
+  "2_floating_prompt": "작가 노트",
+  "3_vectors": "벡터 저장소 (채팅)",
+  "4_vectors_data_bank": "벡터 저장소 (데이터 뱅크)",
+  DEPTH_PROMPT: "캐릭터 노트",
+  PERSONA_DESCRIPTION: "페르소나 설명",
+};
+// The 시나리오 기억 extension's memory block (its key carries a version: scenario-summarizer-v2).
+const SCENARIO_MEMORY_KEY = /^scenario-summarizer/i;
+// A key that reads like a summary or memory is picked until the user says otherwise.
+const SUMMARY_KEY = /memor|summar|recap|요약|기억/i;
+// Only a request over the input limit is shortened (limitPrompt): as the oldest items of
+// <recent_chat>, these entries go first then, one by one.
+const STORY_SO_FAR_NOTE =
+  "The story_so_far entries are not chat messages. They summarize what happened earlier in the story, before the messages below. It is the past: what is happening now is what the messages below show.";
+const STORY_ENTRY_SIZE = 1500;
+// Injected prompts that differ only in trailing numbers (one piece per message) are one item.
+const injectedKey = (name) => name.replace(/([_\-:.]\d+)+$/, "") || name;
 
 // A reply that is cut off or isn't valid JSON.
 class StateReplyError extends Error {}
 
 export const character = {
   getCurrentCharacterProfile() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const characterId = context.characterId;
     const character =
       characterId !== undefined && characterId !== null
@@ -54,8 +82,11 @@ export const character = {
     };
   },
 
-  getRoleplayProfileContext({ includeUser = true, includeCharacter = true } = {}) {
-    const context = window.SillyTavern?.getContext?.() || {};
+  getRoleplayProfileContext({
+    includeUser = true,
+    includeCharacter = true,
+  } = {}) {
+    const context = stOf(this) || {};
     const characterId = context.characterId;
     const character =
       characterId !== undefined && characterId !== null
@@ -101,7 +132,7 @@ export const character = {
   },
 
   userCharacterName() {
-    return String(window.SillyTavern?.getContext?.()?.name1 || "User").slice(0, 160);
+    return String(stOf(this)?.name1 || "User").slice(0, 160);
   },
 
   characterAvatarMarkup() {
@@ -152,7 +183,8 @@ export const character = {
   async statusLine(key) {
     const cacheKey = `${this.currentChatId()}|${key}`;
     this.statusLineCache ||= new Map();
-    if (this.statusLineCache.has(cacheKey)) return this.statusLineCache.get(cacheKey);
+    if (this.statusLineCache.has(cacheKey))
+      return this.statusLineCache.get(cacheKey);
     const record = await this.loadStateRecord(this.statusKeyFor(key));
     const line = String(record?.state?.text || "").trim();
     this.statusLineCache.set(cacheKey, line);
@@ -160,9 +192,20 @@ export const character = {
   },
 
   /** A new 상태메시지 (empty clears it), from the chat message `sourceMessageId` names. */
-  async saveStatusLine(person, line, sourceMessageId = this.latestMessageSource()) {
-    const text = String(line || "").trim().slice(0, 80);
-    await this.saveStateRecord(this.statusKeyFor(person.key), person, sourceMessageId, { text });
+  async saveStatusLine(
+    person,
+    line,
+    sourceMessageId = this.latestMessageSource(),
+  ) {
+    const text = String(line || "")
+      .trim()
+      .slice(0, 80);
+    await this.saveStateRecord(
+      this.statusKeyFor(person.key),
+      person,
+      sourceMessageId,
+      { text },
+    );
     this.statusLineCache ||= new Map();
     this.statusLineCache.set(`${this.currentChatId()}|${person.key}`, text);
     document.querySelectorAll("[data-status-for]").forEach((item) => {
@@ -175,7 +218,7 @@ export const character = {
 
   /** The chat's newest message as a state names its source (so a swipe of it lets go). */
   latestMessageSource() {
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     const index = chat.length - 1;
     return index < 0 ? "0" : `${index}-${this.messageHash(chat[index])}`;
   },
@@ -188,13 +231,17 @@ export const character = {
       const line = await this.statusLine(person.key).catch(() => "");
       if (line) lines[person.name] = line;
     }
-    return Object.keys(lines).length ? [dataBlock("status_messages", lines)] : [];
+    return Object.keys(lines).length
+      ? [dataBlock("status_messages", lines)]
+      : [];
   },
 
   /** Fills each [data-status-for] in `root` with that person's 상태메시지 (hidden when none). */
   async fillStatusLines(root) {
     for (const item of root?.querySelectorAll?.("[data-status-for]") || []) {
-      const line = await this.statusLine(item.dataset.statusFor).catch(() => "");
+      const line = await this.statusLine(item.dataset.statusFor).catch(
+        () => "",
+      );
       if (!item.isConnected) continue;
       item.textContent = line;
       item.hidden = !line;
@@ -213,7 +260,10 @@ export const character = {
   statePeople() {
     const voices = this.config.character_voices || {};
     return this.phoneContacts({ includeHidden: true })
-      .filter((contact) => !voices[contact.key]?.persona && !voices[contact.key]?.no_state)
+      .filter(
+        (contact) =>
+          !voices[contact.key]?.persona && !voices[contact.key]?.no_state,
+      )
       .map((contact) => {
         const card = contact.cardKey;
         const ownCard = card === contact.key;
@@ -248,7 +298,10 @@ export const character = {
     if (/[A-Za-z]/.test(name))
       return (
         name.length > 1 &&
-        new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text)
+        new RegExp(
+          `(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`,
+          "iu",
+        ).test(text)
       );
     if (name.length > 1) return text.includes(name);
     return new RegExp(
@@ -265,16 +318,47 @@ export const character = {
         (message) =>
           (person.author && message.speaker === person.author) ||
           names.some(
-            (name) => message.speaker === name || this.nameInText(String(message.text || ""), name),
+            (name) =>
+              message.speaker === name ||
+              this.nameInText(String(message.text || ""), name),
           ),
       );
     });
   },
 
-  /** An AI reply: a character's message with text (not the user's, not a system or hidden one). */
+  /**
+   * A reply a slash command put in the chat (/sendas and the like, as QR scripts do): SillyTavern
+   * marks those with the model "slash command". /sys narration and /comment notes aren't these.
+   */
+  isCommandReply(message) {
+    return Boolean(
+      message &&
+      !message.is_user &&
+      message.extra?.api === "manual" &&
+      message.extra?.model === "slash command" &&
+      !["narrator", "comment"].includes(message.extra?.type),
+    );
+  },
+
+  /** Left out of what the AI reads and of reply counts: QR-made replies, unless switched off. */
+  skipsCommandReply(message) {
+    return (
+      this.config?.llm?.skip_command_replies !== false &&
+      this.isCommandReply(message)
+    );
+  },
+
+  /**
+   * An AI reply: a character's message with text (not the user's, not a system or hidden one,
+   * not a QR-made one).
+   */
   isReply(message) {
     return Boolean(
-      message && !message.is_user && !message.is_system && String(message.mes || "").trim(),
+      message &&
+      !message.is_user &&
+      !message.is_system &&
+      !this.skipsCommandReply(message) &&
+      String(message.mes || "").trim(),
     );
   },
 
@@ -284,12 +368,13 @@ export const character = {
    * being written now, or one came since.
    */
   chatMovedOn(latestIndex) {
-    const writing = this.generatingSince && Date.now() - this.generatingSince < 180000;
+    const writing =
+      this.generatingSince && Date.now() - this.generatingSince < 180000;
     return Boolean(writing) || this.latestReplyIndex() !== latestIndex;
   },
 
   latestReplyIndex() {
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     for (let index = chat.length - 1; index >= 0; index -= 1)
       if (this.isReply(chat[index])) return index;
     return -1;
@@ -324,16 +409,23 @@ export const character = {
   stateStatus(key, record, round = null) {
     const none = !record?.state;
     if (!round) return { unknown: false, away: false, none };
-    const edited = !none && String(record.updated_at || "") > String(round.updated_at || "");
+    const edited =
+      !none && String(record.updated_at || "") > String(round.updated_at || "");
     const present = this.roundPresent(round);
     // A key the person had before being made again (MultiCast 연동, registered anew) is theirs.
     const inScene =
-      present.includes(key) || present.some((old) => old !== key && this.livePersonKey?.(old) === key);
+      present.includes(key) ||
+      present.some((old) => old !== key && this.livePersonKey?.(old) === key);
     // A state written by hand since says where they are: with the user is in the scene.
     const presence = edited ? record.state.contact?.presence : "";
     return {
       unknown: !edited && (none || this.roundUnknown(round).includes(key)),
-      away: presence === "together" ? false : presence === "apart" ? true : !inScene,
+      away:
+        presence === "together"
+          ? false
+          : presence === "apart"
+            ? true
+            : !inScene,
       none,
     };
   },
@@ -345,11 +437,17 @@ export const character = {
   stateSourceLive(sourceMessageId) {
     const [position, hash] = String(sourceMessageId || "").split("-");
     if (!/^[0-9a-f]{64}$/.test(hash || "")) return true;
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     const index = Number(position);
-    if (Number.isInteger(index) && chat[index] && this.messageHash(chat[index]) === hash)
+    if (
+      Number.isInteger(index) &&
+      chat[index] &&
+      this.messageHash(chat[index]) === hash
+    )
       return true;
-    return chat.some((message) => this.isReply(message) && this.messageHash(message) === hash);
+    return chat.some(
+      (message) => this.isReply(message) && this.messageHash(message) === hash,
+    );
   },
 
   /** A chat message's text hash as states name their source by it (kept: it's plain-JS SHA-256). */
@@ -409,7 +507,9 @@ export const character = {
     if (!person?.stateKey) return null;
     const record =
       (await this.loadStateRecord(person.stateKey)) ||
-      ((await this.adoptOldState(person)) ? await this.loadStateRecord(person.stateKey) : null);
+      ((await this.adoptOldState(person))
+        ? await this.loadStateRecord(person.stateKey)
+        : null);
     return record ? { ...record, state_key: person.stateKey } : null;
   },
 
@@ -425,7 +525,9 @@ export const character = {
     this.stateAdoptTried.add(tried);
     try {
       const response = await this.fetch(
-        this.apiUrl(`/api/plugins/scenevoice/states?chat_id=${encodeURIComponent(this.currentChatId())}`),
+        this.apiUrl(
+          `/api/plugins/scenevoice/states?chat_id=${encodeURIComponent(this.currentChatId())}`,
+        ),
         { cache: "no-store" },
       );
       if (!response.ok) return false;
@@ -437,9 +539,15 @@ export const character = {
             item.state_key !== person.stateKey &&
             String(item.character_key || "").startsWith("speaker:") &&
             !voices[item.character_key] &&
-            names.includes(String(item.character_name || "").trim().toLowerCase()),
+            names.includes(
+              String(item.character_name || "")
+                .trim()
+                .toLowerCase(),
+            ),
         )
-        .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0];
+        .sort((a, b) =>
+          String(b.updated_at).localeCompare(String(a.updated_at)),
+        )[0];
       if (!old) return false;
       const moved = await this.request("/api/plugins/scenevoice/state/adopt", {
         method: "POST",
@@ -462,7 +570,8 @@ export const character = {
   /** The state of one tracked person (the first one by default). */
   async loadCurrentState(key = "") {
     const people = this.statePeople();
-    const person = people.find((item) => item.key === key) || (key ? null : people[0]);
+    const person =
+      people.find((item) => item.key === key) || (key ? null : people[0]);
     return person ? this.loadPersonState(person) : null;
   },
 
@@ -493,8 +602,16 @@ export const character = {
   stateBlocks(found) {
     if (!found) return { blocks: [], absent: false, unknown: false };
     return found.unknown
-      ? { blocks: [dataBlock("state", { unknown_whereabouts: true })], absent: true, unknown: true }
-      : { blocks: [dataBlock("state", found.state)], absent: Boolean(found.away), unknown: false };
+      ? {
+          blocks: [dataBlock("state", { unknown_whereabouts: true })],
+          absent: true,
+          unknown: true,
+        }
+      : {
+          blocks: [dataBlock("state", found.state)],
+          absent: Boolean(found.away),
+          unknown: false,
+        };
   },
 
   /**
@@ -502,7 +619,7 @@ export const character = {
    * built from a message at or before it that is still in the chat.
    */
   async statesAtMessage(index, keys) {
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     const sourceOf = (item) => {
       const [position, hash] = String(item.source_message_id).split("-");
       const source = Number(position);
@@ -515,9 +632,14 @@ export const character = {
         : -1;
     };
     const result = [];
-    for (const person of this.statePeople().filter((item) => keys.includes(item.key))) {
-      const item = (await this.loadStateHistory(person.stateKey)).find((entry) => sourceOf(entry) >= 0);
-      if (item) result.push({ key: person.key, name: person.name, state: item.state });
+    for (const person of this.statePeople().filter((item) =>
+      keys.includes(item.key),
+    )) {
+      const item = (await this.loadStateHistory(person.stateKey)).find(
+        (entry) => sourceOf(entry) >= 0,
+      );
+      if (item)
+        result.push({ key: person.key, name: person.name, state: item.state });
     }
     return result;
   },
@@ -541,11 +663,19 @@ export const character = {
     return this.statesAtMessage(index, [...keys]);
   },
 
-  /** State updates run: 상태 추적 사용, or something that needs them (먼저 연락, 엿듣는 통화). */
+  /** State updates run: 상태 추적 사용, or something that needs them (선연락, 엿듣는 통화). */
   stateTrackingRuns() {
-    return Boolean(
-      this.config.state_tracking?.enabled || this.autoCallOn() || this.autoTextOn() || this.overheardCallsOn(),
-    );
+    // With the phone on, 인물별 상태 추적 is one of the two ways people reach out: it runs while
+    // anything reaches out first that way, and never with 랜덤. Its own switch counts only
+    // with the phone off (where it is all that is left of it).
+    if (this.phoneOn())
+      return (
+        this.outreachMode() === "state" &&
+        Boolean(
+          this.autoCallOn() || this.autoTextOn() || this.overheardCallsOn(),
+        )
+      );
+    return Boolean(this.config.state_tracking?.enabled);
   },
 
   scheduleStateTracking(force = false) {
@@ -557,7 +687,12 @@ export const character = {
         this.run(async () => {
           // A reply being written (a swipe's new answer streaming in) is read once it is done:
           // its end schedules this again.
-          if (!force && this.generatingSince && Date.now() - this.generatingSince < 180000) return;
+          if (
+            !force &&
+            this.generatingSince &&
+            Date.now() - this.generatingSince < 180000
+          )
+            return;
           if (force || (await this.stateTrackingDue()))
             await this.trackCurrentState({ force });
         }),
@@ -574,9 +709,13 @@ export const character = {
     if (!this.hasCharacterChat()) return false;
     // Only the first message (the greeting, before the user says anything): left to 지금 분석, so
     // opening a new chat doesn't start an update (and a call) at once.
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
-    if (!chat.some((message) => message?.is_user && !message.is_system)) return false;
-    const every = Math.max(1, Number(this.config.state_tracking?.every_messages) || 1);
+    const chat = stOf(this)?.chat || [];
+    if (!chat.some((message) => message?.is_user && !message.is_system))
+      return false;
+    const every = Math.max(
+      1,
+      Number(this.config.state_tracking?.every_messages) || 1,
+    );
     const latest = this.latestReplyIndex();
     if (latest < 0) return false;
     const round = await this.loadStateRound();
@@ -586,17 +725,148 @@ export const character = {
     return this.assistantMessagesSince(last, latest) >= every;
   },
 
-  /** The last `count` chat messages (no upper limit: a request too big is cut when sent). */
-  buildRecentChatContext(count = 8) {
-    const context = window.SillyTavern?.getContext?.() || {};
-    const chat = Array.isArray(context.chat) ? context.chat : [];
-    const size = Math.max(1, Math.floor(Number(count)) || 1);
-    return chat.slice(-size).map((message, offset) => ({
-      index: Math.max(0, chat.length - size) + offset,
-      speaker: String(message.name || (message.is_user ? "User" : "Character")),
-      role: message.is_user ? "user" : "character",
-      text: stripMarkup(message.mes || ""),
+  /** Hidden messages are left out and the injected summary read instead (the setting). */
+  hiddenAsSummary() {
+    return this.config?.llm?.hidden_messages === "summary";
+  },
+
+  /**
+   * The text other extensions are injecting into the open chat right now (SillyTavern's extension
+   * prompts: summaries, author's note and so on), ours left out. An extension that injects one
+   * piece per message (keys ending in numbers) is one item with all its pieces, oldest first.
+   * `picked`: read by SceneVoice, by the user's choice or, with none made, by the key's name.
+   */
+  injectedPrompts() {
+    const prompts = stOf(this)?.extensionPrompts;
+    if (!prompts || typeof prompts !== "object") return [];
+    const choices = this.config?.llm?.injected_prompts || {};
+    const groups = new Map();
+    for (const [name, item] of Object.entries(prompts)) {
+      const text = String(item?.value ?? "").trim();
+      if (
+        !text ||
+        name.startsWith(CHAT_MEMORY_PROMPT_PREFIX) ||
+        name === "QUIET_PROMPT"
+      )
+        continue;
+      const key = injectedKey(name);
+      // In the chat at a depth: the deeper, the earlier in the story. Elsewhere: before the chat.
+      const depth =
+        Number(item?.position) === 1
+          ? Math.max(0, Number(item?.depth) || 0)
+          : Infinity;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ text, depth });
+    }
+    return (
+      [...groups]
+        .map(([key, parts]) => {
+          parts.sort((a, b) => b.depth - a.depth);
+          const summary = SUMMARY_KEY.test(key);
+          return {
+            key,
+            parts,
+            summary,
+            text: parts.map((part) => part.text).join("\n"),
+            label:
+              INJECTED_NAMES[key] ||
+              (SCENARIO_MEMORY_KEY.test(key)
+                ? "시나리오 기억"
+                : /^custom(Depth)?WI/.test(key)
+                  ? "월드인포"
+                  : key),
+            picked: typeof choices[key] === "boolean" ? choices[key] : summary,
+          };
+        })
+        // Summaries first, so they are easy to find in the list.
+        .sort((a, b) => Number(b.summary) - Number(a.summary))
+    );
+  },
+
+  /**
+   * Chat messages the 시나리오 기억 extension leaves out when a reply is made, its memory standing
+   * in for them (it doesn't hide them in SillyTavern). Read through the object it publishes
+   * (globalThis.ScenarioMemory, from its 2.5.103). Empty unless its memory block is injected right
+   * now and is one SceneVoice reads: otherwise nothing would stand in for the messages.
+   */
+  replacedBySummary() {
+    const none = new Set();
+    try {
+      const memory = globalThis.ScenarioMemory;
+      if (typeof memory?.excludedIndices !== "function") return none;
+      const name = String(memory.promptKey || "scenario-summarizer-v2");
+      if (!String(stOf(this)?.extensionPrompts?.[name]?.value ?? "").trim())
+        return none;
+      const key = injectedKey(name);
+      if (!this.injectedPrompts().find((item) => item.key === key)?.picked)
+        return none;
+      const indices = memory.excludedIndices();
+      return new Set(Array.isArray(indices) ? indices : []);
+    } catch {
+      return none;
+    }
+  },
+
+  /**
+   * The picked injected text, as entries for the start of <recent_chat>, oldest first (none when
+   * hidden messages are simply read). A long piece goes in several entries, cut between
+   * paragraphs: a request over the input limit loses its oldest entries one by one, not the
+   * whole summary at once.
+   */
+  storyEntries() {
+    if (!this.hiddenAsSummary()) return [];
+    const pieces = this.injectedPrompts()
+      .filter((item) => item.picked)
+      .flatMap((item) => item.parts)
+      .sort((a, b) => b.depth - a.depth)
+      .flatMap((part) => {
+        const chunks = [];
+        for (const paragraph of part.text.split(/\n\s*\n/)) {
+          const text = stripMarkup(paragraph).trim();
+          if (!text) continue;
+          const last = chunks.at(-1);
+          if (last && last.length + text.length < STORY_ENTRY_SIZE)
+            chunks[chunks.length - 1] = `${last}\n\n${text}`;
+          else chunks.push(text);
+        }
+        return chunks;
+      });
+    return pieces.map((text, index) => ({
+      role: "story_so_far",
+      ...(index === 0 ? { note: STORY_SO_FAR_NOTE } : {}),
+      text,
     }));
+  },
+
+  /**
+   * The last `count` chat messages; 0 = all of them (no upper limit: a request too big is cut
+   * when sent). QR-made replies and messages with no text are left out and don't count toward
+   * `count`. Messages hidden in SillyTavern (is_system) are read like the rest, or with
+   * 요약으로 대신 읽기 left out (as are the ones a summary extension says it replaced), the
+   * injected summary going first as story_so_far entries.
+   */
+  buildRecentChatContext(count = 8) {
+    const context = stOf(this) || {};
+    const chat = Array.isArray(context.chat) ? context.chat : [];
+    const summary = this.hiddenAsSummary();
+    const replaced = summary ? this.replacedBySummary() : new Set();
+    const shown = chat
+      .map((message, index) => ({
+        index,
+        speaker: String(
+          message?.name || (message?.is_user ? "User" : "Character"),
+        ),
+        role: message?.is_user ? "user" : "character",
+        text:
+          (summary && (message?.is_system || replaced.has(index))) ||
+          this.skipsCommandReply(message)
+            ? ""
+            : stripMarkup(message?.mes || ""),
+      }))
+      .filter((item) => item.text.trim());
+    const asked = Math.floor(Number(count));
+    const recent = asked === 0 ? shown : shown.slice(-Math.max(1, asked || 1));
+    return [...this.storyEntries(), ...recent];
   },
 
   parseJsonObject(response) {
@@ -619,6 +889,7 @@ export const character = {
       "action_candidate",
       "action_candidates",
       "side_call",
+      "side_text",
       "voice_memo",
       "lines",
       "people",
@@ -665,7 +936,7 @@ export const character = {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
     if (start < 0 || end <= start)
-      throw new Error("보조 모델 응답에서 JSON을 찾지 못했습니다.");
+      throw new Error("보조모델 응답에서 JSON을 찾지 못했습니다.");
     return JSON.parse(cleaned.slice(start, end + 1));
   },
 
@@ -785,11 +1056,20 @@ export const character = {
         .join(" / ")
         .slice(0, 1200);
     }
-    const contact = source?.contact && typeof source.contact === "object" ? source.contact : {};
+    const contact =
+      source?.contact && typeof source.contact === "object"
+        ? source.contact
+        : {};
     state.contact = {
       presence: this.contactWord(contact.presence, ["together", "apart"]),
-      availability: this.contactWord(contact.availability, ["free", "busy", "asleep"]),
-      note: String(contact.note || "").trim().slice(0, 300),
+      availability: this.contactWord(contact.availability, [
+        "free",
+        "busy",
+        "asleep",
+      ]),
+      note: String(contact.note || "")
+        .trim()
+        .slice(0, 300),
     };
     return state;
   },
@@ -815,11 +1095,15 @@ export const character = {
       ...(person.aliases ? { aliases: person.aliases } : {}),
       ...(person.note ? { performance_note: person.note } : {}),
       ...(person.hidden ? { no_phone: true } : {}),
-      ...(statuses.get(person.key)?.unknown ? { unknown_whereabouts: true } : {}),
+      ...(statuses.get(person.key)?.unknown
+        ? { unknown_whereabouts: true }
+        : {}),
       ...(statusLines && !person.hidden
         ? {
             status_message: statusLines.get(person.key) || "",
-            writes_in: languageName(this.conversationLanguage?.([], "", person.key) || "ko"),
+            writes_in: languageName(
+              this.conversationLanguage?.([], "", person.key) || "ko",
+            ),
           }
         : {}),
       previous_state: records.get(person.key)?.state || null,
@@ -837,6 +1121,7 @@ export const character = {
           contactTypes: round.contactTypes,
           language: round.language,
           sideCalls: round.sideCalls,
+          sideTexts: Boolean(round.textRooms),
           voiceMemos: round.voiceMemos,
           statusLines: Boolean(round.statusLines),
         }),
@@ -846,9 +1131,20 @@ export const character = {
         content: userPrompt(
           [
             dataBlock("profile", round.roleplayProfile),
-            dataBlock("people", this.statePeopleData(batch, round.records, round.statuses, round.statusLines)),
+            dataBlock(
+              "people",
+              this.statePeopleData(
+                batch,
+                round.records,
+                round.statuses,
+                round.statusLines,
+              ),
+            ),
             dataBlock("recent_chat", round.recent),
             dataBlock("recent_calls", round.contactContext.recent),
+            ...(round.textRooms
+              ? [dataBlock("text_rooms", round.textRooms)]
+              : []),
           ],
           stateFinal(),
         ),
@@ -871,7 +1167,12 @@ export const character = {
     }
     let items = Array.isArray(parsed?.people) ? parsed.people : null;
     // One person in the older shape ({"state":…}) still counts.
-    if (!items && batch.length === 1 && parsed?.state && typeof parsed.state === "object")
+    if (
+      !items &&
+      batch.length === 1 &&
+      parsed?.state &&
+      typeof parsed.state === "object"
+    )
       items = [{ key: batch[0].key, state: parsed.state }];
     if (!items && batch.length)
       throw new StateReplyError("상태 응답에 인물 목록이 없습니다.");
@@ -883,12 +1184,16 @@ export const character = {
       if (!person || results.has(person.key)) continue;
       const unknown = item.unknown_whereabouts === true;
       // Older answers had no present flag: a named person was in the scene.
-      const present = typeof item.present === "boolean" ? item.present : !unknown;
+      const present =
+        typeof item.present === "boolean" ? item.present : !unknown;
       const state =
         !item.unchanged && item.state && typeof item.state === "object"
           ? this.normalizeCharacterState(item.state)
           : null;
-      const status = typeof item.status_message === "string" ? item.status_message.trim().slice(0, 80) : "";
+      const status =
+        typeof item.status_message === "string"
+          ? item.status_message.trim().slice(0, 80)
+          : "";
       results.set(person.key, {
         present,
         ...(state && this.hasCharacterStateContent(state) ? { state } : {}),
@@ -900,6 +1205,7 @@ export const character = {
       results,
       action_candidates: this.normalizeActionCandidates(parsed),
       side_call: this.normalizeSideCall(parsed),
+      side_text: this.normalizeSideText?.(parsed) || null,
       voice_memo: this.normalizeVoiceMemo?.(parsed) || null,
       failed: [],
     };
@@ -945,10 +1251,21 @@ export const character = {
     }
     for (const [key, result] of reply.results)
       if (result.state) {
-        round.records.set(key, { state: result.state, source_message_id: round.sourceMessageId });
-        round.statuses.set(key, { unknown: false, away: !result.present, none: false });
+        round.records.set(key, {
+          state: result.state,
+          source_message_id: round.sourceMessageId,
+        });
+        round.statuses.set(key, {
+          unknown: false,
+          away: !result.present,
+          none: false,
+        });
       } else if (result.unknown)
-        round.statuses.set(key, { ...round.statuses.get(key), unknown: true, away: true });
+        round.statuses.set(key, {
+          ...round.statuses.get(key),
+          unknown: true,
+          away: true,
+        });
     return reply;
   },
 
@@ -964,11 +1281,14 @@ export const character = {
     } catch (error) {
       if (!(error instanceof StateReplyError)) throw error;
       if (batch.length < 2) {
-        console.warn("[SceneVoice] 상태 응답이 잘렸거나 형식이 깨졌습니다.", error);
+        console.warn(
+          "[SceneVoice] 상태 응답이 잘렸거나 형식이 깨졌습니다.",
+          error,
+        );
         if (batch.length && !this.stateOutputNoticeShown) {
           this.stateOutputNoticeShown = true;
           this.notify(
-            `상태 분석 응답이 잘리거나 형식이 깨져 ${batch[0].name}의 상태를 갱신하지 못했습니다. 설정 → 보조모델 분석 → 최대 출력 토큰을 늘려 보십시오.`,
+            `상태 분석 응답이 잘리거나 형식이 깨져 ${batch[0].name}의 상태를 갱신하지 못했습니다. 연결 프로필의 최대 출력 토큰을 늘려 보십시오.`,
             "warning",
           );
         }
@@ -976,39 +1296,60 @@ export const character = {
           results: new Map(),
           action_candidates: [],
           side_call: null,
+          side_text: null,
           voice_memo: null,
           failed: batch.map((person) => person.key),
         };
       }
       const half = Math.ceil(batch.length / 2);
-      const first = await this.requestStateBatch(batch.slice(0, half), ask, { retry: false, decide });
-      const second = await this.requestStateBatch(batch.slice(half), ask, { retry: false, decide });
+      const first = await this.requestStateBatch(batch.slice(0, half), ask, {
+        retry: false,
+        decide,
+      });
+      const second = await this.requestStateBatch(batch.slice(half), ask, {
+        retry: false,
+        decide,
+      });
       return {
         results: new Map([...first.results, ...second.results]),
-        action_candidates: [...first.action_candidates, ...second.action_candidates],
+        action_candidates: [
+          ...first.action_candidates,
+          ...second.action_candidates,
+        ],
         side_call: first.side_call || second.side_call,
+        side_text: first.side_text || second.side_text,
         voice_memo: first.voice_memo || second.voice_memo,
         failed: [...first.failed, ...second.failed],
       };
     }
   },
 
-  async saveStateRecord(stateKey, { key = "", name = "" }, sourceMessageId, state, history = true) {
-    const response = await this.fetch(this.apiUrl("/api/plugins/scenevoice/state"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        state_key: stateKey,
-        chat_id: String(this.currentChatId()),
-        character_key: key,
-        character_name: name,
-        source_message_id: sourceMessageId,
-        state,
-        ...(history ? {} : { history: false }),
-      }),
-    });
+  async saveStateRecord(
+    stateKey,
+    { key = "", name = "" },
+    sourceMessageId,
+    state,
+    history = true,
+  ) {
+    const response = await this.fetch(
+      this.apiUrl("/api/plugins/scenevoice/state"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state_key: stateKey,
+          chat_id: String(this.currentChatId()),
+          character_key: key,
+          character_name: name,
+          source_message_id: sourceMessageId,
+          state,
+          ...(history ? {} : { history: false }),
+        }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `상태 저장 실패 (${response.status})`);
+    if (!response.ok)
+      throw new Error(data.detail || `상태 저장 실패 (${response.status})`);
     return data;
   },
 
@@ -1020,7 +1361,8 @@ export const character = {
    */
   async trackCurrentState({ force = false } = {}) {
     const operation = this.captureChat();
-    if (this.stateTrackingBusy || (!force && !this.stateTrackingRuns())) return null;
+    if (this.stateTrackingBusy || (!force && !this.stateTrackingRuns()))
+      return null;
     const profileId =
       this.config.state_tracking?.connection_profile_id ||
       this.config.connection_profile_id ||
@@ -1035,21 +1377,22 @@ export const character = {
     }
     // ST's welcome chat ("SillyTavern System") and other chats without a character have no people.
     if (!this.hasCharacterChat()) {
-      if (force) this.notify("캐릭터 채팅을 연 뒤에 분석할 수 있습니다.", "info");
+      if (force)
+        this.notify("캐릭터 채팅을 연 뒤에 분석할 수 있습니다.", "info");
       return null;
     }
 
-    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const chat = stOf(this)?.chat || [];
     const latestIndex = this.latestReplyIndex();
     if (latestIndex < 0) return null;
     const people = this.statePeople();
     const recent = this.buildRecentChatContext(
-      this.config.state_tracking?.context_messages ?? 8,
+      this.config.state_tracking?.context_messages ?? 6,
     );
     const roleplayProfile = this.getRoleplayProfileContext();
-    // States are kept in English whatever the chat's language: one language for the prompts that
-    // read them, and no drifting between rounds when the chat's language is judged differently.
-    const language = "en";
+    // States are written in the chat's language (the language setting when one is fixed), so the
+    // 상태 tab reads like the chat. Ones saved earlier stay as they are until they next change.
+    const language = this.chatLanguage();
     const sourceMessageId = `${latestIndex}-${simpleHash(stripMarkup(chat[latestIndex]?.mes || ""))}-${contentKey({ version: PROMPT_VERSION, profile: this.connectionService?.fingerprint?.(profileId) || profileId, people: people.map(({ key, name, aliases, note }) => ({ key, name, aliases, note })), roles: roleplayProfile, llm: this.config.llm, language, context: recent })}`;
     const roundKey = this.stateRoundKey();
     const sourceKey = `${roundKey}|${sourceMessageId}`;
@@ -1058,7 +1401,10 @@ export const character = {
     const previous = await this.loadStateRound();
     if (!force && previous?.source_message_id === sourceMessageId) {
       this.lastStateTrackingSource = sourceKey;
-      this.lastStateRound = { source_message_id: sourceMessageId, ...previous.state };
+      this.lastStateRound = {
+        source_message_id: sourceMessageId,
+        ...previous.state,
+      };
       return this.lastStateRound;
     }
 
@@ -1067,14 +1413,20 @@ export const character = {
       // What was known at the last update: who was away, whose whereabouts were unknown.
       const records = new Map();
       const statuses = new Map();
-      const loaded = await Promise.all(people.map((person) => this.loadPersonState(person)));
+      const loaded = await Promise.all(
+        people.map((person) => this.loadPersonState(person)),
+      );
       people.forEach((person, index) => {
         records.set(person.key, loaded[index]);
-        statuses.set(person.key, this.stateStatus(person.key, loaded[index], previous));
+        statuses.set(
+          person.key,
+          this.stateStatus(person.key, loaded[index], previous),
+        );
       });
-      const contactEnabled = Boolean(
-        this.autoCallOn() || this.autoTextOn(),
-      );
+      // With 랜덤 연락 the update only keeps the state: who reaches out is left to the dice.
+      const judged = this.outreachMode() === "state";
+      const contactEnabled =
+        judged && Boolean(this.autoCallOn() || this.autoTextOn());
       const round = {
         operation,
         profileId,
@@ -1087,18 +1439,35 @@ export const character = {
         sourceMessageId,
         contactContext: await this.loadRecentCallContext(latestIndex),
         contactTypes: [
-          ...(this.autoCallOn() ? ["incoming_call"] : []),
-          ...(this.autoTextOn() ? ["text_message", "voice_message"] : []),
+          ...(judged && this.autoCallOn() ? ["incoming_call"] : []),
+          ...(judged && this.autoTextOn()
+            ? ["text_message", "voice_message"]
+            : []),
         ],
         // 엿듣는 통화: two people phoning each other, judged in the same request.
-        sideCalls: this.overheardCallsOn() && people.filter((person) => !person.hidden).length > 1,
+        sideCalls:
+          judged &&
+          this.overheardCallsOn() &&
+          people.filter((person) => !person.hidden).length > 1,
+        // 스스로 대화하기: people texting each other, judged in the same request (the rooms they
+        // have go along); not again within a few replies of the last time.
+        textRooms:
+          judged &&
+          this.selfTextsOn?.() &&
+          this.selfTalkDue?.() &&
+          people.filter((person) => !person.hidden).length > 1
+            ? await this.selfTalkRooms()
+            : null,
         // 음성 메모: someone recording one for themselves, judged in the same request too.
-        voiceMemos: Boolean(this.autoMemosOn?.()),
+        voiceMemos: judged && Boolean(this.autoMemosOn?.()),
         // 상태메시지: changed now and then, in the same request (only with the phone on).
         statusLines: this.phoneOn?.()
           ? new Map(
               await Promise.all(
-                people.map(async (person) => [person.key, await this.statusLine(person.key).catch(() => "")]),
+                people.map(async (person) => [
+                  person.key,
+                  await this.statusLine(person.key).catch(() => ""),
+                ]),
               ),
             )
           : null,
@@ -1108,11 +1477,16 @@ export const character = {
       // Unknown whereabouts carry on until the model (or a hand edit) says otherwise.
       const unknown = new Set(
         people
-          .filter((person) => statuses.get(person.key).unknown && records.get(person.key)?.state)
+          .filter(
+            (person) =>
+              statuses.get(person.key).unknown &&
+              records.get(person.key)?.state,
+          )
           .map((person) => person.key),
       );
       let candidates = [];
       let sideCall = null;
+      let sideText = null;
       let voiceMemo = null;
       if (people.length) {
         const reply = await this.requestStateBatch(
@@ -1132,10 +1506,20 @@ export const character = {
             continue;
           }
           if (result.state) {
-            await this.saveStateRecord(person.stateKey, person, sourceMessageId, result.state);
+            await this.saveStateRecord(
+              person.stateKey,
+              person,
+              sourceMessageId,
+              result.state,
+            );
             outcome.updated.push(person.key);
           }
-          if (result.status && round.statusLines && !person.hidden && result.status !== round.statusLines.get(person.key))
+          if (
+            result.status &&
+            round.statusLines &&
+            !person.hidden &&
+            result.status !== round.statusLines.get(person.key)
+          )
             await this.saveStatusLine(person, result.status, sourceMessageId);
           if (result.present) {
             present.push(person.key);
@@ -1147,6 +1531,7 @@ export const character = {
         }
         candidates = reply.action_candidates;
         sideCall = reply.side_call;
+        sideText = reply.side_text;
         voiceMemo = reply.voice_memo;
       }
       const asked = people.map((person) => person.key);
@@ -1159,19 +1544,38 @@ export const character = {
         asked.filter((key) => unknown.has(key) || !records.get(key)?.state),
       );
       // Each person's state sheet as it stands now: the contact decision goes by what it shows.
-      const sheets = new Map(asked.map((key) => [key, records.get(key)?.state?.contact]));
+      const sheets = new Map(
+        asked.map((key) => [key, records.get(key)?.state?.contact]),
+      );
       // Its contact decisions belong to that moment: with a reply being written by now (or one
       // written since), a call would cut in from a point already passed, so the next update
       // judges again.
       if (this.chatMovedOn(latestIndex)) this.lastContactDecisions = [];
       else {
-        await this.handleActionCandidates(candidates, sourceMessageId, round.contactContext, unknownNow, sheets);
-        if (sideCall) await this.handleSideCall(sideCall, sourceMessageId, sheets);
-        if (voiceMemo) await this.handleVoiceMemo(voiceMemo, sourceMessageId, sheets);
+        await this.handleActionCandidates(
+          candidates,
+          sourceMessageId,
+          round.contactContext,
+          unknownNow,
+          sheets,
+        );
+        if (sideCall)
+          await this.handleSideCall(sideCall, sourceMessageId, sheets);
+        if (voiceMemo)
+          await this.handleVoiceMemo(voiceMemo, sourceMessageId, sheets);
+        if (sideText)
+          await this.handleSideText(sideText, sheets).catch((error) => {
+            if (error.name === "AbortError") throw error;
+            console.warn("[SceneVoice] 인물끼리 문자 실패", error);
+          });
       }
       if (force) {
         const names = (keys) =>
-          keys.map((key) => people.find((person) => person.key === key)?.name || key).join(", ");
+          keys
+            .map(
+              (key) => people.find((person) => person.key === key)?.name || key,
+            )
+            .join(", ");
         this.notify(
           outcome.updated.length
             ? `${names(outcome.updated)}의 상태를 갱신했습니다.`

@@ -7,13 +7,25 @@ import { throwIfAborted } from "../shared/queue.js";
 
 /** The ElevenLabs key an older 실리태번 (before 1.15) keeps in its TTS settings, in the page. */
 const legacyElevenLabsKey = () =>
-  window.SillyTavern?.getContext?.()?.extensionSettings?.tts?.ElevenLabs?.apiKey || "";
+  window.SillyTavern?.getContext?.()?.extensionSettings?.tts?.ElevenLabs
+    ?.apiKey || "";
 // `Response.json(value)`, which Safari before 17 lacks.
 const jsonResponse = (value, init = {}) =>
   new Response(JSON.stringify(value), {
     ...init,
     headers: { "Content-Type": "application/json" },
   });
+/**
+ * Where a voice in the account's list is from: ElevenLabs' own ("basic"), made by the user (a
+ * clone or a designed voice, "mine"), or added from the voice library ("library").
+ */
+function voiceKind(voice) {
+  if (voice.category === "premade") return "basic";
+  if (voice.is_owner ?? ["cloned", "generated"].includes(voice.category))
+    return "mine";
+  return voice.category ? "library" : "";
+}
+
 export class Transport {
   mode = "st";
   constructor(getHeaders) {
@@ -24,13 +36,19 @@ export class Transport {
    * with the key kept there; an older one is asked nothing: the page calls ElevenLabs itself with
    * the key in its TTS settings, as that 실리태번 did.
    */
-  elevenLabs(kind, { voiceId = "", body = null, signal } = {}, timeout = 180000) {
+  elevenLabs(
+    kind,
+    { voiceId = "", body = null, signal } = {},
+    timeout = 180000,
+  ) {
     if (this.elevenLabsServer)
       return this.network(
         `/api/speech/elevenlabs/${kind}`,
         {
           method: "POST",
-          ...(kind === "synthesize" ? { body: JSON.stringify({ voiceId, request: body }) } : {}),
+          ...(kind === "synthesize"
+            ? { body: JSON.stringify({ voiceId, request: body }) }
+            : {}),
           signal,
         },
         timeout,
@@ -41,11 +59,21 @@ export class Transport {
     return kind === "synthesize"
       ? this.network(
           `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
-          { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body), signal },
+          {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal,
+          },
           timeout,
           true,
         )
-      : this.network("https://api.elevenlabs.io/v1/voices", { headers, signal }, timeout, true);
+      : this.network(
+          "https://api.elevenlabs.io/v1/voices",
+          { headers, signal },
+          timeout,
+          true,
+        );
   }
   /** `external`: another site, sent nothing of 실리태번's (no cookies, no request headers). */
   async network(url, options = {}, timeout = 180000, external = false) {
@@ -79,7 +107,8 @@ export class Transport {
   }
   async init() {
     const account = await this.network("/api/users/me", {}, 10000);
-    if (!account.ok) throw new Error("실리태번 사용자 계정을 확인할 수 없습니다.");
+    if (!account.ok)
+      throw new Error("실리태번 사용자 계정을 확인할 수 없습니다.");
     const { handle } = await account.json();
     if (!handle) throw new Error("실리태번 계정 식별자가 없습니다.");
     const secrets = await import("/scripts/secrets.js");
@@ -143,6 +172,17 @@ export class Transport {
             signal,
           });
         if (!response.ok) {
+          // 실리태번's own ElevenLabs route answers 500 whatever ElevenLabs said, and writes the
+          // reason only to its server window.
+          if (
+            request.engine === "elevenlabs" &&
+            this.elevenLabsServer &&
+            response.status === 500
+          )
+            throw new UserError(
+              "일레븐랩스가 음성 요청을 거절했습니다. 정확한 이유는 실리태번 서버 창(터미널)의 ‘ElevenLabs synthesis failed’ 줄에 나옵니다(잔액 부족, 없는 목소리, 모델 권한, 요청 한도 등). 자동 재시도하지 않습니다.",
+              502,
+            );
           const hints = {
             401: "API 키",
             402: "잔액",
@@ -167,7 +207,10 @@ export class Transport {
       checkEngine: async (engine, settings, signal) => {
         if (engine === "fish") {
           if (!settings.fish.api_key)
-            return { ok: false, message: "이 브라우저에 Fish API 키가 없습니다." };
+            return {
+              ok: false,
+              message: "이 브라우저에 Fish API 키가 없습니다.",
+            };
           const fish = (path) =>
             this.network(
               `/proxy/https://api.fish.audio${path}`,
@@ -222,10 +265,16 @@ export class Transport {
         // The male and female defaults, each checked against the account's voices.
         const named = [
           ["남성", settings.elevenlabs.voice_id_male],
-          ["여성", settings.elevenlabs.voice_id_female || settings.elevenlabs.voice_id],
+          [
+            "여성",
+            settings.elevenlabs.voice_id_female || settings.elevenlabs.voice_id,
+          ],
         ]
           .filter(([, id]) => id)
-          .map(([label, id]) => `${label} 기본: ${voices.find((voice) => voice.voice_id === id)?.name || "내 보이스 목록에 없음"}`);
+          .map(
+            ([label, id]) =>
+              `${label} 기본: ${voices.find((voice) => voice.voice_id === id)?.name || "내 보이스 목록에 없음"}`,
+          );
         return {
           ok: true,
           message: `키 확인됨 · 내 보이스 ${voices.length}개`,
@@ -238,21 +287,31 @@ export class Transport {
         if (engine !== "elevenlabs") return { items: [] };
         const response = await this.elevenLabs("voices", { signal });
         if (!response.ok)
-          throw new UserError("실리태번 기본 TTS의 ElevenLabs 키를 확인해 주십시오.");
+          throw new UserError(
+            "실리태번 기본 TTS의 ElevenLabs 키를 확인해 주십시오.",
+          );
         return {
           items: ((await response.json()).voices || []).map((v) => ({
             id: v.voice_id,
             name: v.name,
-            // A short description for the picker: gender, accent, age, and whether it is a clone.
+            // A short description for the picker: gender, accent and age.
             meta: [
-              { female: "여성", male: "남성", neutral: "중성" }[v.labels?.gender] || "",
+              { female: "여성", male: "남성", neutral: "중성" }[
+                v.labels?.gender
+              ] || "",
               v.labels?.accent,
               v.labels?.age,
-              v.category === "cloned" ? "내 복제 목소리" : "",
             ]
               .filter((part) => typeof part === "string" && part.trim())
               .map((part) => part.trim().slice(0, 40))
               .join(" · "),
+            kind: voiceKind(v),
+            lang: /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(v.labels?.language || "")
+              ? v.labels.language
+              : "",
+            preview: /^https?:\/\//.test(v.preview_url || "")
+              ? v.preview_url
+              : "",
           })),
         };
       },
@@ -266,7 +325,8 @@ export class Transport {
     for (const [key, item] of Object.entries(result)) {
       if (key === "audio_url" && typeof item === "string" && item)
         result[key] = this.local.store.audioURL(item.split("/").at(-1));
-      else if (item && typeof item === "object") result[key] = this.audioURLs(item);
+      else if (item && typeof item === "object")
+        result[key] = this.audioURLs(item);
     }
     return result;
   }
@@ -289,7 +349,10 @@ export class Transport {
       return jsonResponse(this.audioURLs(result.json));
     } catch (error) {
       if (options.signal?.aborted) throw error;
-      return jsonResponse({ detail: error.message }, { status: error.status || 500 });
+      return jsonResponse(
+        { detail: error.message },
+        { status: error.status || 500 },
+      );
     }
   }
   dispose() {

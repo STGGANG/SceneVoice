@@ -11,7 +11,9 @@ export const callHistory = {
   callNames(session) {
     return [
       session.character_name || "",
-      ...(session.call_direction === "overheard" ? [session.callee_name || ""] : []),
+      ...(session.call_direction === "overheard"
+        ? [session.callee_name || ""]
+        : []),
       ...(session.others || []).map((other) => other.name),
     ];
   },
@@ -20,8 +22,18 @@ export const callHistory = {
   callMembers(session) {
     return [
       this.phoneContact(session.character_key),
-      ...(session.call_direction === "overheard" ? [{ ...this.phoneContact(session.callee_key), name: session.callee_name }] : []),
-      ...(session.others || []).map((other) => ({ ...this.phoneContact(other.key), name: other.name })),
+      ...(session.call_direction === "overheard"
+        ? [
+            {
+              ...this.phoneContact(session.callee_key),
+              name: session.callee_name,
+            },
+          ]
+        : []),
+      ...(session.others || []).map((other) => ({
+        ...this.phoneContact(other.key),
+        name: other.name,
+      })),
     ];
   },
 
@@ -34,11 +46,18 @@ export const callHistory = {
     }
     const listening = this.callPlayback;
     if (listening?.playing && listening.session) {
-      this.renderListenScreen(body, listening.session, listening, { away: listening.away });
+      this.renderListenScreen(body, listening.session, listening, {
+        away: listening.away,
+      });
       return;
     }
     if (this.callListenOpen) {
-      this.renderListenScreen(body, this.callListenOpen.session, {}, { ended: true, away: this.callListenOpen.away });
+      this.renderListenScreen(
+        body,
+        this.callListenOpen.session,
+        {},
+        { ended: true, away: this.callListenOpen.away },
+      );
       return;
     }
     body.innerHTML =
@@ -59,18 +78,26 @@ export const callHistory = {
       // After a reload: back to the call last looked at (its paused part, or its page).
       const view = this.callViewRestored ? null : this.savedCallView();
       this.callViewRestored = true;
-      const viewed = view && items.find((session) => session.id === view.sessionId);
+      const viewed =
+        view && items.find((session) => session.id === view.sessionId);
       if (viewed && this.phoneActiveTab === "history") {
         if (view.open && viewed.continuing) {
           this.callListenOpen = { session: viewed, away: view.away };
-          this.renderListenScreen(body, viewed, {}, { ended: true, away: view.away });
+          this.renderListenScreen(
+            body,
+            viewed,
+            {},
+            { ended: true, away: view.away },
+          );
         } else this.renderPhoneHistoryDetail(body, viewed, view.away);
         return;
       }
       this.saveCallView(null);
       const here = items.filter((session) => this.anchorShown(session));
       const away = items.filter(
-        (session) => !this.anchorShown(session) && !["active", "ringing"].includes(session.status),
+        (session) =>
+          !this.anchorShown(session) &&
+          !["active", "ringing"].includes(session.status),
       );
       const tabs = this.phoneShelfTabs("history", away.length);
       const shelf = this.phoneShelf.history === "unapplied";
@@ -89,13 +116,19 @@ export const callHistory = {
         ? `<div class="sv-call-history-list">${tabs}${listen}${shelf ? this.phoneShelfNote() : '<h3 class="sv-recents-title">최근 통화</h3>'}${sessions
             .map((session) => {
               // Red only for theirs I missed; mine that went unanswered stays plain.
-              const missed = ["rejected", "missed"].includes(session.status) && session.call_direction !== "outgoing";
+              const missed =
+                ["rejected", "missed"].includes(session.status) &&
+                session.call_direction !== "outgoing";
               const live = ["active", "ringing"].includes(session.status);
               const voicemail = session.turns?.[0]?.voicemail;
               const between = session.call_direction === "overheard";
               const fresh = this.unheardCalls?.has(session.id);
               const who = this.callNames(session).join(", ") || "캐릭터";
-              const icon = between ? "fa-ear-listen" : session.call_direction === "incoming" ? "fa-phone-volume" : "fa-phone";
+              const icon = between
+                ? "fa-ear-listen"
+                : session.call_direction === "incoming"
+                  ? "fa-phone-volume"
+                  : "fa-phone";
               return `
                 <div class="sv-call-history-item">
                   <button type="button" class="sv-call-history-session ${missed ? "sv-missed" : ""}" data-session-id="${escapeHtml(session.id)}">
@@ -132,7 +165,9 @@ export const callHistory = {
       );
       body
         .querySelector("[data-shelf-clear]")
-        ?.addEventListener("click", () => this.run(() => this.clearAwayCalls(body, away)));
+        ?.addEventListener("click", () =>
+          this.run(() => this.clearAwayCalls(body, away)),
+        );
       body.querySelectorAll(".sv-call-history-session").forEach((button) =>
         button.addEventListener("click", () => {
           const selected = sessions.find(
@@ -167,18 +202,38 @@ export const callHistory = {
     const most = mine ? 4 : 5;
     const options = (selected) =>
       contacts
-        .map((contact) => `<option value="${escapeHtml(contact.key)}" ${contact.key === selected ? "selected" : ""}>${escapeHtml(contact.name)}</option>`)
+        .map(
+          (contact) =>
+            `<option value="${escapeHtml(contact.key)}" ${contact.key === selected ? "selected" : ""}>${escapeHtml(contact.name)}</option>`,
+        )
         .join("");
     const off = editor.busy ? "disabled" : "";
     // The first one or two stay; the people added after them can be taken off again.
     const keep = mine ? 1 : 2;
     const row = (label, index) =>
       `<div class="sv-call-person"><label class="sv-room-name"><span>${label}</span><select data-person="${index}" ${off}>${options(editor.people[index])}</select></label>${
-        index >= keep ? `<button type="button" class="sv-call-person-remove" data-person-remove="${index}" aria-label="빼기" title="빼기" ${off}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>` : ""
+        index >= keep
+          ? `<button type="button" class="sv-call-person-remove" data-person-remove="${index}" aria-label="빼기" title="빼기" ${off}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`
+          : ""
       }</div>`;
     const people = mine
-      ? editor.people.map((key, index) => row(index ? "함께 통화하는 사람" : "상대", index)).join("")
-      : editor.people.map((key, index) => row(index ? (index > 1 ? "함께 받는 사람" : "받는 사람") : "거는 사람", index)).join("");
+      ? editor.people
+          .map((key, index) =>
+            row(index ? "함께 통화하는 사람" : "상대", index),
+          )
+          .join("")
+      : editor.people
+          .map((key, index) =>
+            row(
+              index
+                ? index > 1
+                  ? "함께 받는 사람"
+                  : "받는 사람"
+                : "거는 사람",
+              index,
+            ),
+          )
+          .join("");
     body.innerHTML = `
       <div class="sv-room-editor sv-overheard-editor">
         <header class="sv-msg-head">
@@ -204,8 +259,18 @@ export const callHistory = {
           value: editor.open ? "open" : "complete",
           cls: "sv-overheard-modes",
           choices: [
-            ["complete", "phone", "시작부터 끝까지", "한 번에 처음부터 통화가 끝날 때까지 씁니다."],
-            ["open", "arrows-rotate", "길게 이어가기", "끊지 않고 중간에서 멈춥니다. 다음 내용을 지시하며 이어 가고, 원할 때 마무리합니다."],
+            [
+              "complete",
+              "phone",
+              "시작부터 끝까지",
+              "한 번에 처음부터 통화가 끝날 때까지 씁니다.",
+            ],
+            [
+              "open",
+              "arrows-rotate",
+              "길게 이어가기",
+              "끊지 않고 중간에서 멈춥니다. 다음 내용을 지시하며 이어 가고, 원할 때 마무리합니다.",
+            ],
           ],
         })}
         <label class="sv-room-name"><span data-overheard-length-label>${editor.open ? "한 번에 쓸 길이" : "통화 길이"}</span><select id="sv-overheard-length" ${off}>${OVERHEARD_LENGTH_CHOICES.map(([value, label]) => `<option value="${value}" ${value === editor.length ? "selected" : ""}>${label}</option>`).join("")}</select></label>
@@ -226,31 +291,44 @@ export const callHistory = {
     );
     body.querySelector("[data-person-add]")?.addEventListener("click", () => {
       // Someone not on it yet, when there is anyone left.
-      const next = contacts.find((contact) => !editor.people.includes(contact.key)) || contacts[0];
+      const next =
+        contacts.find((contact) => !editor.people.includes(contact.key)) ||
+        contacts[0];
       editor.people.push(next.key);
       this.renderOverheardEditor(body);
     });
-    body.querySelector("#sv-overheard-side")?.addEventListener("change", (event) => {
-      editor.meFirst = event.target.value === "me";
-    });
-    body.querySelector("#sv-overheard-length").addEventListener("change", (event) => {
-      editor.length = event.target.value;
-    });
-    body.querySelectorAll('input[name="sv-overheard-mode"]').forEach((input) => {
-      input.disabled = Boolean(editor.busy);
-      input.addEventListener("change", () => {
-        if (!input.checked) return;
-        editor.open = input.value === "open";
-        body.querySelector("[data-overheard-length-label]").textContent = editor.open ? "한 번에 쓸 길이" : "통화 길이";
+    body
+      .querySelector("#sv-overheard-side")
+      ?.addEventListener("change", (event) => {
+        editor.meFirst = event.target.value === "me";
       });
-    });
-    body.querySelector("#sv-overheard-reason").addEventListener("input", (event) => {
-      editor.reason = event.target.value;
-    });
-    body.querySelector("[data-overheard-cancel]").addEventListener("click", () => {
-      this.overheardEditor = null;
-      this.renderSmartphoneHistory(body);
-    });
+    body
+      .querySelector("#sv-overheard-length")
+      .addEventListener("change", (event) => {
+        editor.length = event.target.value;
+      });
+    body
+      .querySelectorAll('input[name="sv-overheard-mode"]')
+      .forEach((input) => {
+        input.disabled = Boolean(editor.busy);
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          editor.open = input.value === "open";
+          body.querySelector("[data-overheard-length-label]").textContent =
+            editor.open ? "한 번에 쓸 길이" : "통화 길이";
+        });
+      });
+    body
+      .querySelector("#sv-overheard-reason")
+      .addEventListener("input", (event) => {
+        editor.reason = event.target.value;
+      });
+    body
+      .querySelector("[data-overheard-cancel]")
+      .addEventListener("click", () => {
+        this.overheardEditor = null;
+        this.renderSmartphoneHistory(body);
+      });
     body.querySelector("[data-overheard-make]").addEventListener("click", () =>
       this.run(async () => {
         if (editor.busy) return;
@@ -264,13 +342,20 @@ export const callHistory = {
             : editor.meFirst
               ? [me, chosen]
               : [chosen[0], [me, ...chosen.slice(1)]];
-          const session = await this.writeOverheardCall(caller, callees, editor.reason.trim(), "", {
-            announce: false,
-            length: editor.length,
-            open: editor.open,
-          });
+          const session = await this.writeOverheardCall(
+            caller,
+            callees,
+            editor.reason.trim(),
+            "",
+            {
+              announce: false,
+              length: editor.length,
+              open: editor.open,
+            },
+          );
           // Each next part as long as the first.
-          if (session?.continuing) (this.callPartLength ||= {})[session.id] = editor.length;
+          if (session?.continuing)
+            (this.callPartLength ||= {})[session.id] = editor.length;
           if (this.overheardEditor !== editor) return;
           this.overheardEditor = null;
           if (!session || !body.isConnected) return;
@@ -280,7 +365,8 @@ export const callHistory = {
         } finally {
           if (this.overheardEditor === editor) {
             editor.busy = false;
-            if (body.isConnected && this.phoneActiveTab === "history") this.renderOverheardEditor(body);
+            if (body.isConnected && this.phoneActiveTab === "history")
+              this.renderOverheardEditor(body);
           }
         }
       }),
@@ -289,7 +375,12 @@ export const callHistory = {
 
   /** Removes one call from the history, and the chat memory it left. */
   async deletePhoneSession(body, session) {
-    if (!confirm(`${session.character_name || "캐릭터"}와의 통화 기록을 지우시겠습니까?`)) return;
+    if (
+      !confirm(
+        `${session.character_name || "캐릭터"}와의 통화 기록을 지우시겠습니까?`,
+      )
+    )
+      return;
     const response = await this.request(
       `/api/plugins/scenevoice/phone/sessions/${encodeURIComponent(session.id)}`,
       {
@@ -299,11 +390,14 @@ export const callHistory = {
       },
     );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "통화 기록을 지우지 못했습니다.");
-    if (this.anchorShown(session)) await this.removeChatMemoryEvent(session.anchor_message_id, session.id);
+    if (!response.ok)
+      throw new Error(data.detail || "통화 기록을 지우지 못했습니다.");
+    if (this.anchorShown(session))
+      await this.removeChatMemoryEvent(session.anchor_message_id, session.id);
     else await this.forgetSwipeMemory(session);
     // A voicemail of it no longer waits to be heard.
-    if (this.unheardCalls?.delete(session.id)) this.updatePhoneLauncherVisibility();
+    if (this.unheardCalls?.delete(session.id))
+      this.updatePhoneLauncherVisibility();
     await this.renderSmartphoneHistory(body);
   },
 
@@ -315,17 +409,24 @@ export const callHistory = {
     if (!away.length) return;
     if (
       !confirm(
-        `미적용 기억의 통화 ${away.length}개를 모두 지우시겠습니까?\n휴대폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
+        `미적용 기억의 통화 ${away.length}개를 모두 지우시겠습니까?\n스마트폰에서 완전히 지워지고, 그 스와이프로 돌아가도 다시 나타나지 않습니다.`,
       )
     )
       return;
-    const response = await this.request("/api/plugins/scenevoice/phone/sessions/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: this.currentChatId(), ids: away.map((session) => session.id) }),
-    });
+    const response = await this.request(
+      "/api/plugins/scenevoice/phone/sessions/delete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: this.currentChatId(),
+          ids: away.map((session) => session.id),
+        }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "통화 기록을 지우지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "통화 기록을 지우지 못했습니다.");
     for (const session of away) {
       await this.forgetSwipeMemory(session);
       this.unheardCalls?.delete(session.id);
@@ -341,22 +442,37 @@ export const callHistory = {
    */
   renderPhoneHistoryDetail(body, session, away = false) {
     const between = session.call_direction === "overheard";
-    const caller = this.phoneContact(session.character_key || this.getCurrentCharacterProfile().key);
+    const caller = this.phoneContact(
+      session.character_key || this.getCurrentCharacterProfile().key,
+    );
     const many = between || Boolean(session.others?.length);
     // Several voices on it: everyone named on their lines (also a phone handed over on a call).
     const named =
-      many || (session.turns || []).some((turn) => turn.speaker_key && turn.speaker_key !== session.character_key);
+      many ||
+      (session.turns || []).some(
+        (turn) =>
+          turn.speaker_key && turn.speaker_key !== session.character_key,
+      );
     const name = escapeHtml(this.callNames(session).join(", ") || "캐릭터");
     const live = ["active", "ringing"].includes(session.status);
-    if (this.unheardCalls?.delete(session.id)) this.updatePhoneLauncherVisibility();
+    if (this.unheardCalls?.delete(session.id))
+      this.updatePhoneLauncherVisibility();
     const shell = document.getElementById("sv-smartphone");
     if (shell) shell.dataset.screen = "app";
     const turns = session.turns || [];
     this.saveCallView({ sessionId: session.id, away });
     const heard = this.heardPosition(session.id);
-    const playing = this.callPlayback?.sessionId === session.id ? this.callPlayback : heard ? { position: heard } : null;
+    const playing =
+      this.callPlayback?.sessionId === session.id
+        ? this.callPlayback
+        : heard
+          ? { position: heard }
+          : null;
     const avatar = many
-      ? this.threadAvatarMarkup({ group: true, members: this.callMembers(session) })
+      ? this.threadAvatarMarkup({
+          group: true,
+          members: this.callMembers(session),
+        })
       : this.contactAvatarMarkup(caller);
     body.innerHTML = `
             <div class="sv-phone-history-detail" data-session="${escapeHtml(session.id)}">
@@ -372,17 +488,20 @@ export const callHistory = {
                     ${turns
                       .map((turn, index) => {
                         // My lines have a voice only with a persona voice.
-                        const voiceable = turn.role !== "user" || this.personaVoiceReady();
+                        const voiceable =
+                          turn.role !== "user" || this.personaVoiceReady();
                         // A past call's line without a voice yet can be made here.
                         // The line sounding now stays lit through redraws, as in 문자.
-                        const sounding = this.playingTurnId === turn.id && this.currentAudio;
+                        const sounding =
+                          this.playingTurnId === turn.id && this.currentAudio;
                         const button = turn.audio_url
                           ? `<button type="button" class="sv-call-replay${sounding ? " sv-playing" : ""}" data-turn="${index}" aria-label="이 대사 재생" title="재생"><i class="fa-solid fa-play" aria-hidden="true"></i></button>`
                           : (!live && voiceable) || turn.voicemail || between
                             ? `<button type="button" class="sv-call-replay" data-turn="${index}" aria-label="재생" title="재생: 음성을 만든 뒤 재생합니다"><i class="fa-solid fa-play" aria-hidden="true"></i></button>`
                             : "";
                         // The first line names 음성 재생성; the rest keep icons (names in tooltips).
-                        const firstLabel = (label) => (index === 0 ? `<span>${label}</span>` : "");
+                        const firstLabel = (label) =>
+                          index === 0 ? `<span>${label}</span>` : "";
                         const tools = live
                           ? ""
                           : `<div class="sv-call-line-tools${index === 0 ? " sv-labeled" : ""}">${
@@ -395,7 +514,11 @@ export const callHistory = {
                           : named && turn.role !== "user"
                             ? `<small class="sv-voicemail-label">${escapeHtml(turn.speaker_name || session.character_name || "")}${turn.aside ? " · 뒤에서" : ""}</small>`
                             : "";
-                        const reading = (playing?.playing && playing.position === index) || sounding ? " sv-call-reading" : "";
+                        const reading =
+                          (playing?.playing && playing.position === index) ||
+                          sounding
+                            ? " sv-call-reading"
+                            : "";
                         return `<article class="${turn.role === "user" ? "sv-call-user" : "sv-call-character"}${reading}" data-index="${index}" aria-label="${turn.role === "user" ? "나" : escapeHtml(turn.speaker_name || session.character_name || "")}">${label}<p>${escapeHtml(turn.text)}</p>${this.translationHtml(turn)}${tools}${button}</article>`;
                       })
                       .join("")}
@@ -406,37 +529,83 @@ export const callHistory = {
       ?.addEventListener("click", () => this.renderSmartphoneHistory(body));
     body
       .querySelector(".sv-detail-delete")
-      ?.addEventListener("click", () => this.run(() => this.deletePhoneSession(body, session)));
+      ?.addEventListener("click", () =>
+        this.run(() => this.deletePhoneSession(body, session)),
+      );
     body
       .querySelector("[data-call-aloud]")
-      ?.addEventListener("click", () => this.run(() => this.playCallThrough(body, session, away)));
+      ?.addEventListener("click", () =>
+        this.run(() => this.playCallThrough(body, session, away)),
+      );
     const save = body.querySelector("[data-call-download]");
     save?.addEventListener("click", () =>
       this.run(async () => {
         const kind = await this.pickDownload();
-        if (kind === "video") await this.withBusyButton(save, () => this.downloadCallVideo(body, session, away));
-        else if (kind === "audio") await this.withBusyButton(save, () => this.downloadCall(body, session, away));
+        if (kind === "video")
+          await this.withBusyButton(save, () =>
+            this.downloadCallVideo(body, session, away),
+          );
+        else if (kind === "audio")
+          await this.withBusyButton(save, () =>
+            this.downloadCall(body, session, away),
+          );
       }),
     );
-    body.querySelector("[data-call-share]")?.addEventListener("click", () => this.run(() => this.shareCall(session)));
-    body.querySelector("[data-call-continue]")?.addEventListener("click", () =>
-      this.renderListenScreen(body, session, {}, { ended: true, away }),
-    );
-    body.querySelectorAll(".sv-call-replay").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.playHistoryTurn(body, session, turns[Number(button.dataset.turn)], button, away)),
-      ),
-    );
-    body.querySelectorAll("[data-turn-reroll]").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.playHistoryTurn(body, session, turns[Number(button.dataset.turnReroll)], button, away, true)),
-      ),
-    );
-    body.querySelectorAll("[data-turn-edit]").forEach((button) =>
-      button.addEventListener("click", () =>
-        this.run(() => this.editHistoryTurn(body, session, turns[Number(button.dataset.turnEdit)], away)),
-      ),
-    );
+    body
+      .querySelector("[data-call-share]")
+      ?.addEventListener("click", () =>
+        this.run(() => this.shareCall(session)),
+      );
+    body
+      .querySelector("[data-call-continue]")
+      ?.addEventListener("click", () =>
+        this.renderListenScreen(body, session, {}, { ended: true, away }),
+      );
+    body
+      .querySelectorAll(".sv-call-replay")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.playHistoryTurn(
+              body,
+              session,
+              turns[Number(button.dataset.turn)],
+              button,
+              away,
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll("[data-turn-reroll]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.playHistoryTurn(
+              body,
+              session,
+              turns[Number(button.dataset.turnReroll)],
+              button,
+              away,
+              true,
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll("[data-turn-edit]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.editHistoryTurn(
+              body,
+              session,
+              turns[Number(button.dataset.turnEdit)],
+              away,
+            ),
+          ),
+        ),
+      );
   },
 
   /**
@@ -453,22 +622,41 @@ export const callHistory = {
     if (sheet === null) return;
     const edit = this.spokenEdit(sheet.value);
     if (!edit.text) throw new Error("대사를 비울 수는 없습니다.");
-    const { changed, words, translation } = this.sheetChanges(turn, edit, sheet);
+    const { changed, words, translation } = this.sheetChanges(
+      turn,
+      edit,
+      sheet,
+    );
     if (!changed) return;
-    const response = await this.request(`/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turn.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: session.chat_id, ...edit, translation }),
-    });
+    const response = await this.request(
+      `/api/plugins/scenevoice/phone/turns/${encodeURIComponent(turn.id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: session.chat_id,
+          ...edit,
+          translation,
+        }),
+      },
+    );
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "대사를 고치지 못했습니다.");
+    if (!response.ok)
+      throw new Error(data.detail || "대사를 고치지 못했습니다.");
     const current = data.session;
     await this.keepCallMemory(current);
     if (!body.isConnected) return;
     this.renderPhoneHistoryDetail(body, current, away);
     const index = current.turns.findIndex((item) => item.id === turn.id);
     const button = body.querySelector(`.sv-call-replay[data-turn="${index}"]`);
-    if (words && turn.audio_url && button) await this.playHistoryTurn(body, current, current.turns[index], button, away);
+    if (words && turn.audio_url && button)
+      await this.playHistoryTurn(
+        body,
+        current,
+        current.turns[index],
+        button,
+        away,
+      );
   },
 
   /**
@@ -480,13 +668,19 @@ export const callHistory = {
   async callClips(session, onStep = () => {}, { captions = false } = {}) {
     let current = session;
     const voiced = this.personaVoiceReady();
-    const turns = (session.turns || []).filter((turn) => turn.role !== "user" || voiced || (captions && turn.text));
-    const lacking = (mine) => turns.filter((turn) => !turn.audio_url && (turn.role === "user") === mine).length;
+    const turns = (session.turns || []).filter(
+      (turn) => turn.role !== "user" || voiced || (captions && turn.text),
+    );
+    const lacking = (mine) =>
+      turns.filter((turn) => !turn.audio_url && (turn.role === "user") === mine)
+        .length;
     const theirs = lacking(false);
     const mine = voiced ? lacking(true) : 0;
     const makeTheirs =
       theirs > 0 &&
-      confirm(`캐릭터 대사 ${theirs}개는 아직 목소리가 없습니다. 만들어서 함께 넣으시겠습니까?\n취소하면 그 대사는 빠집니다.`);
+      confirm(
+        `캐릭터 대사 ${theirs}개는 아직 목소리가 없습니다. 만들어서 함께 넣으시겠습니까?\n취소하면 그 대사는 빠집니다.`,
+      );
     const makeMine =
       mine > 0 &&
       confirm(
@@ -498,13 +692,22 @@ export const callHistory = {
       let url = turn.audio_url ? this.apiUrl(turn.audio_url) : "";
       let revoke = false;
       if (!url && (turn.role === "user" ? makeMine : makeTheirs)) {
-        const made = await this.makePhoneTurnAudio(current, turn).catch(() => null);
+        const made = await this.makePhoneTurnAudio(current, turn).catch(
+          () => null,
+        );
         if (made?.session) current = made.session;
         url = made?.audioUrl || "";
         revoke = Boolean(url);
       }
-      if (url) clips.push({ url, revoke, turn, filter: this.shouldApplyCommunicationFilter("phone", turn) });
-      else if (captions && turn.role === "user" && turn.text) clips.push({ silent: true, turn });
+      if (url)
+        clips.push({
+          url,
+          revoke,
+          turn,
+          filter: this.shouldApplyCommunicationFilter("phone", turn),
+        });
+      else if (captions && turn.role === "user" && turn.text)
+        clips.push({ silent: true, turn });
     }
     return { clips, current, left: turns.length - clips.length };
   },
@@ -526,7 +729,8 @@ export const callHistory = {
       for (const clip of clips) if (clip.revoke) URL.revokeObjectURL(clip.url);
     }
     if (left) this.notify(`목소리가 없는 대사 ${left}개는 빠졌습니다.`, "info");
-    if (current !== session && body.isConnected) this.renderPhoneHistoryDetail(body, current, away);
+    if (current !== session && body.isConnected)
+      this.renderPhoneHistoryDetail(body, current, away);
   },
 
   /**
@@ -535,7 +739,8 @@ export const callHistory = {
    */
   pickDownload() {
     const screen = document.querySelector("#sv-smartphone .sv-phone-screen");
-    if (!this.downloadCallVideo || !this.canMakeCallVideo() || !screen) return Promise.resolve("audio");
+    if (!this.downloadCallVideo || !this.canMakeCallVideo() || !screen)
+      return Promise.resolve("audio");
     screen.querySelector(".sv-ph-sheet")?.remove();
     const sheet = document.createElement("div");
     sheet.className = "sv-ph-sheet";
@@ -610,7 +815,11 @@ export const callHistory = {
    */
   heardPosition(sessionId) {
     try {
-      return Number(JSON.parse(localStorage.getItem(HEARD_KEY) || "{}")[sessionId]) || 0;
+      return (
+        Number(
+          JSON.parse(localStorage.getItem(HEARD_KEY) || "{}")[sessionId],
+        ) || 0
+      );
     } catch {
       return 0;
     }
@@ -621,7 +830,10 @@ export const callHistory = {
       const heard = JSON.parse(localStorage.getItem(HEARD_KEY) || "{}");
       delete heard[sessionId];
       if (position > 0) heard[sessionId] = position;
-      localStorage.setItem(HEARD_KEY, JSON.stringify(Object.fromEntries(Object.entries(heard).slice(-30))));
+      localStorage.setItem(
+        HEARD_KEY,
+        JSON.stringify(Object.fromEntries(Object.entries(heard).slice(-30))),
+      );
     } catch {
       /* storage blocked */
     }
@@ -638,7 +850,11 @@ export const callHistory = {
 
   saveCallView(view) {
     try {
-      if (view) localStorage.setItem(VIEW_KEY, JSON.stringify({ ...view, chat: this.currentChatId() }));
+      if (view)
+        localStorage.setItem(
+          VIEW_KEY,
+          JSON.stringify({ ...view, chat: this.currentChatId() }),
+        );
       else localStorage.removeItem(VIEW_KEY);
     } catch {
       /* storage blocked */
@@ -693,10 +909,19 @@ export const callHistory = {
           : saved < turns.length
             ? saved
             : 0;
-    const run = (this.callPlayback = { sessionId: session.id, position: start, playing: true, stopped: false });
-    const over = () => run.stopped || operation.signal.aborted || this.callPlayback !== run;
+    const run = (this.callPlayback = {
+      sessionId: session.id,
+      position: start,
+      playing: true,
+      stopped: false,
+    });
+    const over = () =>
+      run.stopped || operation.signal.aborted || this.callPlayback !== run;
     // Played on a call screen: the line being said under who is on the call.
-    const shown = () => body.querySelector(`.sv-listen-screen[data-session="${CSS.escape(session.id)}"]`);
+    const shown = () =>
+      body.querySelector(
+        `.sv-listen-screen[data-session="${CSS.escape(session.id)}"]`,
+      );
     run.session = session;
     run.away = away;
     this.renderListenScreen(body, session, run, { away });
@@ -705,7 +930,8 @@ export const callHistory = {
       if (!view) return;
       const turn = turns[run.position];
       const caption = view.querySelector("[data-listen-caption]");
-      if (caption && turn) caption.innerHTML = this.listenCaptionHtml(session, turn);
+      if (caption && turn)
+        caption.innerHTML = this.listenCaptionHtml(session, turn);
       this.syncListenSteps(view, run.position, turns.length);
       run.ready = true;
     };
@@ -718,8 +944,15 @@ export const callHistory = {
         ? (made[index] ||= (async () => {
             const turn = turns[index];
             if (!voiced(turn)) return null;
-            if (turn.audio_url) return { url: this.apiUrl(turn.audio_url), revoke: false, mixed: Boolean(turn.sounds_mixed) };
-            const result = await this.makePhoneTurnAudio(current, turn).catch(() => null);
+            if (turn.audio_url)
+              return {
+                url: this.apiUrl(turn.audio_url),
+                revoke: false,
+                mixed: Boolean(turn.sounds_mixed),
+              };
+            const result = await this.makePhoneTurnAudio(current, turn).catch(
+              () => null,
+            );
             if (!result) return null;
             if (result.session) current = result.session;
             return { url: result.audioUrl, revoke: true, mixed: result.mixed };
@@ -733,7 +966,8 @@ export const callHistory = {
         mark();
         // Two voices first, and two more whenever it catches up with the making, so a slow one
         // doesn't leave a gap midway.
-        if (!settled.has(index)) await Promise.all([prepare(index), prepare(index + 1)]);
+        if (!settled.has(index))
+          await Promise.all([prepare(index), prepare(index + 1)]);
         const ready = await prepare(index);
         prepare(index + 1);
         prepare(index + 2);
@@ -741,14 +975,23 @@ export const callHistory = {
         const turn = turns[index];
         if (run.next === null) {
           // A line without a voice (mine, with no persona voice) stays up long enough to read.
-          if (!ready) await this.listenWait(run, Math.min(6, 1.2 + Array.from(turn.text || "").length * 0.07) * 1000);
+          if (!ready)
+            await this.listenWait(
+              run,
+              Math.min(6, 1.2 + Array.from(turn.text || "").length * 0.07) *
+                1000,
+            );
           else
             await new Promise((resolve) =>
               // Kept until the end (‹ can play it again); let go below.
               this.playWithSounds(ready.url, turn.script, null, false, {
                 mixed: ready.mixed,
-                communicationFilter: this.shouldApplyCommunicationFilter("phone", turn),
+                communicationFilter: this.shouldApplyCommunicationFilter(
+                  "phone",
+                  turn,
+                ),
                 aside: Boolean(turn.aside),
+                place: this.turnPlace(turn),
                 onEnded: resolve,
                 onStop: () => {
                   // ‹ › stop it to go to another line; anything else stops the listening.
@@ -772,13 +1015,15 @@ export const callHistory = {
         this.saveHeardPosition(session.id, 0);
       }
     } finally {
-      for (const clip of made) clip?.then((ready) => ready?.revoke && URL.revokeObjectURL(ready.url));
+      for (const clip of made)
+        clip?.then((ready) => ready?.revoke && URL.revokeObjectURL(ready.url));
       run.playing = false;
       clearInterval(run.clock);
       // Heard to the end: the call screen says so, to hear again or go back. Stopped: back to
       // the call, drawn again with the voices made meanwhile (their play buttons).
       if (shown() && !operation.signal.aborted) {
-        if (!run.stopped) this.renderListenScreen(body, current, run, { ended: true, away });
+        if (!run.stopped)
+          this.renderListenScreen(body, current, run, { ended: true, away });
         else {
           const shell = document.getElementById("sv-smartphone");
           if (shell) shell.dataset.screen = "app";
@@ -807,7 +1052,8 @@ export const callHistory = {
       this.callDirectionDraft = "";
     } finally {
       this.writtenCallBusy = "";
-      if (!current && body.isConnected) this.renderListenScreen(body, session, {}, { ended: true, away });
+      if (!current && body.isConnected)
+        this.renderListenScreen(body, session, {}, { ended: true, away });
     }
     if (!body.isConnected) return;
     const last = Math.max(0, ...current.turns.map((turn) => turn.part || 0));
@@ -839,26 +1085,46 @@ export const callHistory = {
     const writing = this.writtenCallBusy === session.id;
     // Stays on screen through other redraws until left (나중에 이어 가기) or ended.
     if (open) this.callListenOpen = { session, away };
-    else if (this.callListenOpen?.session.id === session.id) this.callListenOpen = null;
+    else if (this.callListenOpen?.session.id === session.id)
+      this.callListenOpen = null;
     this.saveCallView({ sessionId: session.id, away, open });
     // The line said now (drawn again mid-call), the last one once it ended.
-    const line = ended ? (session.turns || []).at(-1) : run.ready ? session.turns?.[run.position] : null;
+    const line = ended
+      ? (session.turns || []).at(-1)
+      : run.ready
+        ? session.turns?.[run.position]
+        : null;
     const control = (attrs, icon, label, cls = "sv-listen-back") =>
       `<div><button type="button" class="sv-call-end ${cls}" ${attrs} aria-label="${label}" ${writing ? "disabled" : ""}><i class="fa-solid ${icon}" aria-hidden="true"></i></button><small>${label}</small></div>`;
     body.innerHTML = `
       <div class="sv-call-screen sv-listen-screen${many ? " sv-listen-between" : ""}${members.length > 2 ? " sv-listen-many" : ""}" data-phone-wallpaper data-session="${escapeHtml(session.id)}">
         <div class="sv-call-identity">
-          ${many ? `<div class="sv-room-avatar" aria-hidden="true">${members.slice(0, 4).map((member) => this.contactAvatarMarkup(member)).join("")}</div>` : this.contactAvatarMarkup(members[0])}
+          ${
+            many
+              ? `<div class="sv-room-avatar" aria-hidden="true">${members
+                  .slice(0, 4)
+                  .map((member) => this.contactAvatarMarkup(member))
+                  .join("")}</div>`
+              : this.contactAvatarMarkup(members[0])
+          }
           <h2>${names}</h2>
           <span class="sv-call-state">${ended && !open ? "" : '<i class="sv-live-dot" aria-hidden="true"></i>'}<span>${
-            open ? "통화 중 · 멈춤" : ended ? "통화가 끝났습니다" : between ? "엿듣는 중" : "지난 통화 듣는 중"
+            open
+              ? "통화 중 · 멈춤"
+              : ended
+                ? "통화가 끝났습니다"
+                : between
+                  ? "엿듣는 중"
+                  : "지난 통화 듣는 중"
           }</span>${ended ? "" : ' · <time class="sv-call-duration">00:00</time>'}</span>
         </div>
         <div class="sv-call-live-line">${
           writing
             ? '<div class="sv-call-thinking"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>다음 부분 쓰는 중…</span></div>'
             : `<div class="sv-call-caption" data-listen-caption>${
-                line ? this.listenCaptionHtml(session, line) : '<p class="sv-call-waiting">연결 중…</p>'
+                line
+                  ? this.listenCaptionHtml(session, line)
+                  : '<p class="sv-call-waiting">연결 중…</p>'
               }</div>`
         }</div>
         ${
@@ -867,19 +1133,30 @@ export const callHistory = {
                  <textarea id="sv-call-direction" rows="1" maxlength="600" placeholder="다음 내용 지시 (비우면 AI가 알아서)" aria-label="다음 내용 지시" ${writing ? "disabled" : ""}>${escapeHtml(this.callDirectionDraft || "")}</textarea>
                  <button type="submit" aria-label="이어 가기" title="이어 가기: 다음 부분을 써서 들려줍니다" ${writing ? "disabled" : ""}><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
                </form>${
-                 between ? `<button type="button" class="sv-listen-later" data-listen-back ${writing ? "disabled" : ""}>나중에 이어 가기</button>` : ""
+                 between
+                   ? `<button type="button" class="sv-listen-later" data-listen-back ${writing ? "disabled" : ""}>나중에 이어 가기</button>`
+                   : ""
                }`
             : ""
         }
         <div class="sv-call-controls sv-listen-controls">${
           open
-            ? control("data-listen-again", "fa-rotate-left", "다시 듣기", "sv-listen-again") +
+            ? control(
+                "data-listen-again",
+                "fa-rotate-left",
+                "다시 듣기",
+                "sv-listen-again",
+              ) +
               control("data-listen-part-again", "fa-arrows-rotate", "재생성") +
               control("data-listen-finish", "fa-flag-checkered", "마무리") +
               control("data-listen-hangup", "fa-phone-slash", "끊기", "")
             : ended
-              ? control("data-listen-again", "fa-rotate-left", "다시 듣기", "sv-listen-again") +
-                control("data-listen-back", "fa-list", "통화 기록")
+              ? control(
+                  "data-listen-again",
+                  "fa-rotate-left",
+                  "다시 듣기",
+                  "sv-listen-again",
+                ) + control("data-listen-back", "fa-list", "통화 기록")
               : `${this.listenStepHtml("data-listen-prev", "fa-backward-step", "앞 대사")}<div><button type="button" class="sv-call-end" data-listen-stop aria-label="그만 듣기" title="그만 듣기"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>${this.listenStepHtml("data-listen-next", "fa-forward-step", "다음 대사")}`
         }</div>
       </div>`;
@@ -893,12 +1170,18 @@ export const callHistory = {
       this.stopPlayback();
     });
     const count = (session.turns || []).length;
-    body.querySelector("[data-listen-prev]")?.addEventListener("click", () => this.listenStep(run, -1, count));
-    body.querySelector("[data-listen-next]")?.addEventListener("click", () => this.listenStep(run, 1, count));
+    body
+      .querySelector("[data-listen-prev]")
+      ?.addEventListener("click", () => this.listenStep(run, -1, count));
+    body
+      .querySelector("[data-listen-next]")
+      ?.addEventListener("click", () => this.listenStep(run, 1, count));
     if (!ended) this.syncListenSteps(body, run.position ?? 0, count);
     body
       .querySelector("[data-listen-again]")
-      ?.addEventListener("click", () => this.run(() => this.playCallThrough(body, session, away, { from: 0 })));
+      ?.addEventListener("click", () =>
+        this.run(() => this.playCallThrough(body, session, away, { from: 0 })),
+      );
     body.querySelector("[data-listen-back]")?.addEventListener("click", () => {
       this.callListenOpen = null;
       if (shell) shell.dataset.screen = "app";
@@ -908,24 +1191,35 @@ export const callHistory = {
     direction?.addEventListener("input", () => {
       this.callDirectionDraft = direction.value;
     });
-    const write = (mode) => this.run(() => this.writeCallPart(body, session, mode, away));
-    body.querySelector(".sv-call-direction")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      write("next");
-    });
-    body.querySelector("[data-listen-part-again]")?.addEventListener("click", () => write("again"));
-    body.querySelector("[data-listen-finish]")?.addEventListener("click", () => write("last"));
+    const write = (mode) =>
+      this.run(() => this.writeCallPart(body, session, mode, away));
+    body
+      .querySelector(".sv-call-direction")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        write("next");
+      });
+    body
+      .querySelector("[data-listen-part-again]")
+      ?.addEventListener("click", () => write("again"));
+    body
+      .querySelector("[data-listen-finish]")
+      ?.addEventListener("click", () => write("last"));
     body.querySelector("[data-listen-hangup]")?.addEventListener("click", () =>
       this.run(async () => {
         const closed = await this.closeWrittenCall(session);
-        if (body.isConnected) this.renderListenScreen(body, closed, {}, { ended: true, away });
+        if (body.isConnected)
+          this.renderListenScreen(body, closed, {}, { ended: true, away });
       }),
     );
     if (!ended) {
       run.began ||= Date.now();
       const tick = () => {
         const time = body.querySelector(".sv-listen-screen .sv-call-duration");
-        if (time) time.textContent = this.formatCallDuration((Date.now() - run.began) / 1000);
+        if (time)
+          time.textContent = this.formatCallDuration(
+            (Date.now() - run.began) / 1000,
+          );
       };
       tick();
       clearInterval(run.clock);
@@ -937,21 +1231,37 @@ export const callHistory = {
    * Plays a past call's line, with its sounds; a line without a voice gets one first.
    * `regenerate` (음성 재생성): a new voice for the same words.
    */
-  async playHistoryTurn(body, session, turn, button, away = false, regenerate = false) {
+  async playHistoryTurn(
+    body,
+    session,
+    turn,
+    button,
+    away = false,
+    regenerate = false,
+  ) {
     if (!turn) return;
     // Pressed again while it sounds: it stops.
     if (!regenerate && this.playingTurnId === turn.id && this.currentAudio) {
       this.stopPlayback();
       return;
     }
-    const communicationFilter = this.shouldApplyCommunicationFilter("phone", turn);
-    const index = (session.turns || []).findIndex((item) => item.id === turn.id);
+    const communicationFilter = this.shouldApplyCommunicationFilter(
+      "phone",
+      turn,
+    );
+    const index = (session.turns || []).findIndex(
+      (item) => item.id === turn.id,
+    );
     // Its play button pulses and its line is outlined while it sounds.
     const play = (url, revoke, mixed, lit) => {
       // A redrawn button isn't the one playback lit, so the marks are looked up, not remembered.
       const unmark = () => {
-        body.querySelectorAll(".sv-history-transcript .sv-call-reading").forEach((article) => article.classList.remove("sv-call-reading"));
-        body.querySelectorAll(".sv-history-transcript .sv-call-replay.sv-playing").forEach((lit) => lit.classList.remove("sv-playing"));
+        body
+          .querySelectorAll(".sv-history-transcript .sv-call-reading")
+          .forEach((article) => article.classList.remove("sv-call-reading"));
+        body
+          .querySelectorAll(".sv-history-transcript .sv-call-replay.sv-playing")
+          .forEach((lit) => lit.classList.remove("sv-playing"));
       };
       const done = () => {
         if (this.playingTurnId === turn.id) {
@@ -961,23 +1271,42 @@ export const callHistory = {
       };
       unmark();
       this.playingTurnId = turn.id;
-      body.querySelector(`.sv-history-transcript article[data-index="${index}"]`)?.classList.add("sv-call-reading");
-      this.playWithSounds(url, turn.script, lit, revoke, { mixed, communicationFilter, aside: Boolean(turn.aside), onEnded: done, onStop: done });
+      body
+        .querySelector(`.sv-history-transcript article[data-index="${index}"]`)
+        ?.classList.add("sv-call-reading");
+      this.playWithSounds(url, turn.script, lit, revoke, {
+        mixed,
+        communicationFilter,
+        aside: Boolean(turn.aside),
+        place: this.turnPlace(turn),
+        onEnded: done,
+        onStop: done,
+      });
     };
     if (turn.audio_url && !regenerate) {
-      play(this.apiUrl(turn.audio_url), false, Boolean(turn.sounds_mixed), button);
+      play(
+        this.apiUrl(turn.audio_url),
+        false,
+        Boolean(turn.sounds_mixed),
+        button,
+      );
       return;
     }
     this.unlockAudioForMobile();
     const icon = button.innerHTML;
     button.disabled = true;
-    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+    button.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
     try {
       const made = await this.makePhoneTurnAudio(session, turn, regenerate);
       if (!made) return;
       // Drawn again with its new voice first, so the button that plays it is the one lit.
       let lit = null;
-      if (made.session && body.isConnected && body.querySelector(".sv-phone-history-detail")) {
+      if (
+        made.session &&
+        body.isConnected &&
+        body.querySelector(".sv-phone-history-detail")
+      ) {
         this.renderPhoneHistoryDetail(body, made.session, away);
         lit = body.querySelector(`.sv-call-replay[data-turn="${index}"]`);
       }
@@ -991,10 +1320,14 @@ export const callHistory = {
   },
 
   callStatusLabel(session) {
-    if (session.continuing) return session.call_direction === "overheard" ? "엿듣는 중 · 이어 가는 중" : "이어 가는 중";
+    if (session.continuing)
+      return session.call_direction === "overheard"
+        ? "엿듣는 중 · 이어 가는 중"
+        : "이어 가는 중";
     if (session.call_direction === "overheard") return "엿들은 통화";
     if (session.status === "rejected") return "거절";
-    if (session.status === "missed") return session.call_direction === "outgoing" ? "연결 안 됨" : "부재중";
+    if (session.status === "missed")
+      return session.call_direction === "outgoing" ? "연결 안 됨" : "부재중";
     if (session.status === "active") return "통화 중";
     if (session.status === "ringing") return "수신 중";
     return session.call_direction === "incoming" ? "수신 통화" : "발신 통화";

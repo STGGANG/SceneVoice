@@ -1,6 +1,11 @@
-import { dataBlock, ghostwriteFinal, ghostwriteSystem, phoneMessages } from "./prompts.js";
+import {
+  dataBlock,
+  ghostwriteFinal,
+  ghostwriteSystem,
+  phoneMessages,
+} from "./prompts.js";
 import { stripTags } from "../shared/providers.js";
-import { escapeHtml } from "./common.js";
+import { escapeHtml, stOf } from "./common.js";
 
 /**
  * 대필: the helper model drafts the user's next text or call line in their persona's voice.
@@ -9,10 +14,12 @@ import { escapeHtml } from "./common.js";
 export const ghostwrite = {
   /** The user's persona as the draft prompt sees it. */
   personaProfile() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     return {
       name: String(context.name1 || "User").slice(0, 160),
-      description: String(context.powerUserSettings?.persona_description || "").trim(),
+      description: String(
+        context.powerUserSettings?.persona_description || "",
+      ).trim(),
       performance_note: String(this.config.character_notes?.user || "").trim(),
     };
   },
@@ -23,7 +30,9 @@ export const ghostwrite = {
    */
   async ghostwriteDraft(mode, key = "", draft = "") {
     const profileId =
-      this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
+      this.config.phone?.connection_profile_id ||
+      this.config.connection_profile_id ||
+      "";
     if (!profileId || !this.connectionService)
       throw new Error("대필에 쓸 실리태번 연결 프로필을 먼저 골라 주십시오.");
     const operation = this.captureChat();
@@ -39,21 +48,28 @@ export const ghostwrite = {
       conversation = dataBlock(
         "call_transcript",
         turns.map((turn) => ({
-          speaker: turn.role === "user" ? persona.name : `${turn.speaker_name || other.name}${turn.aside ? " (in the background)" : ""}`,
+          speaker:
+            turn.role === "user"
+              ? persona.name
+              : `${turn.speaker_name || other.name}${turn.aside ? " (in the background)" : ""}`,
           text: turn.text,
         })),
       );
     } else {
-      const thread = (await this.loadMessages())
-        .filter((item) => this.messageThreadOf(item) === key)
-        .slice(-40);
+      const all = (await this.loadMessages()).filter(
+        (item) => this.messageThreadOf(item) === key,
+      );
+      const thread = this.lastTexts ? this.lastTexts(all) : all.slice(-40);
       other = this.threadContact(key);
       otherKey = other.group ? "" : key;
       lines = thread.map((item) => item.text);
       conversation = dataBlock(
         "text_thread",
         thread.map((item) => ({
-          from: item.role === "user" ? persona.name : item.character_name || other.name,
+          from:
+            item.role === "user"
+              ? persona.name
+              : item.character_name || other.name,
           text: item.text,
         })),
       );
@@ -69,12 +85,20 @@ export const ghostwrite = {
         dataBlock(
           "other",
           other.group
-            ? { group: other.name, members: other.members.map((member) => member.name) }
-            : { name: other.name, description: String(other.description || "").slice(0, 1500) },
+            ? {
+                group: other.name,
+                members: other.members.map((member) => member.name),
+              }
+            : {
+                name: other.name,
+                description: String(other.description || "").slice(0, 1500),
+              },
         ),
         dataBlock(
           "recent_chat",
-          this.buildRecentChatContext(this.config.phone?.context_messages ?? 10),
+          this.buildRecentChatContext(
+            this.config.phone?.context_messages ?? 10,
+          ),
         ),
         ...((await this.worldInfoBlocks?.(lines)) || []),
         ...this.currentTimeBlocks(otherKey ? [otherKey] : []),
@@ -84,23 +108,39 @@ export const ghostwrite = {
       draft.trim() ? [dataBlock("user_draft", draft.trim())] : [],
     );
     this.assertChat(operation);
-    const parsed = await this.requestSpokenReply(profileId, messages, translation ? 1000 : 600);
+    const parsed = await this.requestSpokenReply(
+      profileId,
+      messages,
+      translation ? 1000 : 600,
+    );
     this.assertChat(operation);
     const text = String(parsed?.text ?? "")
       .split("\n")
-      .map((line) => stripTags(line).replace(/^["“「]|["”」]$/g, "").trim())
+      .map((line) =>
+        stripTags(line)
+          .replace(/^["“「]|["”」]$/g, "")
+          .trim(),
+      )
       .filter(Boolean)
       .join(mode === "call" ? " " : "\n");
-    if (!text) throw new Error("보조 모델이 대필 내용을 돌려주지 않았습니다.");
+    if (!text) throw new Error("보조모델이 대필 내용을 돌려주지 않았습니다.");
     // Shown and kept only while the draft is sent as written; never part of a prompt.
-    const korean = translation ? String(parsed?.translation ?? "").trim().slice(0, 4000) : "";
-    this.draftTranslation = korean ? { key: mode === "call" ? "call" : key, text, translation: korean } : null;
+    const korean = translation
+      ? String(parsed?.translation ?? "")
+          .trim()
+          .slice(0, 4000)
+      : "";
+    this.draftTranslation = korean
+      ? { key: mode === "call" ? "call" : key, text, translation: korean }
+      : null;
     return text;
   },
 
   draftTranslationFor(key, value) {
     const note = this.draftTranslation;
-    return note && note.key === key && String(value || "").trim() === note.text ? note.translation : "";
+    return note && note.key === key && String(value || "").trim() === note.text
+      ? note.translation
+      : "";
   },
 
   draftTranslationHtml(key, value) {

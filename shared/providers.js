@@ -41,8 +41,17 @@ export const DELIVERY_TAGS = [
   "reflective",
   "matter-of-fact",
   "breathy",
+  "breathless",
+  "husky",
   "shaky",
   "hesitant",
+  // Named in ElevenLabs' or Fish's own prompting guides.
+  "excited",
+  "nervous",
+  "annoyed",
+  "mischievous",
+  "shouting",
+  "crying",
 ];
 // Voice and breath sounds that can sit inside a line (ElevenLabs' forms; Fish reads them too).
 export const SOUND_TAGS = [
@@ -59,6 +68,8 @@ export const SOUND_TAGS = [
   "sobs",
   "yawns",
   "scoffs",
+  "panting",
+  "inhales deeply",
   // A kiss; ElevenLabs performs it.
   "smooch",
 ];
@@ -81,23 +92,33 @@ export const cleanTag = (value) =>
     .slice(0, 160);
 
 const TAG = /\[([^\[\]\r\n]{1,160})\]/g;
-const oneSpace = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+const oneSpace = (value) =>
+  String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 // Japanese and Chinese text has no spaces between words, so a removed tag leaves none there.
 const NO_SPACE = /[\u3000-\u30ff\u3400-\u9fff\uff00-\uffef]/;
 /** The line without its [tags]. */
 export const stripTags = (value) =>
   oneSpace(
-    String(value ?? "").replace(/(\s*)\[[^\[\]\r\n]{1,160}\](\s*)/g, (match, left, right, offset, whole) => {
-      const before = whole[offset - 1] || "";
-      const after = whole[offset + match.length] || "";
-      if (NO_SPACE.test(before) || NO_SPACE.test(after)) return "";
-      return left || right || (/\w/.test(before) && /\w/.test(after)) ? " " : "";
-    }),
+    String(value ?? "").replace(
+      /(\s*)\[[^\[\]\r\n]{1,160}\](\s*)/g,
+      (match, left, right, offset, whole) => {
+        const before = whole[offset - 1] || "";
+        const after = whole[offset + match.length] || "";
+        if (NO_SPACE.test(before) || NO_SPACE.test(after)) return "";
+        return left || right || (/\w/.test(before) && /\w/.test(after))
+          ? " "
+          : "";
+      },
+    ),
   );
 const sameWords = (a, b) => a.replace(/\s+/g, "") === b.replace(/\s+/g, "");
 /** Whether a tagged line still has exactly the words of the line (spacing aside). */
-export const keepsLine = (script, line) => sameWords(stripTags(script), String(line ?? ""));
-const scriptTags = (script) => [...String(script || "").matchAll(TAG)].map((match) => match[1]);
+export const keepsLine = (script, line) =>
+  sameWords(stripTags(script), String(line ?? ""));
+const scriptTags = (script) =>
+  [...String(script || "").matchAll(TAG)].map((match) => match[1]);
 
 /**
  * A line with audio tags woven in, e.g. "[clears throat] so, you... [chuckles] just kidding."
@@ -106,7 +127,9 @@ const scriptTags = (script) => [...String(script || "").matchAll(TAG)].map((matc
  * Without `line` (a saved manual edit) only the tags are cleaned; it is checked when spoken.
  */
 export function cleanScript(script, line) {
-  let value = String(script ?? "").replace(/\r\n?/g, "\n").trim();
+  let value = String(script ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
   if (!value || value.length > 12000) return "";
   value = value.replace(TAG, (_, tag) => {
     const clean = cleanTag(tag);
@@ -182,12 +205,13 @@ export function normalizeSpeech(input, { matchScript = true } = {}) {
     text: spoken,
     script,
     tags,
-    emotion: tagEmotion(tags, Array.isArray(input.tags) ? "default" : input.emotion),
+    emotion: tagEmotion(
+      tags,
+      Array.isArray(input.tags) ? "default" : input.emotion,
+    ),
     // Kept for older readers of saved records.
     direction: tags.join(", "),
-    language: SPEECH_LANGUAGES.includes(input.language)
-      ? input.language
-      : "ja",
+    language: SPEECH_LANGUAGES.includes(input.language) ? input.language : "ja",
     intensity: bounded(input.intensity, 0, 1, 0.5),
   };
 }
@@ -200,7 +224,8 @@ export function deliveryCue(tags, engine = "elevenlabs") {
 }
 /** What the engine reads: the tagged line when there is one, otherwise leading tags + the line. */
 export function directedText(input, engine = "elevenlabs") {
-  if (input.script) return engine === "fish" ? fishScript(input.script) : input.script;
+  if (input.script)
+    return engine === "fish" ? fishScript(input.script) : input.script;
   const cue = deliveryCue(normalizeTags(input), engine);
   return cue ? `${cue} ${input.text}` : input.text;
 }
@@ -209,7 +234,9 @@ export function directedText(input, engine = "elevenlabs") {
  * already starts with is not doubled.
  */
 export function withAlwaysTags(raw, always = []) {
-  const tags = (Array.isArray(always) ? always : []).map(cleanTag).filter(Boolean);
+  const tags = (Array.isArray(always) ? always : [])
+    .map(cleanTag)
+    .filter(Boolean);
   if (!tags.length) return raw;
   const known = new Set(tags.map((tag) => tag.toLowerCase()));
   const lead = tags.map((tag) => `[${tag}]`).join("");
@@ -221,7 +248,10 @@ export function withAlwaysTags(raw, always = []) {
       .filter((tag) => !known.has(cleanTag(tag).toLowerCase()))
       .map((tag) => `[${tag}]`)
       .join("");
-    return { ...raw, script: `${lead}${kept} ${script.slice(head.length).trimStart()}` };
+    return {
+      ...raw,
+      script: `${lead}${kept} ${script.slice(head.length).trimStart()}`,
+    };
   }
   const rest = (Array.isArray(raw.tags) ? raw.tags : [])
     .map(cleanTag)
@@ -243,13 +273,68 @@ export function flowingText(value, language = "") {
   const cjk = ["ja", "zh"].includes(language);
   return lines
     .map((line, index) =>
-      index === lines.length - 1 || /[.!?。！？…~〜♪」』)\]"”'’,、，:;]$/.test(line)
+      index === lines.length - 1 ||
+      /[.!?。！？…~〜♪」』)\]"”'’,、，:;]$/.test(line)
         ? line
         : `${line}${cjk ? "。" : "."}`,
     )
     .join(cjk ? "" : " ");
 }
 
+const LATIN = /[A-Za-z0-9À-ɏ]/;
+/**
+ * 발음 사전: words the engine misreads go to it written the way they are said (夏川 → なつかわ);
+ * the line itself stays as written. Longest word first, each place once, [tags] untouched.
+ * A word in Latin letters or digits counts only as a whole word.
+ */
+export function respell(value, words) {
+  const source = String(value ?? "");
+  const map = new Map(
+    (Array.isArray(words) ? words : [])
+      .filter((word) => word?.from && word.to)
+      .map(({ from, to }) => [String(from).toLowerCase(), String(to)]),
+  );
+  if (!map.size) return source;
+  const pattern = new RegExp(
+    [...map.keys()]
+      .sort((a, b) => b.length - a.length)
+      .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|"),
+    "giu",
+  );
+  return source
+    .split(/(\[[^\[\]\r\n]{1,160}\])/)
+    .map((part, index) =>
+      index % 2
+        ? part
+        : part.replace(pattern, (match, offset) => {
+            const to = map.get(match.toLowerCase());
+            if (to === undefined) return match;
+            const before = part[offset - 1] || "";
+            const after = part[offset + match.length] || "";
+            if (
+              (LATIN.test(match[0]) && LATIN.test(before)) ||
+              (LATIN.test(match.at(-1)) && LATIN.test(after))
+            )
+              return match;
+            return to;
+          }),
+    )
+    .join("");
+}
+
+/** The words in use for these bot cards: those for every card, then the cards' own (which win). */
+export function wordsFor(words, cards) {
+  const list = Array.isArray(words) ? words : [];
+  const open = new Set(Array.isArray(cards) ? cards.map(String) : []);
+  return [
+    ...list.filter((word) => !word?.card),
+    ...list.filter((word) => word?.card && open.has(word.card)),
+  ];
+}
+
+// How far a line's intensity may loosen the consistency setting (see buildSpeechRequest).
+const INTENSITY_PULL = 0.5;
 export function buildSpeechRequest(settings, raw) {
   const input = normalizeSpeech(raw);
   const engine = settings.engine,
@@ -260,9 +345,17 @@ export function buildSpeechRequest(settings, raw) {
   if (!voice || !/^[a-zA-Z0-9_-]{1,200}$/.test(voice))
     throw new UserError("음성의 Voice / Reference ID를 설정해 주십시오.");
   // ElevenLabs models before v3 would read a bracketed tag aloud: they get the plain line.
-  const traits = engine === "elevenlabs" ? elevenModelTraits(config.model) : null;
-  const useTags = engine !== "elevenlabs" || (traits.tags && config.use_audio_tags !== false);
-  const spoken = flowingText(useTags ? directedText(input, engine) : input.text, input.language);
+  const traits =
+    engine === "elevenlabs" ? elevenModelTraits(config.model) : null;
+  const useTags =
+    engine !== "elevenlabs" || (traits.tags && config.use_audio_tags !== false);
+  const spoken = respell(
+    flowingText(
+      useTags ? directedText(input, engine) : input.text,
+      input.language,
+    ),
+    wordsFor(settings.pronunciation?.words, raw.card_keys),
+  );
   const control = input.script
     ? directedText(input, engine).slice(0, 400)
     : deliveryCue(input.tags, engine) || "기본 연기";
@@ -272,6 +365,10 @@ export function buildSpeechRequest(settings, raw) {
     );
   if (spoken.length > 10000 && !traits)
     throw new UserError("연기 지시를 포함한 대사가 10,000자를 초과했습니다.");
+  // A line performed with more feeling than usual (intensity above 0.5) loosens the engine's own
+  // consistency setting a little: up to a quarter of the way from the user's value to its loose
+  // end at intensity 1. The user's value stays the rule for ordinary lines.
+  const loosen = Math.max(0, input.intensity - 0.5) * INTENSITY_PULL;
   if (engine === "fish")
     return {
       engine,
@@ -284,7 +381,9 @@ export function buildSpeechRequest(settings, raw) {
       body: {
         text: spoken,
         reference_id: voice,
-        temperature: config.temperature,
+        temperature:
+          Number(config.temperature) +
+          (1 - Number(config.temperature)) * loosen,
         top_p: config.top_p,
         prosody: { speed: config.speed, volume: 0, normalize_loudness: true },
         normalize: true,
@@ -295,14 +394,17 @@ export function buildSpeechRequest(settings, raw) {
       },
     };
   const voiceSettings = {
-    stability: config.stability,
+    stability: Number(config.stability) * (1 - loosen),
     similarity_boost: config.similarity_boost,
   };
-  if (traits.v3)
-    // V3's three delivery modes: Creative / Natural / Robust.
+  if (traits.v3) {
+    // V3's three delivery modes (Creative / Natural / Robust), by the user's own value: a line's
+    // intensity is too small a step to move between them.
+    const wanted = Number(config.stability);
     voiceSettings.stability = [0, 0.5, 1].reduce((a, b) =>
-      Math.abs(b - config.stability) < Math.abs(a - config.stability) ? b : a,
+      Math.abs(b - wanted) < Math.abs(a - wanted) ? b : a,
     );
+  }
   if (traits.style) voiceSettings.style = config.style;
   // Speaking speed, only to models that have it (v4 doesn't).
   if (traits.speed && Number(config.speed) && Number(config.speed) !== 1)
@@ -312,7 +414,11 @@ export function buildSpeechRequest(settings, raw) {
     input,
     voice,
     model: config.model,
-    control: useTags ? control : traits.tags ? "태그 미사용" : "태그 미사용 · 이 모델은 오디오 태그를 읽지 못함",
+    control: useTags
+      ? control
+      : traits.tags
+        ? "태그 미사용"
+        : "태그 미사용 · 이 모델은 오디오 태그를 읽지 못함",
     url: `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`,
     headers: {},
     body: {

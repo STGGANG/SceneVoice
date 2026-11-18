@@ -1,5 +1,8 @@
 // Small helpers and constants shared by the client modules.
-import { EMOTIONS as EMOTION_LIST, settingsWithDefaults } from "../shared/settings.js";
+import {
+  EMOTIONS as EMOTION_LIST,
+  settingsWithDefaults,
+} from "../shared/settings.js";
 import { sha256, contentKey } from "../shared/hash.js";
 import { normalizeTags, tagEmotion } from "../shared/providers.js";
 /** "[frustrated][emphatic]" for display, or the plain-delivery label. */
@@ -41,7 +44,9 @@ function escapeHtml(value) {
 let inertDocument = null;
 function stripMarkup(value) {
   inertDocument ||= document.implementation?.createHTMLDocument?.("") || null;
-  const holder = inertDocument ? inertDocument.body : document.createElement("div");
+  const holder = inertDocument
+    ? inertDocument.body
+    : document.createElement("div");
   holder.innerHTML = String(value ?? "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/\[TTSVoice[\s\S]*?\]/gi, "");
@@ -70,6 +75,23 @@ function clamp(value, min, max) {
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : min;
 }
 
+/**
+ * 공간감: where a line is heard from. side: "left" | "right" | "" (centre); space: "close" |
+ * "far" | "muffled" | "" (as it is). Anything else a model returns counts as the plain value.
+ */
+function normalizePlace(item) {
+  const pick = (value, choices) => {
+    const word = String(value ?? "")
+      .trim()
+      .toLowerCase();
+    return choices.includes(word) ? word : "";
+  };
+  return {
+    side: pick(item?.side, ["left", "right"]),
+    space: pick(item?.space, ["close", "far", "muffled"]),
+  };
+}
+
 const simpleHash = (value) => sha256(String(value ?? ""));
 const mergeConfig = settingsWithDefaults;
 
@@ -87,7 +109,15 @@ export {
   simpleHash,
   mergeConfig,
   normalizeTags,
+  normalizePlace,
   tagEmotion,
   tagsText,
   contentKey,
 };
+
+/**
+ * 실리태번's context as this app sees it: the open chat's, or (the phone visiting another bot
+ * card, client/visit.js) that card's chat. Everything that reads the chat goes through here.
+ */
+export const stOf = (app) =>
+  app?.scopeContext ?? window.SillyTavern?.getContext?.();

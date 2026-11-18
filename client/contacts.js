@@ -1,8 +1,13 @@
 // 스마트폰 연락처: the people from 화자 설정 as phone contacts, with pictures, quick calls and
 // per-card hiding.
-import { escapeHtml } from "./common.js";
+import { escapeHtml, stOf } from "./common.js";
 import { SPEECH_LANGUAGES, elevenModelTraits } from "../shared/settings.js";
-import { resolveVoice, globalUsedIn, cardStandIn, personNames } from "../shared/casting.js";
+import {
+  resolveVoice,
+  globalUsedIn,
+  cardStandIn,
+  personNames,
+} from "../shared/casting.js";
 
 // Speakers registered per bot card double as phone contacts.
 // A card key ("character:<avatar>") holds the card's own voice; other entries may name
@@ -11,7 +16,7 @@ import { resolveVoice, globalUsedIn, cardStandIn, personNames } from "../shared/
 export const contacts = {
   /** A character or group chat is open (not ST's own welcome chat, "SillyTavern System"). */
   hasCharacterChat() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     if (context.groupId !== undefined && context.groupId !== null) return true;
     return (
       context.characterId !== undefined &&
@@ -22,7 +27,7 @@ export const contacts = {
 
   /** Cards of the open chat: the group members in a group chat, otherwise the one card. */
   currentCardKeys() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     if (context.groupId !== undefined && context.groupId !== null) {
       const group = (context.groups || []).find(
         (item) => String(item.id) === String(context.groupId),
@@ -36,7 +41,7 @@ export const contacts = {
   },
 
   cardInfo(key) {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const avatar = String(key || "").startsWith("character:")
       ? key.slice("character:".length)
       : "";
@@ -60,11 +65,16 @@ export const contacts = {
   },
 
   /** The people registered under a card, in the order they were added; personas only on request. */
-  cardPeople(cardKey, { personas = false, voices = this.config.character_voices || {} } = {}) {
+  cardPeople(
+    cardKey,
+    { personas = false, voices = this.config.character_voices || {} } = {},
+  ) {
     return Object.entries(voices)
       .filter(
         ([key, entry]) =>
-          key !== cardKey && entry?.card === cardKey && (personas || !entry.persona),
+          key !== cardKey &&
+          entry?.card === cardKey &&
+          (personas || !entry.persona),
       )
       .map(([key]) => key);
   },
@@ -88,10 +98,12 @@ export const contacts = {
   /** The bot cards a global person is switched on for, spelled out (one used everywhere: all known cards). */
   globalUseList(entry = {}) {
     if (Array.isArray(entry.use_cards)) return entry.use_cards;
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     return [
       ...new Set([
-        ...Object.keys(this.config.character_voices || {}).filter((key) => key.startsWith("character:")),
+        ...Object.keys(this.config.character_voices || {}).filter((key) =>
+          key.startsWith("character:"),
+        ),
         ...(context.characters || []).map((card) => `character:${card.avatar}`),
       ]),
     ].slice(0, 200);
@@ -104,17 +116,25 @@ export const contacts = {
    * only one, else the old shared "user" voice.
    */
   personaKey() {
-    const context = window.SillyTavern?.getContext?.() || {};
-    const me = String(context.name1 || "").trim().toLowerCase();
+    const context = stOf(this) || {};
+    const me = String(context.name1 || "")
+      .trim()
+      .toLowerCase();
     const cards = this.currentCardKeys();
     const personas = Object.entries(this.config.character_voices || {}).filter(
       ([key, entry]) => key.startsWith("speaker:") && entry?.persona,
     );
     const named = ([, entry]) => Boolean(me) && personNames(entry).includes(me);
-    const own = personas.filter(([, entry]) => entry.card && cards.includes(entry.card));
-    const global = personas.filter(([, entry]) => !entry.card && this.globalInUse(entry, cards));
+    const own = personas.filter(
+      ([, entry]) => entry.card && cards.includes(entry.card),
+    );
+    const global = personas.filter(
+      ([, entry]) => !entry.card && this.globalInUse(entry, cards),
+    );
     const chosen = global.filter(([, entry]) => Array.isArray(entry.use_cards));
-    const everywhere = global.filter(([, entry]) => !Array.isArray(entry.use_cards));
+    const everywhere = global.filter(
+      ([, entry]) => !Array.isArray(entry.use_cards),
+    );
     const found =
       own.find(named) ||
       own[0] ||
@@ -135,12 +155,25 @@ export const contacts = {
 
   /**
    * The card itself counts as a person (a contact, someone whose state is tracked) only when it
-   * reads everything with one voice, or when no people are registered under it yet and no
-   * global person named like it stands for it.
+   * reads everything with one voice, or when it has no people: none registered under it, no
+   * global person named like it standing for it, and (for a card without a voice of its own)
+   * no global person switched on for it by name.
    */
   cardIsPerson(cardKey) {
-    if (this.config.character_voices?.[cardKey]?.single_voice === true) return true;
-    return !this.cardPeople(cardKey).length && !this.cardStandIn(cardKey);
+    const voices = this.config.character_voices || {};
+    if (voices[cardKey]?.single_voice === true) return true;
+    if (this.cardPeople(cardKey).length || this.cardStandIn(cardKey))
+      return false;
+    if (voices[cardKey]?.voice_id) return true;
+    return !Object.entries(voices).some(
+      ([key, entry]) =>
+        key.startsWith("speaker:") &&
+        entry &&
+        !entry.card &&
+        !entry.persona &&
+        Array.isArray(entry.use_cards) &&
+        entry.use_cards.includes(cardKey),
+    );
   },
 
   /**
@@ -151,7 +184,8 @@ export const contacts = {
     if (!this.hasCharacterChat()) return [];
     const list = [];
     const add = (key) => {
-      if (!list.some((contact) => contact.key === key)) list.push(this.phoneContact(key));
+      if (!list.some((contact) => contact.key === key))
+        list.push(this.phoneContact(key));
     };
     for (const cardKey of this.currentCardKeys()) {
       if (this.cardIsPerson(cardKey)) add(cardKey);
@@ -196,13 +230,25 @@ export const contacts = {
         // Other names the same key was sent under (one message may carry the newer spelling).
         ...(this.senderNames?.get(key) || []),
       ]
-        .map((item) => String(item || "").trim().toLowerCase())
+        .map((item) =>
+          String(item || "")
+            .trim()
+            .toLowerCase(),
+        )
         .filter(Boolean),
     );
     // This chat's people first, then anyone registered.
-    const order = [...this.phoneContacts({ includeHidden: true }).map((contact) => contact.key), ...Object.keys(voices)];
+    const order = [
+      ...this.phoneContacts({ includeHidden: true }).map(
+        (contact) => contact.key,
+      ),
+      ...Object.keys(voices),
+    ];
     const found = order.find(
-      (item) => item.startsWith("speaker:") && voices[item] && personNames(voices[item]).some((alias) => names.has(alias)),
+      (item) =>
+        item.startsWith("speaker:") &&
+        voices[item] &&
+        personNames(voices[item]).some((alias) => names.has(alias)),
     );
     this.liveKeys.set(memo, found || key);
     return found || key;
@@ -211,7 +257,9 @@ export const contacts = {
   /** Hidden from the phone: a card or a card's person switched to hidden (a global person is on or off per card instead). */
   contactHidden(key) {
     const entry = this.config.character_voices?.[key] || {};
-    return Boolean((entry.card || key.startsWith("character:")) && entry.phone_hidden);
+    return Boolean(
+      (entry.card || key.startsWith("character:")) && entry.phone_hidden,
+    );
   },
 
   /** On the home screen for a quick call: those switched on, and the first contact unless switched off. */
@@ -222,7 +270,9 @@ export const contacts = {
 
   quickCallContacts() {
     const contacts = this.phoneContacts();
-    return contacts.filter((contact) => this.isQuickCall(contact.key, contacts));
+    return contacts.filter((contact) =>
+      this.isQuickCall(contact.key, contacts),
+    );
   },
 
   phoneContact(key) {
@@ -233,13 +283,17 @@ export const contacts = {
     const owner = ownerKey ? this.cardInfo(ownerKey) : null;
     // Without a card (persona, shared people, a group with no member list) use the profile itself.
     const self = owner || this.cardInfo(key);
-    const persona = window.SillyTavern?.getContext?.()?.name1 || "사용자";
+    const persona = stOf(this)?.name1 || "사용자";
     return {
       key,
       cardKey: ownerKey,
       name: String(
         entry.name ||
-          (key === "user" ? persona : key.startsWith("speaker:") ? "" : self.name) ||
+          (key === "user"
+            ? persona
+            : key.startsWith("speaker:")
+              ? ""
+              : self.name) ||
           "이름 없음",
       ),
       note: String(notes[key] || "").trim(),
@@ -254,7 +308,8 @@ export const contacts = {
    * JPEG where WebP can't be written), then stored. Returns its URL.
    */
   async uploadAvatar(file) {
-    if (!/^image\//.test(file?.type || "")) throw new Error("사진 파일을 골라 주십시오.");
+    if (!/^image\//.test(file?.type || ""))
+      throw new Error("사진 파일을 골라 주십시오.");
     const url = URL.createObjectURL(file);
     try {
       const image = await new Promise((resolve, reject) => {
@@ -272,27 +327,26 @@ export const contacts = {
       canvas.width = canvas.height = size;
       canvas
         .getContext("2d")
-        .drawImage(
-          image,
-          left,
-          top,
-          side,
-          side,
-          0,
-          0,
-          size,
-          size,
-        );
+        .drawImage(image, left, top, side, side, 0, 0, size, size);
       let dataUrl = canvas.toDataURL("image/webp", 0.85);
-      if (!dataUrl.startsWith("data:image/webp")) dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      if (!dataUrl.startsWith("data:image/webp"))
+        dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       const [head, data] = dataUrl.split(",");
-      const response = await this.request("/api/plugins/scenevoice/avatars", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: head.slice(5, head.indexOf(";")), data }),
-      }, 30000);
+      const response = await this.request(
+        "/api/plugins/scenevoice/avatars",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: head.slice(5, head.indexOf(";")),
+            data,
+          }),
+        },
+        30000,
+      );
       const saved = await response.json();
-      if (!response.ok) throw new Error(saved.detail || "사진을 저장하지 못했습니다.");
+      if (!response.ok)
+        throw new Error(saved.detail || "사진을 저장하지 못했습니다.");
       return saved.url;
     } finally {
       URL.revokeObjectURL(url);
@@ -302,7 +356,8 @@ export const contacts = {
   /** A picture without one chosen: a card's own, and the card's for its person of the same name. */
   defaultAvatar(key) {
     const entry = this.config.character_voices?.[key] || {};
-    if (!key?.startsWith?.("speaker:")) return this.cardInfo(key).avatarUrl || "";
+    if (!key?.startsWith?.("speaker:"))
+      return this.cardInfo(key).avatarUrl || "";
     if (!entry.card) return "";
     const owner = this.cardInfo(entry.card);
     return entry.name && entry.name === owner.name ? owner.avatarUrl || "" : "";
@@ -319,7 +374,9 @@ export const contacts = {
     const voices = this.config.character_voices || {};
     const pick = (entry) =>
       entry?.engine && entry.engine !== "inherit" ? entry.engine : "";
-    return pick(voices[key]) || pick(voices[voices[key]?.card]) || this.config.engine;
+    return (
+      pick(voices[key]) || pick(voices[voices[key]?.card]) || this.config.engine
+    );
   },
 
   /**
@@ -329,7 +386,9 @@ export const contacts = {
   phoneSoundEffects(key) {
     if (this.config.elevenlabs?.sound_effects !== true) return false;
     const choices = this.soundChoices?.();
-    return choices && choices.mine.length + choices.library.length ? choices : this.soundEffectsFor(key);
+    return choices && choices.mine.length + choices.library.length
+      ? choices
+      : this.soundEffectsFor(key);
   },
 
   /** Sound-effect tags are on and this person speaks with ElevenLabs. */
@@ -348,10 +407,11 @@ export const contacts = {
    */
   speakerHasVoice(key, kind = "dialogue") {
     const voices = this.config.character_voices || {};
-    const anyone = Object.values(voices).some((entry) => entry?.voice_id || entry?.thought_voice_id);
+    const anyone = Object.values(voices).some((entry) => entry?.voice_id);
     if (!anyone) return true;
     return (
-      resolveVoice(this.config, { speaker_key: key, utterance_kind: kind }).voice_from !== "default"
+      resolveVoice(this.config, { speaker_key: key, utterance_kind: kind })
+        .voice_from !== "default"
     );
   },
 
@@ -364,7 +424,9 @@ export const contacts = {
       voice_gender: gender,
     });
     const section = resolved.settings[resolved.settings.engine] || {};
-    return !section[resolved.settings.engine === "fish" ? "reference_id" : "voice_id"];
+    return !section[
+      resolved.settings.engine === "fish" ? "reference_id" : "voice_id"
+    ];
   },
 
   /** Left out of 음성 준비 and playing in a row (skip switch, or play buttons hidden). */
@@ -376,16 +438,59 @@ export const contacts = {
   /** This person's card lets them know the real date and time in calls and texts. */
   realtimeFor(key) {
     const voices = this.config.character_voices || {};
-    return Boolean(voices[key]?.realtime || voices[voices[key]?.card]?.realtime);
+    return Boolean(
+      voices[key]?.realtime || voices[voices[key]?.card]?.realtime,
+    );
   },
 
-  /** "2026-10-09 (금) 22:47" in the user's local time. */
-  realTimeLabel(value = new Date()) {
+  /** The time zone a card set for its people ("" = this device's), by a person's or card's key. */
+  timeZoneFor(key) {
+    const voices = this.config.character_voices || {};
+    const card = voices[key]?.card ? voices[voices[key].card] : voices[key];
+    return card?.realtime ? card.time_zone || "" : "";
+  },
+
+  /** The time zone that card set for the user's character ("" = this device's). */
+  userTimeZoneFor(key) {
+    const voices = this.config.character_voices || {};
+    const card = voices[key]?.card ? voices[voices[key].card] : voices[key];
+    return card?.realtime ? card.user_time_zone || "" : "";
+  },
+
+  /** "2026-10-09 (금) 22:47": in this device's time, or in `zone` (an IANA name). */
+  realTimeLabel(value = new Date(), zone = "") {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
     const pad = (number) => String(number).padStart(2, "0");
-    const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} (${weekday}) ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    const days = ["일", "월", "화", "수", "목", "금", "토"];
+    if (zone) {
+      try {
+        const parts = Object.fromEntries(
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: zone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            weekday: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+          })
+            .formatToParts(date)
+            .map((part) => [part.type, part.value]),
+        );
+        const weekday =
+          days[
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+              parts.weekday,
+            )
+          ];
+        return `${parts.year}-${parts.month}-${parts.day} (${weekday}) ${parts.hour}:${parts.minute}`;
+      } catch {
+        // A zone this browser doesn't know: this device's time.
+      }
+    }
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} (${days[date.getDay()]}) ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   },
 
   /** The language set for a person (or their card); "" follows the general setting. */

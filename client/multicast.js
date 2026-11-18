@@ -8,17 +8,26 @@
 //   following its own 겹쳐 재생 setting and 🔁 sounds (sfxOverlay, { loop } per sound).
 import { contentKey } from "../shared/hash.js";
 import { personNames, globalUsedIn, rangeStep } from "../shared/casting.js";
-import { mergeConfig } from "./common.js";
+import { mergeConfig, stOf } from "./common.js";
 import { wavBlob, blobBase64 } from "./wav.js";
 
 // A phone line's sound-effect tag, and the tags ahead of its first word.
 const SOUND_TAG = /\[sfx:\s*([^\]]+)\]/gi;
 const leadingTags = (text) => /^(?:\s*\[[^\]]*\])*/.exec(text)[0].length;
-const wait = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
+const wait = (ms) =>
+  new Promise((resolve) => setTimeout(() => resolve(null), ms));
 
 const QUICK_ACTION = "scenevoice-phone";
 // MultiCast's temperaments and the emotional range each stands for (its own table).
-const TEMPER_RANGE = { calm: 2, hot: 5, cold: 1, gentle: 2, cheerful: 4, shy: 2, playful: 3 };
+const TEMPER_RANGE = {
+  calm: 2,
+  hot: 5,
+  cold: 1,
+  gentle: 2,
+  cheerful: 4,
+  shy: 2,
+  playful: 3,
+};
 const HOLDS = ["scenevoice-call", "scenevoice-reading"];
 
 // MultiCast's 🔁 loudness when one, two or three loops play together.
@@ -44,7 +53,10 @@ export const multicast = {
       // A change to its cast (when MultiCast tells) is brought in at once.
       const changed = () => {
         clearTimeout(this.multicastCastTimer);
-        this.multicastCastTimer = setTimeout(() => this.run(() => this.syncMultiCastCast()), 400);
+        this.multicastCastTimer = setTimeout(
+          () => this.run(() => this.syncMultiCastCast()),
+          400,
+        );
       };
       api.on?.("castchange", changed);
       this.eventCleanups.push(() => {
@@ -65,7 +77,11 @@ export const multicast = {
   /** MultiCast's sounds, when it shares them: [{ name, words }], or null. */
   multicastSounds() {
     const api = this.multicastApi();
-    if (!this.multicastAttached || typeof api?.listSfx !== "function" || typeof api?.sfxAudio !== "function")
+    if (
+      !this.multicastAttached ||
+      typeof api?.listSfx !== "function" ||
+      typeof api?.sfxAudio !== "function"
+    )
       return null;
     try {
       const list = api.listSfx();
@@ -83,7 +99,10 @@ export const multicast = {
     const names = (sounds) => [
       ...new Set(
         sounds.flatMap((sound) =>
-          (Array.isArray(sound?.words) && sound.words.length ? sound.words : [sound?.name])
+          (Array.isArray(sound?.words) && sound.words.length
+            ? sound.words
+            : [sound?.name]
+          )
             .map((word) => String(word || "").trim())
             .filter((word) => word && !word.startsWith("~")),
         ),
@@ -111,14 +130,22 @@ export const multicast = {
   // forever; past this the line plays with its sounds around it instead.
   soundFor(tag) {
     const api = this.multicastApi();
-    const key = String(tag || "").trim().toLowerCase();
-    if (!key || typeof api?.sfxAudio !== "function") return Promise.resolve(null);
+    const key = String(tag || "")
+      .trim()
+      .toLowerCase();
+    if (!key || typeof api?.sfxAudio !== "function")
+      return Promise.resolve(null);
     this.soundFiles ||= new Map();
     if (!this.soundFiles.has(key))
       this.soundFiles.set(
         key,
         Promise.resolve()
-          .then(() => Promise.race([api.sfxAudio(`[${key}]`), wait(8000).then(() => null)]))
+          .then(() =>
+            Promise.race([
+              api.sfxAudio(`[${key}]`),
+              wait(8000).then(() => null),
+            ]),
+          )
           .then(async (answer) => {
             // A file, a same-origin URL, or { blob, loop }.
             const given = answer?.blob instanceof Blob ? answer.blob : answer;
@@ -126,9 +153,17 @@ export const multicast = {
               given instanceof Blob
                 ? given
                 : typeof given === "string" && given
-                  ? await fetch(given).then((response) => (response.ok ? response.blob() : null))
+                  ? await fetch(given).then((response) =>
+                      response.ok ? response.blob() : null,
+                    )
                   : null;
-            return blob ? { url: URL.createObjectURL(blob), blob, loop: Boolean(answer?.loop) } : null;
+            return blob
+              ? {
+                  url: URL.createObjectURL(blob),
+                  blob,
+                  loop: Boolean(answer?.loop),
+                }
+              : null;
           })
           .catch(() => null)
           .then((found) => {
@@ -146,7 +181,8 @@ export const multicast = {
    */
   multicastVoiceSettings() {
     const api = this.multicastApi();
-    if (!this.multicastAttached || typeof api?.getVoiceSettings !== "function") return null;
+    if (!this.multicastAttached || typeof api?.getVoiceSettings !== "function")
+      return null;
     try {
       if (api.isEnabled?.() === false) return null;
       const given = api.getVoiceSettings();
@@ -165,7 +201,9 @@ export const multicast = {
 
   /** The phone's voices follow MultiCast 확장's settings: it offers them and the chat isn't read here. */
   followsMultiCastEngine() {
-    return this.chatVoiceOn?.() === false && Boolean(this.multicastVoiceSettings());
+    return (
+      this.chatVoiceOn?.() === false && Boolean(this.multicastVoiceSettings())
+    );
   },
 
   /** MultiCast's 효과음을 대사랑 겹쳐서 재생: a sound starts and the voice comes in right away. */
@@ -188,16 +226,24 @@ export const multicast = {
     const sounds = [];
     for (const match of text.matchAll(SOUND_TAG)) {
       const sound = await this.soundFor(match[1]);
-      if (sound) sounds.push({ ...sound, name: match[1].trim(), before: match.index < lead });
+      if (sound)
+        sounds.push({
+          ...sound,
+          name: match[1].trim(),
+          before: match.index < lead,
+        });
     }
-    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const Offline =
+      window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!sounds.length || !Offline) return null;
     const rate = 32000;
     const decoder = new Offline(1, 1, rate);
     const decode = async (blob) => {
       const bytes = await blob.arrayBuffer();
       const decoded = await Promise.race([
-        new Promise((resolve, reject) => decoder.decodeAudioData(bytes, resolve, reject)),
+        new Promise((resolve, reject) =>
+          decoder.decodeAudioData(bytes, resolve, reject),
+        ),
         wait(8000),
       ]);
       if (!decoded) throw new Error("decoding took too long");
@@ -228,10 +274,22 @@ export const multicast = {
       plan.push({ buffer: sound.buffer, at: at + gap });
       at += gap + sound.buffer.duration;
     }
-    const loops = sounds.filter((sound) => sound.loop).slice(0, BED_GAIN.length);
+    const loops = sounds
+      .filter((sound) => sound.loop)
+      .slice(0, BED_GAIN.length);
     for (const sound of loops)
-      plan.push({ buffer: sound.buffer, at: 0, loop: true, until: voiceEnd, gain: 0.3 * BED_GAIN[loops.length - 1] });
-    const total = Math.max(...plan.map((part) => (part.loop ? part.until + 1.9 : part.at + part.buffer.duration)));
+      plan.push({
+        buffer: sound.buffer,
+        at: 0,
+        loop: true,
+        until: voiceEnd,
+        gain: 0.3 * BED_GAIN[loops.length - 1],
+      });
+    const total = Math.max(
+      ...plan.map((part) =>
+        part.loop ? part.until + 1.9 : part.at + part.buffer.duration,
+      ),
+    );
     const mixer = new Offline(1, Math.ceil(total * rate), rate);
     for (const part of plan) {
       const source = mixer.createBufferSource();
@@ -249,7 +307,11 @@ export const multicast = {
       }
     }
     const mixed = await mixer.startRendering();
-    return { blob: wavBlob(mixed.getChannelData(0), rate), sounds: sounds.map((sound) => sound.name), overlay };
+    return {
+      blob: wavBlob(mixed.getChannelData(0), rate),
+      sounds: sounds.map((sound) => sound.name),
+      overlay,
+    };
   },
 
   /**
@@ -257,9 +319,17 @@ export const multicast = {
    * { blob, id, filename }, or null (no sounds, or mixing failed: then they play around it).
    */
   async mixedLine(voice, script, generationId) {
-    if (!generationId || !/\[sfx:/i.test(script || "") || !this.multicastSounds()) return null;
+    if (
+      !generationId ||
+      !/\[sfx:/i.test(script || "") ||
+      !this.multicastSounds()
+    )
+      return null;
     try {
-      const mix = await Promise.race([this.mixLineSounds(voice, script), wait(20000).then(() => null)]);
+      const mix = await Promise.race([
+        this.mixLineSounds(voice, script),
+        wait(20000).then(() => null),
+      ]);
       if (!mix) return null;
       const response = await this.request("/api/plugins/scenevoice/audio/mix", {
         method: "POST",
@@ -272,7 +342,8 @@ export const multicast = {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || `효과음 저장 실패 (${response.status})`);
+      if (!response.ok)
+        throw new Error(data.detail || `효과음 저장 실패 (${response.status})`);
       return { blob: mix.blob, id: data.id, filename: data.audio_filename };
     } catch (error) {
       console.warn("[SceneVoice] sound effects not mixed in", error);
@@ -336,7 +407,8 @@ export const multicast = {
     const api = this.multicastApi();
     if (!api || !this.multicastAttached) return;
     try {
-      for (const reason of this.multicastHolds || []) api.releaseAutoPlay?.(reason);
+      for (const reason of this.multicastHolds || [])
+        api.releaseAutoPlay?.(reason);
       if (this.multicastMenu) api.removeQuickAction?.(QUICK_ACTION);
     } catch (_) {
       /* MultiCast went away first */
@@ -359,15 +431,21 @@ export const multicast = {
    * it made with it; someone registered here first is only unlinked.
    * Works on the given lists (the panel's drafts by default) and returns what changed.
    */
-  importMultiCastCast({ voices = this.voiceDraft, notes = this.noteDraft } = {}) {
+  importMultiCastCast({
+    voices = this.voiceDraft,
+    notes = this.noteDraft,
+  } = {}) {
     const api = this.multicastApi();
     if (!api?.getCast) throw new Error("MultiCast 확장을 찾을 수 없습니다.");
     const cast = api.getCast({ scope: "all" });
-    if (!Array.isArray(cast)) throw new Error("MultiCast 확장 출연진을 읽지 못했습니다.");
+    if (!Array.isArray(cast))
+      throw new Error("MultiCast 확장 출연진을 읽지 못했습니다.");
     // MultiCast keeps a persona row in each bot's cast that follows whichever persona is on until
     // it gets a voice: not a person yet, so it isn't brought in.
-    const rows = cast.filter((row) => row?.id && row?.name && !(row.isUser && !row.voiceId));
-    const context = window.SillyTavern?.getContext?.() || {};
+    const rows = cast.filter(
+      (row) => row?.id && row?.name && !(row.isUser && !row.voiceId),
+    );
+    const context = stOf(this) || {};
     // Rows from before MultiCast handed out these two: read from its saved cast, by id.
     const saved = context.extensionSettings?.voice_cast || {};
     const stored = new Map(
@@ -380,7 +458,9 @@ export const multicast = {
       if (row.scope === "bot" && bot.startsWith("char:"))
         return { card: `character:${bot.slice(5)}`, order: 0 };
       if (row.scope === "bot" && bot.startsWith("group:")) {
-        const group = (context.groups || []).find((item) => String(item.id) === bot.slice(6));
+        const group = (context.groups || []).find(
+          (item) => String(item.id) === bot.slice(6),
+        );
         return {
           card: "",
           cards: (group?.members || []).map((avatar) => `character:${avatar}`),
@@ -402,14 +482,19 @@ export const multicast = {
       .map((row) => ({ row, where: place(row) }))
       .sort((a, b) => a.where.order - b.where.order);
     for (const { row, where } of ordered) {
-      const names = [row.name, ...(row.aliases || [])].map((name) => String(name).trim().toLowerCase());
+      const names = [row.name, ...(row.aliases || [])].map((name) =>
+        String(name).trim().toLowerCase(),
+      );
       const sameName = ([key, entry]) =>
-        key.startsWith("speaker:") && entry && personNames(entry).some((name) => names.includes(name));
+        key.startsWith("speaker:") &&
+        entry &&
+        personNames(entry).some((name) => names.includes(name));
       // Someone global, used in this row's card, by the same name: the same person (one global
       // person may stand for this name in several cards' rows).
       const globalTwin = (card) =>
         Object.entries(voices).find(
-          (item) => sameName(item) && !item[1].card && globalUsedIn(item[1], card),
+          (item) =>
+            sameName(item) && !item[1].card && globalUsedIn(item[1], card),
         );
       let key = ids.get(row.id);
       // Brought in under the card while the same person was already global there: one person.
@@ -425,14 +510,19 @@ export const multicast = {
         // A group chat's row for someone already under one of its cards is that person.
         if (
           where.cards?.length &&
-          Object.entries(voices).some((item) => sameName(item) && where.cards.includes(item[1].card))
+          Object.entries(voices).some(
+            (item) => sameName(item) && where.cards.includes(item[1].card),
+          )
         ) {
           result.skipped++;
           continue;
         }
         key =
           Object.entries(voices).find(
-            (item) => sameName(item) && !item[1].multicast_id && (item[1].card || "") === where.card,
+            (item) =>
+              sameName(item) &&
+              !item[1].multicast_id &&
+              (item[1].card || "") === where.card,
           )?.[0] || (where.card ? globalTwin(where.card)?.[0] : undefined);
       }
       const fresh = !key;
@@ -442,7 +532,12 @@ export const multicast = {
       // Kept in its own field order, so an unchanged person compares (and saves) as unchanged.
       const entry = { ...(voices[key] || { engine: "inherit" }) };
       const set = (field, value) => {
-        if (value === undefined || value === "" || (Array.isArray(value) && !value.length)) return;
+        if (
+          value === undefined ||
+          value === "" ||
+          (Array.isArray(value) && !value.length)
+        )
+          return;
         entry[field] = value;
       };
       // Names: a person's own name stays; MultiCast's names it lacks join its aliases.
@@ -451,19 +546,25 @@ export const multicast = {
         .split(/[,，、/|]/)
         .map((name) => name.trim())
         .filter(Boolean);
-      for (const name of [row.name, ...(row.aliases || [])].map((item) => String(item).trim()))
-        if (name && !personNames({ name: entry.name, aliases: aliases.join(",") }).includes(name.toLowerCase()))
+      for (const name of [row.name, ...(row.aliases || [])].map((item) =>
+        String(item).trim(),
+      ))
+        if (
+          name &&
+          !personNames({
+            name: entry.name,
+            aliases: aliases.join(","),
+          }).includes(name.toLowerCase())
+        )
           aliases.push(name);
       set("aliases", aliases.join(", ").slice(0, 600));
       set("gender", { m: "male", f: "female" }[row.gender]);
-      if (row.voiceId && row.voiceId !== entry.voice_id) {
-        // A thought voice that only repeated the old voice follows the new one.
-        if (entry.thought_voice_id === entry.voice_id) delete entry.thought_voice_id;
+      if (row.voiceId && row.voiceId !== entry.voice_id)
         entry.voice_id = row.voiceId;
-      }
       set("always_tags", (row.alwaysTags || []).slice(0, 4));
       const own = stored.get(row.id) || {};
-      const range = row.range ?? own.range ?? TEMPER_RANGE[row.temper ?? own.temper];
+      const range =
+        row.range ?? own.range ?? TEMPER_RANGE[row.temper ?? own.temper];
       if (Number(range) >= 1 && Number(range) <= 5) {
         const step = rangeStep(range);
         if (step) entry.expressiveness = step;
@@ -486,7 +587,8 @@ export const multicast = {
       ids = linked();
       if (fresh) result.added++;
       else if (linkedNow) result.linked++;
-      else if (JSON.stringify([voices[key], notes[key]]) !== before) result.updated++;
+      else if (JSON.stringify([voices[key], notes[key]]) !== before)
+        result.updated++;
     }
     // Gone from MultiCast: what it made goes too; someone registered here first stays, unlinked.
     for (const [key, entry] of Object.entries(voices)) {
@@ -508,7 +610,11 @@ export const multicast = {
    * the settings panel is open (its drafts would write over it; opening it syncs first).
    */
   async syncMultiCastCast({ panel = false } = {}) {
-    if (!this.multicastAttached || !this.isActive() || this.config.casting?.multicast_sync === false)
+    if (
+      !this.multicastAttached ||
+      !this.isActive() ||
+      this.config.casting?.multicast_sync === false
+    )
       return null;
     if (!panel && document.getElementById("sv-overlay")) return null;
     if (this.multicastSyncing) return this.multicastSyncing;
@@ -521,10 +627,16 @@ export const multicast = {
       const response = await this.request("/api/plugins/scenevoice/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ character_voices: voices, character_notes: notes }),
+        body: JSON.stringify({
+          character_voices: voices,
+          character_notes: notes,
+        }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || `MultiCast 확장 연동 저장 실패 (${response.status})`);
+      if (!response.ok)
+        throw new Error(
+          data.detail || `MultiCast 확장 연동 저장 실패 (${response.status})`,
+        );
       this.config = mergeConfig(data.settings || {});
       if (result.added || result.linked)
         this.notify(

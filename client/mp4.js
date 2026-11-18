@@ -3,12 +3,21 @@
 
 const ascii = (value) => Array.from(value, (char) => char.charCodeAt(0));
 const u16 = (value) => [(value >>> 8) & 255, value & 255];
-const u32 = (value) => [(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255];
+const u32 = (value) => [
+  (value >>> 24) & 255,
+  (value >>> 16) & 255,
+  (value >>> 8) & 255,
+  value & 255,
+];
 const zeros = (count) => new Array(count).fill(0);
-const MATRIX = [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].flatMap(u32);
+const MATRIX = [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].flatMap(
+  u32,
+);
 
 function box(type, ...parts) {
-  const bytes = parts.map((part) => (part instanceof Uint8Array ? part : Uint8Array.from(part)));
+  const bytes = parts.map((part) =>
+    part instanceof Uint8Array ? part : Uint8Array.from(part),
+  );
   const size = 8 + bytes.reduce((sum, part) => sum + part.length, 0);
   const out = new Uint8Array(size);
   out.set([...u32(size), ...ascii(type)]);
@@ -19,7 +28,8 @@ function box(type, ...parts) {
   }
   return out;
 }
-const fullBox = (type, version, flags, ...parts) => box(type, [version, ...u32(flags).slice(1)], ...parts);
+const fullBox = (type, version, flags, ...parts) =>
+  box(type, [version, ...u32(flags).slice(1)], ...parts);
 
 // Run-length sample durations.
 function stts(durations) {
@@ -29,18 +39,35 @@ function stts(durations) {
     if (last && last[1] === duration) last[0]++;
     else runs.push([1, duration]);
   }
-  return fullBox("stts", 0, 0, u32(runs.length), runs.flatMap(([count, duration]) => [...u32(count), ...u32(duration)]));
+  return fullBox(
+    "stts",
+    0,
+    0,
+    u32(runs.length),
+    runs.flatMap(([count, duration]) => [...u32(count), ...u32(duration)]),
+  );
 }
 
 function sampleTable(entry, track, offset) {
-  const keys = track.keys ? track.samples.flatMap((sample, index) => (sample.key ? [index + 1] : [])) : null;
+  const keys = track.keys
+    ? track.samples.flatMap((sample, index) => (sample.key ? [index + 1] : []))
+    : null;
   return box(
     "stbl",
     fullBox("stsd", 0, 0, u32(1), entry),
     stts(track.durations),
-    ...(keys ? [fullBox("stss", 0, 0, u32(keys.length), keys.flatMap(u32))] : []),
+    ...(keys
+      ? [fullBox("stss", 0, 0, u32(keys.length), keys.flatMap(u32))]
+      : []),
     fullBox("stsc", 0, 0, u32(1), u32(1), u32(track.samples.length), u32(1)),
-    fullBox("stsz", 0, 0, u32(0), u32(track.samples.length), track.samples.flatMap((sample) => u32(sample.data.length))),
+    fullBox(
+      "stsz",
+      0,
+      0,
+      u32(0),
+      u32(track.samples.length),
+      track.samples.flatMap((sample) => u32(sample.data.length)),
+    ),
     fullBox("stco", 0, 0, u32(1), u32(offset)),
   );
 }
@@ -97,11 +124,30 @@ function trak(id, track, offset) {
     ),
     box(
       "mdia",
-      fullBox("mdhd", 0, 0, zeros(8), u32(track.timescale), u32(length), u16(0x55c4), zeros(2)),
-      fullBox("hdlr", 0, 0, zeros(4), ascii(video ? "vide" : "soun"), zeros(12), ascii(video ? "Video\0" : "Sound\0")),
+      fullBox(
+        "mdhd",
+        0,
+        0,
+        zeros(8),
+        u32(track.timescale),
+        u32(length),
+        u16(0x55c4),
+        zeros(2),
+      ),
+      fullBox(
+        "hdlr",
+        0,
+        0,
+        zeros(4),
+        ascii(video ? "vide" : "soun"),
+        zeros(12),
+        ascii(video ? "Video\0" : "Sound\0"),
+      ),
       box(
         "minf",
-        video ? fullBox("vmhd", 0, 1, zeros(8)) : fullBox("smhd", 0, 0, zeros(4)),
+        video
+          ? fullBox("vmhd", 0, 1, zeros(8))
+          : fullBox("smhd", 0, 0, zeros(4)),
         box("dinf", fullBox("dref", 0, 0, u32(1), fullBox("url ", 0, 1))),
         sampleTable(entry, track, offset),
       ),
@@ -125,7 +171,14 @@ function esds(config) {
       0x03,
       u16(1),
       [0],
-      descriptor(0x04, [0x40, 0x15], zeros(3), u32(0), u32(0), descriptor(0x05, Array.from(config))),
+      descriptor(
+        0x04,
+        [0x40, 0x15],
+        zeros(3),
+        u32(0),
+        u32(0),
+        descriptor(0x05, Array.from(config)),
+      ),
       descriptor(0x06, [0x02]),
     ),
   );
@@ -143,7 +196,11 @@ export function mp4Parts(video, audio) {
   ];
   const ftyp = box("ftyp", ascii("isom"), u32(512), ascii("isomiso2avc1mp41"));
   const seconds = Math.max(
-    ...tracks.map((track) => track.durations.reduce((sum, duration) => sum + duration, 0) / track.timescale),
+    ...tracks.map(
+      (track) =>
+        track.durations.reduce((sum, duration) => sum + duration, 0) /
+        track.timescale,
+    ),
   );
   const moov = (offsets) =>
     box(
@@ -164,7 +221,9 @@ export function mp4Parts(video, audio) {
       ),
       ...tracks.map((track, index) => trak(index + 1, track, offsets[index])),
     );
-  const sizes = tracks.map((track) => track.samples.reduce((sum, sample) => sum + sample.data.length, 0));
+  const sizes = tracks.map((track) =>
+    track.samples.reduce((sum, sample) => sum + sample.data.length, 0),
+  );
   // The index's size doesn't depend on the offsets in it.
   const start = ftyp.length + moov([0, 0]).length + 8;
   const offsets = [start, start + sizes[0]];

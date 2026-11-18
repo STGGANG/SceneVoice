@@ -4,41 +4,34 @@ import {
   analysisSystem,
   ANALYSIS_FINAL,
   dataBlock,
-  PROMPT_VERSION,
   userPrompt,
 } from "./prompts.js";
-import { clamp, contentKey, normalizeTags, tagsText } from "./common.js";
+import {
+  clamp,
+  contentKey,
+  normalizePlace,
+  normalizeTags,
+  tagsText,
+} from "./common.js";
 import { normalizeSpeech } from "../shared/providers.js";
 import { SPEECH_LANGUAGES } from "../shared/settings.js";
 
 export const analysis = {
-  messageAnalysisKey(button, batch, previousContext, states = []) {
+  /**
+   * Where a message's analysis is kept: its chat, its place and its lines as they are written
+   * now (another swipe or an edit is another message). Nothing of the settings is in it: an
+   * analysis once made stays until the user asks for a new one (분석 보기 → 다시 분석), as a made
+   * voice does.
+   */
+  messageAnalysisKey(button, batch) {
     return `ma-${contentKey({
-      version: PROMPT_VERSION,
       chatId: this.currentChatId(),
       messageId: button.dataset.messageId || "",
-      currentMessage: batch.currentMessage,
-      utterances: batch.utterances,
-      character: this.getCurrentCharacterNote(),
-      profile: this.getRoleplayProfileContext({
-        includeUser: Boolean(this.config.llm?.analysis_include_persona),
-        includeCharacter: this.config.llm?.analysis_include_character !== false,
-      }),
-      previousContext,
-      states: states || [],
-      defaultLanguage: this.config.default_language,
-      connection:
-        this.connectionService?.fingerprint?.(
-          this.config.connection_profile_id,
-        ) || this.config.connection_profile_id,
-      llm: this.config.llm,
-      casting: this.config.casting,
-      roster:
-        this.speakerAnalysisContext?.(batch.utterances) ||
-        this.speakerCatalog?.() ||
-        [],
-      reading: this.config.reading,
-      emotions: [...this.analysisEmotionCandidates()].sort(),
+      lines: batch.utterances.map((line) => [line.kind || "", line.text]),
+      // The two switches that decide what an analysis holds at all (tags, who speaks): one made
+      // with a switch off is not what the user gets with it on.
+      tags: Boolean(this.config.analysis_enabled),
+      cast: Boolean(this.config.casting?.auto_enabled),
     })}`;
   },
 
@@ -58,7 +51,10 @@ export const analysis = {
       await this.analyzeUtterance(button, { force: true });
     } catch (error) {
       button.classList.remove("sv-loading");
-      this.setPlayButtonIcon(button, button.dataset.status === "ready" ? "ready" : "waiting");
+      this.setPlayButtonIcon(
+        button,
+        button.dataset.status === "ready" ? "ready" : "waiting",
+      );
       throw error;
     }
     return this.handleRerollClick(button);
@@ -97,7 +93,10 @@ export const analysis = {
       // A chat card counts too: it speaks with its first person when it lists people.
       const known =
         roster.some((x) => x.key === item.speaker_key) ||
-        Boolean(item.speaker_key && this.currentCardKeys?.().includes(item.speaker_key));
+        Boolean(
+          item.speaker_key &&
+          this.currentCardKeys?.().includes(item.speaker_key),
+        );
       // The model returns the line with tags woven in (script). A script that changed the
       // words is dropped except its leading tags; older replies had tags or emotion + direction.
       let performance = { script: "", tags: [], emotion: "default" };
@@ -116,15 +115,17 @@ export const analysis = {
       const { script, tags } = performance;
       const speakerKey =
         forced ||
-        (automatic && known ? item.speaker_key : utterance.default_speaker_key || "");
+        (automatic && known
+          ? item.speaker_key
+          : utterance.default_speaker_key || "");
       // Hangul or kana in the line settles the language. A line the script can't settle (kanji
       // only, "…!") goes by the speaker's own language when set, then the model's guess.
       const language =
         this.scriptLanguage(utterance.text) ||
-        (/[A-Za-z]/.test(utterance.text) ? "" : this.personLanguage?.(speakerKey) || "") ||
-        (SPEECH_LANGUAGES.includes(
-          String(item.language || "").toLowerCase(),
-        )
+        (/[A-Za-z]/.test(utterance.text)
+          ? ""
+          : this.personLanguage?.(speakerKey) || "") ||
+        (SPEECH_LANGUAGES.includes(String(item.language || "").toLowerCase())
           ? String(item.language).toLowerCase()
           : fallback.language);
       return {
@@ -132,7 +133,9 @@ export const analysis = {
         speaker_key: speakerKey,
         speaker_confidence: clamp(item.speaker_confidence ?? 0, 0, 1),
         // Picks the male or female default voice for a speaker without one of their own.
-        gender: ["male", "female"].includes(String(item.gender || "").toLowerCase())
+        gender: ["male", "female"].includes(
+          String(item.gender || "").toLowerCase(),
+        )
           ? String(item.gender).toLowerCase()
           : "",
         needs_confirmation:
@@ -151,6 +154,7 @@ export const analysis = {
           ? clamp(item.intensity ?? 0.5, 0, 1)
           : 0.5,
         direction: tags.join(", "),
+        ...normalizePlace(item),
       };
     });
   },
@@ -160,6 +164,8 @@ export const analysis = {
       const analysis = analyses[index];
       if (!analysis) return;
       item.dataset.emotion = analysis.emotion;
+      item.dataset.side = analysis.side || "";
+      item.dataset.space = analysis.space || "";
       const speaker = this.resolvedSpeaker(item, analysis);
       this.applyLineVisibility?.(item, speaker.key);
       // The speaker menu's first choice names who the analysis heard (kept for a menu made later).
@@ -167,7 +173,8 @@ export const analysis = {
       const select = item
         .closest(".sv-inline-actions")
         ?.querySelector(".sv-speaker-select");
-      if (select?.options[0]) select.options[0].textContent = item.dataset.speakerLabel;
+      if (select?.options[0])
+        select.options[0].textContent = item.dataset.speakerLabel;
       item.title = `${speaker.name} · ${analysis.script || tagsText(normalizeTags(analysis))}`;
     });
   },
@@ -191,6 +198,28 @@ export const analysis = {
     }
   },
 
+  /**
+   * The message has an analysis kept: its 분석 보기 button shows from here on, without waiting
+   * for a voice. The line may sit outside the message's text (the source lines under a
+   * translation), so the message is found by its number.
+   */
+  async noteAnalysed(analysisKey, button) {
+    // The chat's list may still be on its way (an analysis that finished first).
+    await this.loadLineState?.().catch(() => null);
+    this.lineState?.analysed?.add(analysisKey);
+    const id = button?.dataset?.messageId;
+    // (The host of source lines is a detached .mes_text of its own.)
+    const own = button?.closest?.(".mes_text");
+    const container =
+      (own?.isConnected && own.closest(".mes,.message-body") ? own : null) ||
+      (id !== undefined && id !== ""
+        ? document.querySelector?.(
+            `#chat .mes[mesid="${CSS.escape(String(id))}"] .mes_text`,
+          )
+        : null);
+    if (container) await this.revealMessageTools?.(container);
+  },
+
   async saveStoredMessageAnalysis(analysisKey, button, analyses) {
     try {
       const response = await this.fetch(
@@ -208,10 +237,44 @@ export const analysis = {
         },
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await this.noteAnalysed(analysisKey, button);
     } catch (error) {
       if (error.name === "AbortError") throw error;
       console.warn("[SceneVoice] 메시지 분석 영구 저장에 실패했습니다.", error);
     }
+  },
+
+  /**
+   * The message's analyses as they are kept now (in memory, else in the records), with the key
+   * they are kept under; `analyses` is null when the message was never analysed.
+   */
+  async keptMessageAnalyses(button) {
+    const batch = this.collectMessageBatch(button);
+    const key = this.messageAnalysisKey(button, batch);
+    const analyses =
+      this.analysisCache.get(key) ||
+      (await this.loadStoredMessageAnalysis(key, batch.utterances)) ||
+      null;
+    return { key, batch, analyses };
+  },
+
+  /**
+   * 분석 다시 for some lines of a message (`chosen`: their indexes). The whole message is
+   * analysed again in one request, as its lines are read together; the lines not chosen keep
+   * the analysis they had.
+   */
+  async reanalyzeLines(button, chosen) {
+    const before = (await this.keptMessageAnalyses(button)).analyses;
+    await this.analyzeUtterance(button, { force: true });
+    if (!before) return;
+    const { key, batch, analyses } = await this.keptMessageAnalyses(button);
+    if (!analyses) return;
+    const merged = analyses.map((item, index) =>
+      chosen.has(index) ? item : before[index] || item,
+    );
+    this.analysisCache.set(key, merged);
+    this.applyMessageAnalyses(batch.buttons, merged);
+    await this.saveStoredMessageAnalysis(key, button, merged);
   },
 
   parseMessageAnalysis(response, utterances) {
@@ -232,7 +295,7 @@ export const analysis = {
       )
     ) {
       throw new Error(
-        "보조 모델이 모든 대사의 분석 결과를 반환하지 않았습니다.",
+        "보조모델이 모든 대사의 분석 결과를 반환하지 않았습니다.",
       );
     }
     return this.normalizeMessageAnalyses(data.utterances, utterances);
@@ -242,7 +305,11 @@ export const analysis = {
   failureReason(error) {
     if (error?.name === "TimeoutError") return "10분 안에 답이 오지 않음";
     const text = String(error?.message || error || "").trim();
-    return text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : "이유를 알 수 없음";
+    return text
+      ? text.length > 140
+        ? `${text.slice(0, 140)}…`
+        : text
+      : "이유를 알 수 없음";
   },
 
   /**
@@ -251,13 +318,16 @@ export const analysis = {
    * `storedOnly`: only an analysis already made (null without one); no request is sent.
    * `signal`: stops the analysis request (a message's 정지).
    */
-  async analyzeUtterance(button, { force = false, storedOnly = false, signal } = {}) {
+  async analyzeUtterance(
+    button,
+    { force = false, storedOnly = false, signal } = {},
+  ) {
     const operation = this.captureChat();
     const batch = this.collectMessageBatch(button);
     const previousContext = this.buildPreviousContext(button);
     const states = await this.loadStatesForMessage(button, batch);
     this.assertChat(operation);
-    const analysisKey = this.messageAnalysisKey(button, batch, previousContext, states);
+    const analysisKey = this.messageAnalysisKey(button, batch);
     const selectedIndex = Number(button.dataset.quoteIndex || 0);
     const fallbackBatch = this.normalizeMessageAnalyses([], batch.utterances);
 
@@ -279,18 +349,21 @@ export const analysis = {
     }
 
     const stored =
-      !force && (await this.loadStoredMessageAnalysis(analysisKey, batch.utterances));
+      !force &&
+      (await this.loadStoredMessageAnalysis(analysisKey, batch.utterances));
     if (stored) {
       this.analysisCache.set(analysisKey, stored);
       this.applyMessageAnalyses(batch.buttons, stored);
+      await this.noteAnalysed(analysisKey, button);
       return stored[selectedIndex] || stored[0];
     }
     if (storedOnly) return null;
 
     const roster = this.speakerAnalysisContext(batch.utterances);
     const profileId = this.config.connection_profile_id;
-    // Card descriptions can be left out (설정 → 보조모델 분석 → 봇 프로필 참고).
-    const includeCharacter = this.config.llm?.analysis_include_character !== false;
+    // Card descriptions can be left out (설정 → 보조모델 분석 → 봇카드 설명 참고).
+    const includeCharacter =
+      this.config.llm?.analysis_include_character !== false;
     const roleplayProfile = this.getRoleplayProfileContext({
       includeUser: Boolean(this.config.llm?.analysis_include_persona),
       includeCharacter,
@@ -301,7 +374,11 @@ export const analysis = {
           role: "system",
           content: analysisSystem({
             emotions: [...this.analysisEmotionCandidates()].sort(),
-            soundEffects: roster.some((speaker) => this.soundEffectsFor(speaker.key)),
+            soundEffects: roster.some((speaker) =>
+              this.soundEffectsFor(speaker.key),
+            ),
+            spatial: this.config.playback?.spatial !== false,
+            readings: this.findsReadings(),
           }),
         },
         {
@@ -311,21 +388,24 @@ export const analysis = {
               dataBlock(
                 "speakers",
                 JSON.stringify(
-                  roster.map(({ key, name, aliases, engine, model, range }) => ({
-                    key,
-                    name,
-                    aliases,
-                    range: range || "normal",
-                    engine,
-                    model,
-                  })),
+                  roster.map(
+                    ({ key, name, aliases, engine, model, range }) => ({
+                      key,
+                      name,
+                      aliases,
+                      range: range || "normal",
+                      engine,
+                      model,
+                    }),
+                  ),
                 ),
               ),
               ...roster.map(({ key, name, description, performance_note }) =>
                 dataBlock(
                   "speaker_background",
                   JSON.stringify({
-                    description: includeCharacter || key === "user" ? description : "",
+                    description:
+                      includeCharacter || key === "user" ? description : "",
                     performance_note,
                   }),
                   { key, name },
@@ -336,6 +416,9 @@ export const analysis = {
                 dataBlock("state", state, { key, name }),
               ),
               dataBlock("recent_chat", previousContext),
+              ...(this.findsReadings() && this.knownReadings().length
+                ? [dataBlock("known_readings", this.knownReadings())]
+                : []),
               dataBlock("current_message", batch.currentMessage),
               dataBlock("dialogues", batch.utterances),
             ],
@@ -348,7 +431,10 @@ export const analysis = {
         ? this.connectionService.constructPrompt(messages, profileId)
         : messages;
       // Each line comes back whole with its tags, so the reply grows with the lines' length.
-      const lineChars = batch.utterances.reduce((sum, line) => sum + line.text.length, 0);
+      const lineChars = batch.utterances.reduce(
+        (sum, line) => sum + line.text.length,
+        0,
+      );
       const maxTokens = Math.min(
         8000,
         400 + batch.utterances.length * 140 + Math.ceil(lineChars * 1.5),
@@ -370,6 +456,8 @@ export const analysis = {
       this.analysisCache.set(analysisKey, analyses);
       this.applyMessageAnalyses(batch.buttons, analyses);
       await this.saveStoredMessageAnalysis(analysisKey, button, analyses);
+      // Before the lines are voiced, so the new readings are used for them already.
+      await this.keepFoundReadings(response, batch.utterances);
       return analyses[selectedIndex] || analyses[0];
     } catch (error) {
       if (error.name === "AbortError" || force) throw error;
@@ -377,7 +465,10 @@ export const analysis = {
         "[SceneVoice] 메시지 일괄 감정 분석 실패, 기본값으로 진행합니다.",
         error,
       );
-      this.notify(`메시지 분석에 실패해 기본 연기로 생성합니다. (${this.failureReason(error)})`, "info");
+      this.notify(
+        `메시지 분석에 실패해 기본 연기로 생성합니다. (${this.failureReason(error)})`,
+        "info",
+      );
       // Transient failures must remain retryable; do not cache the fallback.
       this.applyMessageAnalyses(batch.buttons, fallbackBatch);
       return fallbackBatch[selectedIndex] || fallbackBatch[0];

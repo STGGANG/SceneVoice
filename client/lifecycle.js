@@ -15,15 +15,20 @@ export const lifecycle = {
     const back = () => {
       if (document.hidden) return;
       const context = this.communicationAudioContext;
-      if (context && context.state !== "running") context.resume().catch(() => undefined);
+      if (context && context.state !== "running")
+        context.resume().catch(() => undefined);
       this.recoverPhoneAudio?.();
     };
     for (const type of ["touchend", "click", "keydown"]) {
       document.addEventListener(type, unlock, { capture: true, passive: true });
-      this.eventCleanups.push(() => document.removeEventListener(type, unlock, { capture: true }));
+      this.eventCleanups.push(() =>
+        document.removeEventListener(type, unlock, { capture: true }),
+      );
     }
     document.addEventListener("visibilitychange", back);
-    this.eventCleanups.push(() => document.removeEventListener("visibilitychange", back));
+    this.eventCleanups.push(() =>
+      document.removeEventListener("visibilitychange", back),
+    );
     await this.loadConfig();
     // The phone button comes first: a failed restore below must not leave the phone unreachable.
     this.createPhoneLauncher();
@@ -36,6 +41,7 @@ export const lifecycle = {
     this.bindMultiCast();
     this.exposePublicApi();
     this.registerPauseCommand();
+    this.watchButtonRow();
     this.updatePhoneLauncherVisibility();
     this.applyChatDisplay();
     if (this.isActive()) {
@@ -45,6 +51,13 @@ export const lifecycle = {
     this.syncTimer = setInterval(
       () => this.run(() => this.syncSharedSettings()),
       15000,
+    );
+    // Texts of cards that aren't open, still unread from before (the cards are there by now).
+    setTimeout(() => this.run(() => this.refreshOtherUnread()), 5000);
+    // 선연락 · 시간 방식: looked at once a minute.
+    this.timedOutreachTimer = setInterval(
+      () => this.run(() => this.timedOutreachTick()),
+      60000,
     );
   },
   async loadConfig() {
@@ -94,7 +107,8 @@ export const lifecycle = {
     if (now - (this.recentNotices.get(said) || 0) < 6000) return;
     this.recentNotices.set(said, now);
     if (this.recentNotices.size > 30)
-      for (const [key, at] of this.recentNotices) if (now - at >= 6000) this.recentNotices.delete(key);
+      for (const [key, at] of this.recentNotices)
+        if (now - at >= 6000) this.recentNotices.delete(key);
     if (window.toastr?.[type]) {
       window.toastr[type](message, "씬보이스");
       return;

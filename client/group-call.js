@@ -2,7 +2,13 @@
 // others are on it too; to each of my lines, whoever would answer does (one request a reply,
 // like a group chat), each line in its own voice, played in turn.
 import { escapeHtml } from "./common.js";
-import { dataBlock, groupCallFinal, groupCallSystem, languageName, phoneMessages } from "./prompts.js";
+import {
+  dataBlock,
+  groupCallFinal,
+  groupCallSystem,
+  languageName,
+  phoneMessages,
+} from "./prompts.js";
 
 export const groupCall = {
   isGroupCall(session = this.phoneSession) {
@@ -15,7 +21,10 @@ export const groupCall = {
     const contacts = this.phoneContacts();
     const options = (selected) =>
       contacts
-        .map((contact) => `<option value="${escapeHtml(contact.key)}" ${contact.key === selected ? "selected" : ""}>${escapeHtml(contact.name)}</option>`)
+        .map(
+          (contact) =>
+            `<option value="${escapeHtml(contact.key)}" ${contact.key === selected ? "selected" : ""}>${escapeHtml(contact.name)}</option>`,
+        )
         .join("");
     const off = picker.busy ? "disabled" : "";
     body.innerHTML = `
@@ -29,7 +38,9 @@ export const groupCall = {
           .map(
             (key, index) =>
               `<div class="sv-call-person"><label class="sv-room-name"><span>${index ? "함께 통화할 사람" : "전화 받을 사람"}</span><select data-group-person="${index}" ${off}>${options(key)}</select></label>${
-                index >= 2 ? `<button type="button" class="sv-call-person-remove" data-group-remove="${index}" aria-label="빼기" title="빼기" ${off}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>` : ""
+                index >= 2
+                  ? `<button type="button" class="sv-call-person-remove" data-group-remove="${index}" aria-label="빼기" title="빼기" ${off}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`
+                  : ""
               }</div>`,
           )
           .join("")}
@@ -50,30 +61,40 @@ export const groupCall = {
       }),
     );
     body.querySelector("[data-group-add]")?.addEventListener("click", () => {
-      picker.people.push((contacts.find((contact) => !picker.people.includes(contact.key)) || contacts[0]).key);
+      picker.people.push(
+        (
+          contacts.find((contact) => !picker.people.includes(contact.key)) ||
+          contacts[0]
+        ).key,
+      );
       this.renderGroupCallPicker(body);
     });
-    body.querySelector("[data-group-call-cancel]").addEventListener("click", () => {
-      this.groupCallPicker = null;
-      this.phoneContactKey = "";
-      this.renderSmartphone();
-    });
-    body.querySelector("[data-group-call-start]").addEventListener("click", () =>
-      this.run(async () => {
-        if (picker.busy) return;
-        const keys = [...new Set(picker.people)];
-        if (keys.length < 2) throw new Error("서로 다른 두 사람 이상을 골라 주십시오.");
-        picker.busy = true;
-        this.renderGroupCallPicker(body);
-        try {
-          await this.startGroupCall(keys);
-        } finally {
-          picker.busy = false;
-          if (this.groupCallPicker === picker) this.groupCallPicker = null;
-          await this.renderSmartphone();
-        }
-      }),
-    );
+    body
+      .querySelector("[data-group-call-cancel]")
+      .addEventListener("click", () => {
+        this.groupCallPicker = null;
+        this.phoneContactKey = "";
+        this.renderSmartphone();
+      });
+    body
+      .querySelector("[data-group-call-start]")
+      .addEventListener("click", () =>
+        this.run(async () => {
+          if (picker.busy) return;
+          const keys = [...new Set(picker.people)];
+          if (keys.length < 2)
+            throw new Error("서로 다른 두 사람 이상을 골라 주십시오.");
+          picker.busy = true;
+          this.renderGroupCallPicker(body);
+          try {
+            await this.startGroupCall(keys);
+          } finally {
+            picker.busy = false;
+            if (this.groupCallPicker === picker) this.groupCallPicker = null;
+            await this.renderSmartphone();
+          }
+        }),
+      );
   },
 
   /** Calls them together: the first answers, the others join; the call screen opens. */
@@ -81,8 +102,14 @@ export const groupCall = {
     this.unlockAudioForMobile();
     const operation = this.captureChat();
     if (this.phoneBusy) return;
-    const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService) throw new Error("전화 대화에 사용할 실리태번 연결 프로필을 설정해 주십시오.");
+    const profileId =
+      this.config.phone?.connection_profile_id ||
+      this.config.connection_profile_id ||
+      "";
+    if (!profileId || !this.connectionService)
+      throw new Error(
+        "전화 대화에 사용할 실리태번 연결 프로필을 설정해 주십시오.",
+      );
     const people = keys.map((key) => this.phoneContact(key));
     this.phoneBusy = true;
     const operationToken = ++this.phoneOperationToken;
@@ -101,7 +128,10 @@ export const groupCall = {
         situation: "",
       });
       if (made.existing) {
-        this.notify(`${made.existing.character_name || "상대"}와의 통화가 아직 이어지고 있어 그 통화로 돌아갑니다.`, "info");
+        this.notify(
+          `${made.existing.character_name || "상대"}와의 통화가 아직 이어지고 있어 그 통화로 돌아갑니다.`,
+          "info",
+        );
         this.phoneSession = made.existing;
         return;
       }
@@ -123,10 +153,17 @@ export const groupCall = {
   },
 
   /** Whoever answers my latest line: one request, one to four lines, each kept with who said it. */
-  async generateGroupPhoneTurn({ opening = false, operationToken = this.phoneOperationToken } = {}) {
+  async generateGroupPhoneTurn({
+    opening = false,
+    operationToken = this.phoneOperationToken,
+  } = {}) {
     const operation = this.captureChat();
-    const profileId = this.config.phone?.connection_profile_id || this.config.connection_profile_id || "";
-    if (!profileId || !this.connectionService || !this.phoneSession) throw new Error("전화 대화 연결 프로필이 없습니다.");
+    const profileId =
+      this.config.phone?.connection_profile_id ||
+      this.config.connection_profile_id ||
+      "";
+    if (!profileId || !this.connectionService || !this.phoneSession)
+      throw new Error("전화 대화 연결 프로필이 없습니다.");
     const session = this.phoneSession;
     const sessionId = session.id;
     const me = this.userCharacterName();
@@ -134,22 +171,39 @@ export const groupCall = {
       ...person,
       name: index ? person.name : session.character_name || person.name,
     }));
-    const states = await Promise.all(people.map((person) => this.stateForPrompt(person.key).catch(() => null)));
+    const states = await Promise.all(
+      people.map((person) => this.stateForPrompt(person.key).catch(() => null)),
+    );
     const transcript = (session.turns || []).slice(-30).map((turn) => ({
-      speaker: turn.role === "user" ? me : turn.speaker_name || session.character_name || "",
+      speaker:
+        turn.role === "user"
+          ? me
+          : turn.speaker_name || session.character_name || "",
       text: turn.text,
     }));
-    const lastMine = [...(session.turns || [])].reverse().find((turn) => turn.role === "user")?.text;
+    const lastMine = [...(session.turns || [])]
+      .reverse()
+      .find((turn) => turn.role === "user")?.text;
     const languages = people.map((person) =>
-      this.conversationLanguage(transcript.slice(-6).map((turn) => turn.text), lastMine, person.key),
+      this.conversationLanguage(
+        transcript.slice(-6).map((turn) => turn.text),
+        lastMine,
+        person.key,
+      ),
     );
     const messages = phoneMessages(
       groupCallSystem({
+        style: this.config.prompts?.group_call_style,
         emotions: Array.from(this.analysisEmotionCandidates()).sort(),
         opening,
         direction: session.call_direction,
-        translation: languages.some((language) => this.wantsTranslation(language)),
-        soundEffects: people.every((person) => this.phoneSoundEffects(person.key)),
+        translation: languages.some((language) =>
+          this.wantsTranslation(language),
+        ),
+        soundEffects: people.every((person) =>
+          this.phoneSoundEffects(person.key),
+        ),
+        spatial: this.config.playback?.spatial !== false,
       }),
       [
         dataBlock("user_character", me),
@@ -165,27 +219,52 @@ export const groupCall = {
             ...(states[index]?.unknown
               ? { unknown_whereabouts: true }
               : states[index]?.state
-                ? { state: { summary: states[index].state.summary || "", contact: states[index].state.contact || {} } }
+                ? {
+                    state: {
+                      summary: states[index].state.summary || "",
+                      contact: states[index].state.contact || {},
+                    },
+                  }
                 : {}),
           })),
         ),
-        dataBlock("recent_chat", this.buildRecentChatContext(this.config.phone?.context_messages ?? 10)),
+        dataBlock(
+          "recent_chat",
+          this.buildRecentChatContext(
+            this.config.phone?.context_messages ?? 10,
+          ),
+        ),
         ...((await this.statusLinesBlocks?.()) || []),
-        ...((await this.worldInfoBlocks?.(transcript.map((turn) => turn.text))) || []),
+        ...((await this.worldInfoBlocks?.(
+          transcript.map((turn) => turn.text),
+        )) || []),
         ...this.currentTimeBlocks(people.map((person) => person.key)),
-        dataBlock("call_situation", session.situation || "(natural continuation of the chat)", {
-          direction: session.call_direction,
-        }),
+        ...((await this.otherChatsBlocks?.(
+          people.map((person) => person.key),
+        )) || []),
+        dataBlock(
+          "call_situation",
+          session.situation || "(natural continuation of the chat)",
+          {
+            direction: session.call_direction,
+          },
+        ),
         dataBlock("call_transcript", transcript),
       ],
       groupCallFinal(me),
     );
     this.assertChat(operation);
     const parsed = await this.requestSpokenReply(profileId, messages, 1400);
-    if (operationToken !== this.phoneOperationToken || this.phoneSession?.id !== sessionId || this.phoneSession?.status !== "active")
+    if (
+      operationToken !== this.phoneOperationToken ||
+      this.phoneSession?.id !== sessionId ||
+      this.phoneSession?.status !== "active"
+    )
       return;
     const speakerOf = (from) => {
-      const value = String(from || "").trim().toLowerCase();
+      const value = String(from || "")
+        .trim()
+        .toLowerCase();
       return (
         people.find((person) => person.key.toLowerCase() === value) ||
         people.find((person) => person.name.trim().toLowerCase() === value) ||
@@ -193,10 +272,14 @@ export const groupCall = {
       );
     };
     const lines = (Array.isArray(parsed?.lines) ? parsed.lines : [])
-      .map((line) => ({ speaker: speakerOf(line?.from), draft: this.normalizePhoneDraft(line, session.situation || "") }))
+      .map((line) => ({
+        speaker: speakerOf(line?.from),
+        draft: this.normalizePhoneDraft(line, session.situation || ""),
+      }))
       .filter(({ speaker, draft }) => speaker && draft.text)
       .slice(0, 4);
-    if (!lines.length) throw new Error("보조 모델이 통화 대사를 반환하지 않았습니다.");
+    if (!lines.length)
+      throw new Error("보조모델이 통화 대사를 반환하지 않았습니다.");
     const made = [];
     // A new round shows from its first line.
     this.groupCallShown = null;
@@ -212,6 +295,7 @@ export const groupCall = {
           tags: draft.tags,
           language: draft.language,
           intensity: draft.intensity,
+          space: draft.space,
           should_end: index === lines.length - 1 && Boolean(parsed?.should_end),
         },
         sessionId,
@@ -220,7 +304,8 @@ export const groupCall = {
     }
     await this.renderSmartphone();
     // Like a real call, played as they come, one after another.
-    if (this.config.phone?.auto_voice !== false) void this.voiceGroupRound(made.filter(Boolean));
+    if (this.config.phone?.auto_voice !== false)
+      void this.voiceGroupRound(made.filter(Boolean));
   },
 
   /**
@@ -229,16 +314,25 @@ export const groupCall = {
    */
   async voiceGroupRound(ids) {
     const sessionId = this.phoneSession?.id;
-    const turnOf = (id) => this.phoneSession?.turns?.find((turn) => turn.id === id);
+    const turnOf = (id) =>
+      this.phoneSession?.turns?.find((turn) => turn.id === id);
     let next = null;
     const make = (id) => {
       const turn = turnOf(id);
       if (!turn) return Promise.resolve(null);
-      if (turn.audio_url) return Promise.resolve({ url: this.apiUrl(turn.audio_url), revoke: false, mixed: Boolean(turn.sounds_mixed) });
+      if (turn.audio_url)
+        return Promise.resolve({
+          url: this.apiUrl(turn.audio_url),
+          revoke: false,
+          mixed: Boolean(turn.sounds_mixed),
+        });
       return this.makePhoneTurnAudio(this.phoneSession, turn)
         .then((result) => {
-          if (result?.session && this.phoneSession?.id === result.session.id) this.phoneSession = result.session;
-          return result ? { url: result.audioUrl, revoke: true, mixed: result.mixed } : null;
+          if (result?.session && this.phoneSession?.id === result.session.id)
+            this.phoneSession = result.session;
+          return result
+            ? { url: result.audioUrl, revoke: true, mixed: result.mixed }
+            : null;
         })
         .catch(() => null);
     };
@@ -255,6 +349,7 @@ export const groupCall = {
           communicationFilter: this.shouldApplyCommunicationFilter("phone"),
           // A remark from behind the phone (a 1:1 call's background) sounds fainter.
           aside: Boolean(turn?.aside),
+          place: this.turnPlace(turn),
           onEnded: resolve,
           onStop: resolve,
         }),
@@ -268,13 +363,17 @@ export const groupCall = {
     for (;;) {
       const last = this.phoneSession?.turns?.at(-1);
       if (!last || last.role === "user") return;
-      const response = await this.request(`/api/plugins/scenevoice/phone/turns/${encodeURIComponent(last.id)}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: this.phoneSession.chat_id }),
-      });
+      const response = await this.request(
+        `/api/plugins/scenevoice/phone/turns/${encodeURIComponent(last.id)}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: this.phoneSession.chat_id }),
+        },
+      );
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "대사를 다시 받을 수 없습니다.");
+      if (!response.ok)
+        throw new Error(data.detail || "대사를 다시 받을 수 없습니다.");
       this.phoneSession = data.session;
     }
   },

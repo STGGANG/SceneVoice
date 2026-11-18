@@ -1,7 +1,14 @@
 // Storage on 실리태번's own file API: the shared records (split into a few JSON files, each
 // with change detection and one backup) and the audio files.
 import { validateBackup } from "../shared/backup.js";
-import { BACKUP_ITEMS, applyBackup, audioHolders, backupContents, pickBackup, wholeChoice } from "../shared/backup-scope.js";
+import {
+  BACKUP_ITEMS,
+  applyBackup,
+  audioHolders,
+  backupContents,
+  pickBackup,
+  wholeChoice,
+} from "../shared/backup-scope.js";
 import { BrowserStore } from "./browser-store.js";
 import {
   emptyDatabase,
@@ -10,6 +17,10 @@ import {
 } from "../shared/store.js";
 import { newId } from "../shared/hash.js";
 import { UserError } from "../shared/settings.js";
+import { slimPart, fullPart } from "../shared/records-codec.js";
+// A part's backup (its file as it was) is renewed on the first write after loading and then at
+// most this often: a write right after another would only copy nearly the same file again.
+const BACKUP_EVERY = 10 * 60 * 1000;
 const PART_FORMAT = "scenevoice-part-v1";
 /**
  * The records, split by how often and how much each part changes, so a write sends only the
@@ -27,9 +38,12 @@ const PART_NAMES = Object.keys(PARTS);
 export const partFile = (name) => `scenevoice_${name}.json`;
 const backupFile = (name) => `scenevoice_${name}_previous.json`;
 const encode = (value) => new TextEncoder().encode(JSON.stringify(value));
-const pick = (data, name) => Object.fromEntries(PARTS[name].map((key) => [key, data[key]]));
+const pick = (data, name) =>
+  Object.fromEntries(PARTS[name].map((key) => [key, data[key]]));
 const brokenFile = () =>
-  new UserError("공유 목록 형식이 잘못되었습니다. 기존 파일을 덮어쓰지 않았습니다.");
+  new UserError(
+    "공유 목록 형식이 잘못되었습니다. 기존 파일을 덮어쓰지 않았습니다.",
+  );
 
 export class STFileStore {
   tail = Promise.resolve();
@@ -38,6 +52,8 @@ export class STFileStore {
   generation = 0;
   // Per part: the ETag and revision last seen and its contents (null when it has no file yet).
   parts = {};
+  // Per part: when its backup was last written by this page.
+  backedUp = {};
   constructor(name, network) {
     this.local = new BrowserStore(name);
     this.network = network;
@@ -99,7 +115,7 @@ export class STFileStore {
     return (this.parts[name] = {
       etag: response.headers.get("ETag") || "",
       revision: file.revision,
-      value: file.data,
+      value: fullPart(name, file.data),
     });
   }
   /** The parts put together as one records object (what the service works with). */
@@ -108,20 +124,34 @@ export class STFileStore {
     data.audioFiles = {};
     for (const name of PART_NAMES) {
       const value = this.parts[name]?.value;
-      if (value) for (const key of PARTS[name]) if (value[key] !== undefined) data[key] = value[key];
+      if (value)
+        for (const key of PARTS[name])
+          if (value[key] !== undefined) data[key] = value[key];
     }
     // Restores compare this to see that nothing changed since their preview.
-    data.revision = PART_NAMES.map((name) => this.parts[name]?.revision || "").join(".");
+    data.revision = PART_NAMES.map(
+      (name) => this.parts[name]?.revision || "",
+    ).join(".");
     checkDatabase(data);
-    if (!data.audioFiles || typeof data.audioFiles !== "object") throw brokenFile();
+    if (!data.audioFiles || typeof data.audioFiles !== "object")
+      throw brokenFile();
     // Credentials are deliberately never loaded from publicly served files.
-    for (const engine of ["fish", "elevenlabs"]) data.settings[engine].api_key = "";
+    for (const engine of ["fish", "elevenlabs"])
+      data.settings[engine].api_key = "";
     return data;
   }
   /** Writes one part from the records; returns its new revision. */
   async writePart(name, data) {
     const revision = newId();
-    await this.upload(partFile(name), encode({ format: PART_FORMAT, part: name, revision, data: pick(data, name) }));
+    await this.upload(
+      partFile(name),
+      encode({
+        format: PART_FORMAT,
+        part: name,
+        revision,
+        data: slimPart(name, pick(data, name)),
+      }),
+    );
     this.generation++;
     this.parts[name] = { etag: "", revision, value: pick(data, name) };
     return revision;
@@ -130,7 +160,10 @@ export class STFileStore {
   async loadShared({ fresh = false, clone = true } = {}) {
     const before = PART_NAMES.map((name) => this.parts[name]);
     await Promise.all(PART_NAMES.map((name) => this.loadPart(name, { fresh })));
-    if (!this.snapshot || PART_NAMES.some((name, index) => this.parts[name] !== before[index]))
+    if (
+      !this.snapshot ||
+      PART_NAMES.some((name, index) => this.parts[name] !== before[index])
+    )
       this.snapshot = this.assemble();
     return clone ? structuredClone(this.snapshot) : this.snapshot;
   }
@@ -158,7 +191,9 @@ export class STFileStore {
       // Parts that didn't change since they were last seen answer "not modified" (ETag) and
       // aren't downloaded again; the parts about to be written are read fresh below anyway.
       const before = await this.loadShared({ fresh: attempt > 0 });
-      const revisions = Object.fromEntries(PART_NAMES.map((name) => [name, this.parts[name].revision]));
+      const revisions = Object.fromEntries(
+        PART_NAMES.map((name) => [name, this.parts[name].revision]),
+      );
       const data = structuredClone(before);
       data.settings.fish.api_key = key;
       const result = await change(data);
@@ -167,7 +202,10 @@ export class STFileStore {
         data.settings[engine].api_key = "";
       // Only the parts that changed are written (compared as JSON text: native and fast).
       const changed = PART_NAMES.filter((name) =>
-        PARTS[name].some((field) => JSON.stringify(data[field]) !== JSON.stringify(before[field])),
+        PARTS[name].some(
+          (field) =>
+            JSON.stringify(data[field]) !== JSON.stringify(before[field]),
+        ),
       );
       if (!changed.length) {
         if (nextKey !== key)
@@ -177,25 +215,46 @@ export class STFileStore {
         return result;
       }
       // Another device wrote one of these parts meanwhile: start again from its version.
-      const current = await Promise.all(changed.map((name) => this.loadPart(name, { fresh: true })));
-      if (current.some((part, index) => part.revision !== revisions[changed[index]])) continue;
+      const current = await Promise.all(
+        changed.map((name) => this.loadPart(name, { fresh: true })),
+      );
+      if (
+        current.some(
+          (part, index) => part.revision !== revisions[changed[index]],
+        )
+      )
+        continue;
       // Native ST upload has no compare-and-swap operation. Pre/post checks detect most overlaps;
       // simultaneous cross-device writes are not a serializable transaction (documented limitation).
       const written = {};
       for (const name of changed) {
-        if (revisions[name])
+        if (
+          revisions[name] &&
+          !(Date.now() - (this.backedUp[name] || 0) < BACKUP_EVERY)
+        ) {
           await this.upload(
             backupFile(name),
-            encode({ format: PART_FORMAT, part: name, revision: revisions[name], data: pick(before, name) }),
+            encode({
+              format: PART_FORMAT,
+              part: name,
+              revision: revisions[name],
+              data: slimPart(name, pick(before, name)),
+            }),
           );
+          this.backedUp[name] = Date.now();
+        }
         written[name] = await this.writePart(name, data);
       }
-      const check = await Promise.all(changed.map((name) => this.loadPart(name, { fresh: true })));
-      if (check.some((part, index) => part.revision !== written[changed[index]])) {
+      const check = await Promise.all(
+        changed.map((name) => this.loadPart(name, { fresh: true })),
+      );
+      if (
+        check.some((part, index) => part.revision !== written[changed[index]])
+      ) {
         // The other device's version is what the next read must see.
         this.snapshot = null;
         throw new UserError(
-          "다른 기기에서도 목록을 변경했습니다. 새로 불러온 뒤 다시 시도해 주십시오. 직전 목록은 실리태번에 백업되어 있습니다.",
+          "다른 기기에서도 목록을 변경했습니다. 새로 불러온 뒤 다시 시도해 주십시오. 최근 목록은 실리태번에 백업되어 있습니다.",
           409,
         );
       }
@@ -231,7 +290,7 @@ export class STFileStore {
   }
   /** A person's picture in ST's user files; returns the URL it is served at. */
   async uploadImage(name, bytes) {
-    if (!/^scenevoice_avatar_[a-f0-9]{24}\.(webp|jpg|png)$/.test(name))
+    if (!/^scenevoice_(avatar|image)_[a-f0-9]{24}\.(webp|jpg|png)$/.test(name))
       throw new UserError("사진 파일 이름이 올바르지 않습니다.");
     return `/${await this.upload(name, bytes)}`;
   }
@@ -291,7 +350,13 @@ export class STFileStore {
       format: "scenevoice-catalog-v2",
       data: choice ? pickBackup(data, choice) : data,
       ...(choice
-        ? { contents: { common: Boolean(choice.common), scopes: [...choice.scopes], items: [...choice.items] } }
+        ? {
+            contents: {
+              common: Boolean(choice.common),
+              scopes: [...choice.scopes],
+              items: [...choice.items],
+            },
+          }
         : {}),
       created_at: new Date().toISOString(),
     };
@@ -324,25 +389,38 @@ export class STFileStore {
       for (const name of batch)
         if (found[this.nativePath(name)] !== true) missing.push(name);
     }
-    return { data, revision: current.revision, missing, contents: backupContents(input, data) };
+    return {
+      data,
+      revision: current.revision,
+      missing,
+      contents: backupContents(input, data),
+    };
   }
   /**
    * `choice` ({common, scopes, items}): what to take from the file; a chosen bot card's chosen
    * kinds are replaced, the rest stay. `true` takes the settings and people only, `false` all.
    */
   async restoreCatalog(preview, choice = true) {
+    // What a restore replaces is always backed up first, however lately a backup was made.
+    this.backedUp = {};
     const data = validateBackup({
       format: "scenevoice-catalog-v2",
       data: preview.data,
     });
     const contents = preview.contents || backupContents(null, data);
     if (typeof choice === "boolean")
-      choice = { common: true, scopes: contents.scopes, items: choice ? ["people"] : BACKUP_ITEMS.map(([key]) => key) };
+      choice = {
+        common: true,
+        scopes: contents.scopes,
+        items: choice ? ["people"] : BACKUP_ITEMS.map(([key]) => key),
+      };
     const allowed = new Set(contents.scopes);
     choice = {
       common: Boolean(choice.common && contents.common),
       scopes: (choice.scopes || []).filter((scope) => allowed.has(scope)),
-      items: (choice.items || []).filter((item) => contents.items.includes(item)),
+      items: (choice.items || []).filter((item) =>
+        contents.items.includes(item),
+      ),
     };
     const missing = new Set(preview.missing);
     for (const row of audioHolders(data)) {
@@ -360,7 +438,8 @@ export class STFileStore {
         );
       const key = current.settings.fish.api_key;
       applyBackup(current, data, choice);
-      if (wholeChoice(choice, contents)) Object.assign(current.audioFiles, data.audioFiles);
+      if (wholeChoice(choice, contents))
+        Object.assign(current.audioFiles, data.audioFiles);
       current.settings.fish.api_key = key;
       current.settings.elevenlabs.api_key = "";
       return { status: "success", missing: missing.size };

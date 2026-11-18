@@ -1,5 +1,5 @@
 import { dataBlock } from "./prompts.js";
-import { escapeHtml } from "./common.js";
+import { escapeHtml, stOf } from "./common.js";
 
 // 로어북 참고: which lorebooks and entries calls and texts may use, chosen per bot card.
 // Books linked to the card are picked by default, with the entries ST has on.
@@ -17,7 +17,9 @@ const SOURCES = {
 let worldModule = null;
 async function loadWorldModule() {
   // ST's own module; absent outside ST (tests), where only the context functions are used.
-  worldModule ??= import(/* @vite-ignore */ "/scripts/world-info.js").catch(() => ({}));
+  worldModule ??= import(/* @vite-ignore */ "/scripts/world-info.js").catch(
+    () => ({}),
+  );
   return worldModule;
 }
 
@@ -34,43 +36,70 @@ export const lore = {
 
   /** Books for this chat's card: linked ones first (picked by default), then every other book. */
   async discoverLoreBooks() {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const world = await loadWorldModule();
     const card = context.characters?.[context.characterId];
     const books = new Map();
-    const add = (name, source, { auto = false, embedded = null, key = `book:${name}` } = {}) => {
+    const add = (
+      name,
+      source,
+      { auto = false, embedded = null, key = `book:${name}` } = {},
+    ) => {
       if (!name) return;
       const found = books.get(key);
       if (found) {
-        if (source && !found.sources.includes(source)) found.sources.push(source);
+        if (source && !found.sources.includes(source))
+          found.sources.push(source);
         found.auto ||= auto;
         return;
       }
-      books.set(key, { key, name: String(name), sources: source ? [source] : [], auto, embedded });
+      books.set(key, {
+        key,
+        name: String(name),
+        sources: source ? [source] : [],
+        auto,
+        embedded,
+      });
     };
     const primary = card?.data?.extensions?.world;
     add(primary, SOURCES.primary, { auto: true });
     const fileName = String(card?.avatar || "").replace(/\.[^.]+$/, "");
-    const charLore = world.world_info?.charLore?.find?.((item) => item.name === fileName);
-    for (const name of charLore?.extraBooks || []) add(name, SOURCES.extra, { auto: true });
+    const charLore = world.world_info?.charLore?.find?.(
+      (item) => item.name === fileName,
+    );
+    for (const name of charLore?.extraBooks || [])
+      add(name, SOURCES.extra, { auto: true });
     if (!primary && card?.data?.character_book?.entries)
-      add(card.data.character_book.name || "카드 내장 월드인포", SOURCES.embedded, {
-        auto: true,
-        embedded: card.data.character_book,
-        key: `embedded:${card.avatar}`,
-      });
-    add(context.chatMetadata?.[world.METADATA_KEY || "world_info"], SOURCES.chat, { auto: true });
-    add(context.powerUserSettings?.persona_description_lorebook, SOURCES.persona);
-    for (const name of world.selected_world_info || []) add(name, SOURCES.global);
+      add(
+        card.data.character_book.name || "카드 내장 월드인포",
+        SOURCES.embedded,
+        {
+          auto: true,
+          embedded: card.data.character_book,
+          key: `embedded:${card.avatar}`,
+        },
+      );
+    add(
+      context.chatMetadata?.[world.METADATA_KEY || "world_info"],
+      SOURCES.chat,
+      { auto: true },
+    );
+    add(
+      context.powerUserSettings?.persona_description_lorebook,
+      SOURCES.persona,
+    );
+    for (const name of world.selected_world_info || [])
+      add(name, SOURCES.global);
     const names =
-      context.getWorldInfoNames?.() || (Array.isArray(world.world_names) ? world.world_names : []);
+      context.getWorldInfoNames?.() ||
+      (Array.isArray(world.world_names) ? world.world_names : []);
     for (const name of names) add(name, "");
     return [...books.values()];
   },
 
   /** A book's entries: uid, name, keys, content, whether ST has it on, always-on. */
   async loadLoreEntries(book) {
-    const context = window.SillyTavern?.getContext?.() || {};
+    const context = stOf(this) || {};
     const data = book.embedded
       ? book.embedded
       : typeof context.loadWorldInfo === "function"
@@ -78,17 +107,28 @@ export const lore = {
         : (await loadWorldModule()).loadWorldInfo?.(book.name);
     const raw = data?.entries;
     if (!raw || typeof raw !== "object") return [];
-    const list = Array.isArray(raw) ? raw.map((entry, index) => [String(index), entry]) : Object.entries(raw);
+    const list = Array.isArray(raw)
+      ? raw.map((entry, index) => [String(index), entry])
+      : Object.entries(raw);
     return list
       .map(([fallback, entry]) => {
         if (!entry || typeof entry !== "object") return null;
         const keys = keysOf(entry.key ?? entry.keys);
         return {
           uid: String(entry.uid ?? entry.id ?? fallback),
-          name: String(entry.comment || entry.name || keys.join(", ") || `항목 #${fallback}`),
+          name: String(
+            entry.comment ||
+              entry.name ||
+              keys.join(", ") ||
+              `항목 #${fallback}`,
+          ),
           keys,
-          content: typeof entry.content === "string" ? entry.content.trim() : "",
-          enabled: entry.disable !== true && entry.disabled !== true && entry.enabled !== false,
+          content:
+            typeof entry.content === "string" ? entry.content.trim() : "",
+          enabled:
+            entry.disable !== true &&
+            entry.disabled !== true &&
+            entry.enabled !== false,
           constant: Boolean(entry.constant),
         };
       })
@@ -96,7 +136,10 @@ export const lore = {
   },
 
   /** The saved choice for a card: {books: {key: bool}, entries: {bookKey: {uid: bool}}}. */
-  loreChoice(cardKey = this.loreCardKey(), source = this.loreDraft || this.config.phone?.world_info_choice) {
+  loreChoice(
+    cardKey = this.loreCardKey(),
+    source = this.loreDraft || this.config.phone?.world_info_choice,
+  ) {
     return source?.[cardKey] || { books: {}, entries: {} };
   },
 
@@ -105,10 +148,13 @@ export const lore = {
    * key appears in the recent chat or this conversation. [] when 월드인포 참고 is off.
    */
   async worldInfoBlocks(lines = []) {
-    const choice = this.loreChoice(this.loreCardKey(), this.config.phone?.world_info_choice);
+    const choice = this.loreChoice(
+      this.loreCardKey(),
+      this.config.phone?.world_info_choice,
+    );
     if (!choice.enabled) return [];
     try {
-      const context = window.SillyTavern?.getContext?.() || {};
+      const context = stOf(this) || {};
       const scan = [
         ...(context.chat || [])
           .filter((message) => !message?.is_system)
@@ -153,22 +199,28 @@ export const lore = {
     const cardKey = this.loreCardKey();
     // The books come from the open chat's card: another card's are chosen in its own chat.
     if (!cardKey || !this.hasCharacterChat() || shownCard !== cardKey) {
-      root.innerHTML = '<p class="sv-hint">이 봇카드의 채팅을 열면 월드인포를 고를 수 있습니다.</p>';
+      root.innerHTML =
+        '<p class="sv-hint">이 봇카드의 채팅을 열면 월드인포를 고를 수 있습니다.</p>';
       return;
     }
-    this.loreDraft ||= structuredClone(this.config.phone?.world_info_choice || {});
+    this.loreDraft ||= structuredClone(
+      this.config.phone?.world_info_choice || {},
+    );
     root.innerHTML = '<p class="sv-hint">월드인포 목록을 읽는 중…</p>';
     const books = await this.discoverLoreBooks();
     this.loreBooks = books;
     const choice = this.loreChoice(cardKey);
     if (!books.length) {
-      root.innerHTML = '<p class="sv-hint">고를 수 있는 월드인포가 없습니다.</p>';
+      root.innerHTML =
+        '<p class="sv-hint">고를 수 있는 월드인포가 없습니다.</p>';
       return;
     }
     root.innerHTML = `
       <ul class="sv-lore-books">${books
         .map(
-          (book) => `<li class="sv-lore-book" data-book="${escapeHtml(book.key)}">
+          (
+            book,
+          ) => `<li class="sv-lore-book" data-book="${escapeHtml(book.key)}">
             <label class="sv-check"><input type="checkbox" data-lore-book ${(choice.books?.[book.key] ?? book.auto) ? "checked" : ""}><span>${escapeHtml(book.name)}</span></label>
             ${book.sources.map((source) => `<span class="sv-badge">${escapeHtml(source)}</span>`).join("")}
             <button type="button" class="sv-btn sv-btn-ghost sv-btn-sm" data-lore-open aria-expanded="false"><i class="fa-solid fa-list" aria-hidden="true"></i><span>항목</span></button>
@@ -179,7 +231,9 @@ export const lore = {
   },
 
   async renderLoreEntries(item) {
-    const book = this.loreBooks?.find((found) => found.key === item.dataset.book);
+    const book = this.loreBooks?.find(
+      (found) => found.key === item.dataset.book,
+    );
     const box = item.querySelector(".sv-lore-entries");
     if (!book || !box) return;
     box.innerHTML = '<p class="sv-hint">항목을 읽는 중…</p>';
@@ -194,7 +248,9 @@ export const lore = {
     box.innerHTML = entries.length
       ? entries
           .map(
-            (entry) => `<label class="sv-check sv-lore-entry" title="${escapeHtml(entry.content.slice(0, 400))}">
+            (
+              entry,
+            ) => `<label class="sv-check sv-lore-entry" title="${escapeHtml(entry.content.slice(0, 400))}">
               <input type="checkbox" data-lore-entry="${escapeHtml(entry.uid)}" ${(chosen[entry.uid] ?? entry.enabled) ? "checked" : ""}>
               <span>${escapeHtml(entry.name)}</span>
               ${entry.constant ? '<span class="sv-badge">상시</span>' : `<small>${escapeHtml(entry.keys.slice(0, 4).join(", "))}</small>`}
@@ -212,7 +268,9 @@ export const lore = {
     const remember = (book, uid, value) => {
       const cardKey = this.loreCardKey();
       // Saved with the other settings: the change bubbles up to the settings form.
-      this.loreDraft ||= structuredClone(this.config.phone?.world_info_choice || {});
+      this.loreDraft ||= structuredClone(
+        this.config.phone?.world_info_choice || {},
+      );
       const choice = (this.loreDraft[cardKey] ||= { books: {}, entries: {} });
       if (uid === null) choice.books[book] = value;
       else (choice.entries[book] ||= {})[uid] = value;
@@ -235,7 +293,11 @@ export const lore = {
       if (event.target.matches("[data-lore-book]"))
         remember(item.dataset.book, null, event.target.checked);
       else if (event.target.matches("[data-lore-entry]"))
-        remember(item.dataset.book, event.target.dataset.loreEntry, event.target.checked);
+        remember(
+          item.dataset.book,
+          event.target.dataset.loreEntry,
+          event.target.checked,
+        );
     });
   },
 };

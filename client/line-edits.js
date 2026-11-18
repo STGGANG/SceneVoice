@@ -38,8 +38,16 @@ const TAG_LABELS = {
   reflective: "곰곰이",
   "matter-of-fact": "담담하게",
   breathy: "숨 섞인",
+  breathless: "숨이 차서",
+  husky: "낮고 거칠게",
   shaky: "떨리는 목소리",
   hesitant: "머뭇거리며",
+  excited: "들떠서",
+  nervous: "초조하게",
+  annoyed: "짜증 내며",
+  mischievous: "장난스럽게",
+  shouting: "소리치며",
+  crying: "울면서",
   sighs: "한숨",
   laughs: "웃음",
   chuckles: "킥킥 웃음",
@@ -53,40 +61,82 @@ const TAG_LABELS = {
   sobs: "흐느낌",
   yawns: "하품",
   scoffs: "코웃음",
+  panting: "헐떡임",
+  "inhales deeply": "숨 들이쉼",
   smooch: "쪽 (뽀뽀)",
 };
+// The chips in an order that reads as a flow: calm, bright, affectionate, shy and nervous,
+// frightened, sad, angry; then laughs, breaths, starts and sobs. A tag not listed here (an
+// emotion the user added) comes after them.
+const TAG_ORDER = [
+  ...["calm", "soft", "quiet", "whispers", "matter-of-fact", "reflective"],
+  ...["relieved", "languid", "tired"],
+  ...["happy", "excited", "confident", "curious", "mischievous"],
+  ...["sensual", "seductive", "breathy", "breathless", "husky"],
+  ...["embarrassed", "flustered", "hesitant", "nervous", "tense"],
+  ...["surprised", "fearful", "shaky", "urgent"],
+  ...["disappointed", "sad", "crying", "pained"],
+  ...["sarcastic", "annoyed", "angry", "emphatic", "shouting"],
+  ...["laughs", "chuckles", "giggles", "scoffs"],
+  ...["sighs", "exhales", "inhales deeply", "panting", "yawns"],
+  ...["gasps", "gulps", "clears throat"],
+  ...["sniffs", "sobs", "groans", "smooch"],
+];
+const place = (tag) =>
+  TAG_ORDER.includes(tag) ? TAG_ORDER.indexOf(tag) : TAG_ORDER.length;
 const chips = (tags) =>
-  tags
+  [...tags]
+    .sort((a, b) => place(a) - place(b))
     .map(
       (tag) =>
         `<button type="button" class="sv-tag-pick" data-tag="${escapeHtml(tag)}" title="[${escapeHtml(tag)}]">${escapeHtml(TAG_LABELS[tag] || tag)}</button>`,
     )
     .join("");
 
+// What of a person's settings changes a line's voice, or who a line is given to.
+const VOICE_FIELDS = [
+  "name",
+  "aliases",
+  "engine",
+  "voice_id",
+  "card",
+  "single_voice",
+  "expressiveness",
+  "language",
+  "always_tags",
+  "gender",
+  "persona",
+  "use_cards",
+];
+
 export const lineEdits = {
+  /**
+   * What the chat's line buttons read from the settings (who a line is given to, how it is
+   * read): when it changes the chat is looked at again. Made voices don't hang on it: a line's
+   * voice stays its voice whatever the settings become, until it is made again.
+   */
   lineConfigKey() {
-    const engine = (name) =>
-      Object.fromEntries(
-        Object.entries(this.config[name] || {}).filter(
-          ([key]) => !["api_key", "has_api_key", "clear_api_key"].includes(key),
-        ),
-      );
+    const voices = this.config.character_voices;
+    const casting = this.config.casting;
     return contentKey({
       engine: this.config.engine,
-      elevenlabs: engine("elevenlabs"),
-      fish: engine("fish"),
-      voices: this.config.character_voices,
-      notes: this.config.character_notes,
+      voices: Object.fromEntries(
+        Object.entries(voices || {}).map(([key, entry]) => [
+          key,
+          Object.fromEntries(
+            VOICE_FIELDS.filter((field) => entry?.[field] !== undefined).map(
+              (field) => [field, entry[field]],
+            ),
+          ),
+        ]),
+      ),
       reading: this.config.reading,
       language: this.config.default_language,
       analysis: this.config.analysis_enabled,
-      casting: this.config.casting,
-      llm: this.config.llm,
-      context: this.config.context_messages,
-      connection:
-        this.connectionService?.fingerprint?.(
-          this.config.connection_profile_id,
-        ) || this.config.connection_profile_id,
+      casting: {
+        auto_enabled: casting?.auto_enabled,
+        uncertain: casting?.uncertain,
+      },
     });
   },
   /** A line's key: its chat, message (as written now), place, kind and words. Kept per button. */
@@ -112,13 +162,15 @@ export const lineEdits = {
       const requestedAt = Date.now();
       this.lineStatePromise = (async () => {
         const response = await this.request(
-          `/api/plugins/scenevoice/line-state?chat_id=${encodeURIComponent(this.currentChatId())}&config_key=${this.lineConfigKey()}`,
+          `/api/plugins/scenevoice/line-state?chat_id=${encodeURIComponent(this.currentChatId())}`,
         );
         const data = await response.json();
         if (!response.ok)
           throw new Error(data.detail || "대사 설정을 읽지 못했습니다.");
         this.assertChat(operation);
         data.requestedAt = requestedAt;
+        // Keys of the analyses kept for this chat (those messages' 분석 보기 button shows).
+        data.analysed = new Set(data.analysed || []);
         this.lineState = data;
         return data;
       })().catch((error) => {
@@ -136,7 +188,8 @@ export const lineEdits = {
         button.lineSaving ||
         ["queued", "generating"].includes(button.dataset.status) ||
         // Made after this list was asked for: the list doesn't know its voice yet.
-        (button.dataset.madeAt && Number(button.dataset.madeAt) >= (state.requestedAt || 0))
+        (button.dataset.madeAt &&
+          Number(button.dataset.madeAt) >= (state.requestedAt || 0))
       )
         continue;
       const key = this.lineIdentity(button);
@@ -158,7 +211,8 @@ export const lineEdits = {
       button.lineEdit = edit;
       button.lineSignature = signature;
       button.dataset.speakerOverride = edit.speaker_key || "";
-      if (edit.speaker_key) this.applyLineVisibility?.(button, edit.speaker_key);
+      if (edit.speaker_key)
+        this.applyLineVisibility?.(button, edit.speaker_key);
       const select = button
         .closest(".sv-inline-actions")
         ?.querySelector(".sv-speaker-select");
@@ -166,7 +220,11 @@ export const lineEdits = {
       if (audio?.audio_url && button.dataset.status !== "ready") {
         button.dataset.audioUrl = audio.audio_url;
         button.dataset.historyId = audio.id;
-        button.dataset.speakerName = audio.speaker_key === "__default__" ? "" : audio.speaker_name || "";
+        button.dataset.speakerName =
+          audio.speaker_key === "__default__" ? "" : audio.speaker_name || "";
+        // An analysis applied since knows better than the record of the voice.
+        button.dataset.side ??= audio.side || "";
+        button.dataset.space ??= audio.space || "";
         button.dataset.status = "ready";
         button.classList.remove("sv-error");
         button.classList.add("sv-ready");
@@ -205,7 +263,9 @@ export const lineEdits = {
       button.lineKey = key;
       button.lineSignature = "";
       button.dataset.speakerOverride = result.value.speaker_key || "";
-      const select = button.closest(".sv-inline-actions")?.querySelector(".sv-speaker-select");
+      const select = button
+        .closest(".sv-inline-actions")
+        ?.querySelector(".sv-speaker-select");
       if (select) select.value = button.dataset.speakerOverride;
       this.analysisCache.clear();
     })();
@@ -240,7 +300,7 @@ export const lineEdits = {
         )}
       </header>
       <blockquote class="sv-line-text">${escapeHtml(button.dataset.text)}</blockquote>
-      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 메시지의 ‘음성’ 버튼으로 생성하십시오.</span></p>
+      <p class="sv-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>저장만 하며 음성은 만들지 않습니다. 저장한 뒤 재생 버튼이나 메시지의 이어 듣기 버튼으로 생성하십시오.</span></p>
       <div class="sv-row">
         ${fieldHtml({ id: "sv-edit-speaker", label: "화자", control: '<select id="sv-edit-speaker"></select>' })}
         ${fieldHtml({ id: "sv-edit-language", label: "언어", control: `<select id="sv-edit-language">${LANGUAGE_CHOICES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select>` })}
@@ -262,13 +322,18 @@ export const lineEdits = {
       dialog.remove();
       button.focus();
     });
-    const controls = [...dialog.querySelectorAll("select, textarea, .sv-tag-pick, #sv-edit-save, #sv-edit-reanalyze")];
+    const controls = [
+      ...dialog.querySelectorAll(
+        "select, textarea, .sv-tag-pick, #sv-edit-save, #sv-edit-reanalyze",
+      ),
+    ];
     controls.forEach((control) => {
       control.disabled = true;
     });
     const loading = dialog.querySelector("#sv-edit-script-check");
     loading.dataset.state = "";
-    loading.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 이 대사의 분석 결과를 불러오는 중…';
+    loading.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 이 대사의 분석 결과를 불러오는 중…';
     dialog.showModal();
     let key, result, unanalysed;
     try {
@@ -286,7 +351,10 @@ export const lineEdits = {
           }
         : await this.analyzeUtterance(button, { storedOnly: true });
       unanalysed = !result;
-      result ||= this.fallbackAnalysis(button.dataset.text || "", Number(button.dataset.quoteIndex || 0));
+      result ||= this.fallbackAnalysis(
+        button.dataset.text || "",
+        Number(button.dataset.quoteIndex || 0),
+      );
       this.assertChat(operation);
     } catch (error) {
       if (dialog.open) dialog.close();
@@ -311,7 +379,11 @@ export const lineEdits = {
     // The fields from an analysis (the saved one, or a new one after AI 분석 다시).
     const fill = () => {
       const speaker = this.resolvedSpeaker(button, result);
-      if (![...speakerField.options].some((option) => option.value === speaker.key))
+      if (
+        ![...speakerField.options].some(
+          (option) => option.value === speaker.key,
+        )
+      )
         speakerField.prepend(new Option(speaker.name, speaker.key));
       speakerField.value = speaker.key;
       dialog.querySelector("#sv-edit-language").value = result.language || "ko";
@@ -346,7 +418,9 @@ export const lineEdits = {
         const value = field.value;
         const lead = /^(?:\s*\[[^\[\]]+\])*/.exec(value)[0].length;
         const at =
-          group.dataset.place === "lead" ? lead : Math.min(caret ?? value.length, value.length);
+          group.dataset.place === "lead"
+            ? lead
+            : Math.min(caret ?? value.length, value.length);
         const before = value.slice(0, at);
         const after = value.slice(at);
         const tag = `[${chip.dataset.tag}]`;
@@ -370,12 +444,15 @@ export const lineEdits = {
     const againLabel = dialog.querySelector("#sv-edit-reanalyze span");
     if (unanalysed) {
       againLabel.textContent = "AI 분석";
-      check.textContent = "아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르십시오.";
+      check.textContent =
+        "아직 분석하지 않은 대사입니다. 필요하면 ‘AI 분석’을 누르십시오.";
     }
     const save = async () => {
       this.assertChat(operation);
       if (!validate())
-        throw new Error("대사 글자가 바뀌어 저장할 수 없습니다. 태그만 넣고 빼 주십시오.");
+        throw new Error(
+          "대사 글자가 바뀌어 저장할 수 없습니다. 태그만 넣고 빼 주십시오.",
+        );
       if (!button.isConnected || key !== this.lineIdentity(button))
         throw new Error("메시지가 변경되었습니다. 다시 열어 주십시오.");
       this.cancelLineAudio(button);
@@ -420,7 +497,8 @@ export const lineEdits = {
         const icon = again.querySelector("i");
         icon.className = "fa-solid fa-spinner fa-spin";
         check.dataset.state = "";
-        check.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 이 대사를 다시 분석하는 중…';
+        check.innerHTML =
+          '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 이 대사를 다시 분석하는 중…';
         try {
           this.cancelLineAudio(button);
           if (button.lineEdit) await this.saveLineEdit(button, {});

@@ -13,7 +13,10 @@ export function pcm16(samples) {
 export function wavFromParts(parts, rate) {
   const bytes = parts.reduce((total, part) => total + part.byteLength, 0);
   const view = new DataView(new ArrayBuffer(44));
-  const text = (offset, value) => [...value].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)));
+  const text = (offset, value) =>
+    [...value].forEach((char, i) =>
+      view.setUint8(offset + i, char.charCodeAt(0)),
+    );
   text(0, "RIFF");
   view.setUint32(4, 36 + bytes, true);
   text(8, "WAVE");

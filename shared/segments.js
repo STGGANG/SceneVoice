@@ -8,12 +8,42 @@ const escaped = (text, index) => {
 export const READING_KINDS = ["dialogue", "thought"];
 // Double quotes are read out of the box; single quotes (often inner thoughts) are thoughts.
 export const DEFAULT_READING_RULES = [
-  { id: "double-curly", open: "“", close: "”", kind: "dialogue", enabled: true },
-  { id: "double-straight", open: '"', close: '"', kind: "dialogue", enabled: true },
+  {
+    id: "double-curly",
+    open: "“",
+    close: "”",
+    kind: "dialogue",
+    enabled: true,
+  },
+  {
+    id: "double-straight",
+    open: '"',
+    close: '"',
+    kind: "dialogue",
+    enabled: true,
+  },
   { id: "corner", open: "「", close: "」", kind: "dialogue", enabled: false },
-  { id: "white-corner", open: "『", close: "』", kind: "dialogue", enabled: false },
-  { id: "single-curly", open: "‘", close: "’", kind: "thought", enabled: false },
-  { id: "single-straight", open: "'", close: "'", kind: "thought", enabled: false },
+  {
+    id: "white-corner",
+    open: "『",
+    close: "』",
+    kind: "dialogue",
+    enabled: false,
+  },
+  {
+    id: "single-curly",
+    open: "‘",
+    close: "’",
+    kind: "thought",
+    enabled: false,
+  },
+  {
+    id: "single-straight",
+    open: "'",
+    close: "'",
+    kind: "thought",
+    enabled: false,
+  },
   { id: "asterisk", open: "*", close: "*", kind: "thought", enabled: true },
   { id: "paren", open: "(", close: ")", kind: "thought", enabled: false },
 ];
@@ -21,7 +51,9 @@ export const DEFAULT_READING_RULES = [
 const WORD = /[\p{L}\p{N}]/u;
 const apostrophe = (text, index, marker, opening) =>
   ["'", "‘", "’"].includes(marker) &&
-  (opening ? WORD.test(text[index - 1] || "") : WORD.test(text[index + 1] || ""));
+  (opening
+    ? WORD.test(text[index - 1] || "")
+    : WORD.test(text[index + 1] || ""));
 
 /** Accepts the reading settings or a rule list. */
 export function readingRules(source) {
@@ -49,10 +81,7 @@ export function extractSegments(text, reading) {
       !escaped(text, index) &&
       !apostrophe(text, index, marker, opening) &&
       !excluded.some(([a, b]) => index < b && index + marker.length > a) &&
-      !(
-        marker === "*" &&
-        (text[index - 1] === "*" || text[index + 1] === "*")
-      );
+      !(marker === "*" && (text[index - 1] === "*" || text[index + 1] === "*"));
     const next = (marker, offset, opening) => {
       let index = text.indexOf(marker, offset);
       while (index !== -1 && !valid(index, marker, opening))

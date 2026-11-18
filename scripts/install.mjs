@@ -42,13 +42,17 @@ const backup = path.join(
 let moved = false,
   installed = false;
 try {
+  // The licence file is LICENSE in the working copy and LICENSE.md in a release.
+  const license = await fs
+    .access(path.join(source, "LICENSE.md"))
+    .then(() => "LICENSE.md", () => "LICENSE");
   for (const file of [
     "client",
     "shared",
     "index.js",
     "style.css",
     "manifest.json",
-    "LICENSE",
+    license,
   ])
     await fs.cp(path.join(source, file), path.join(stage, file), {
       recursive: true,

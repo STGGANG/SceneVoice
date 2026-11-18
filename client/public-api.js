@@ -24,14 +24,17 @@ export const publicApi = {
       /** A call is ringing or going on. */
       inCall: () => Boolean(self.publicCall),
       /** Hold SceneVoice's 새 답변 자동 재생 until released. Reasons stack. */
-      holdAutoPlay: (reason = "external") => void self.publicHolds.add(String(reason)),
-      releaseAutoPlay: (reason = "external") => void self.publicHolds.delete(String(reason)),
+      holdAutoPlay: (reason = "external") =>
+        void self.publicHolds.add(String(reason)),
+      releaseAutoPlay: (reason = "external") =>
+        void self.publicHolds.delete(String(reason)),
       isAutoPlayHeld: () => self.publicHolds.size > 0,
       /** Open the smartphone. */
       openPhone: () => void self.run(() => self.openSmartphone()),
       on: (type, fn) => {
         if (typeof fn !== "function") return;
-        if (!self.publicListeners.has(type)) self.publicListeners.set(type, new Set());
+        if (!self.publicListeners.has(type))
+          self.publicListeners.set(type, new Set());
         self.publicListeners.get(type).add(fn);
       },
       off: (type, fn) => void self.publicListeners.get(type)?.delete(fn),
@@ -75,7 +78,10 @@ export const publicApi = {
       this.phonePendingEvent?.type === "incoming_call";
     if (call !== Boolean(this.publicCall)) {
       this.publicCall = call;
-      this.emitPublic(call ? "callstart" : "callend", call ? { name: this.phoneSession?.character_name || "" } : {});
+      this.emitPublic(
+        call ? "callstart" : "callend",
+        call ? { name: this.phoneSession?.character_name || "" } : {},
+      );
     }
   },
 
@@ -84,7 +90,8 @@ export const publicApi = {
     clearTimeout(this.publicIdleTimer);
     if (this.publicPlaying) this.emitPublic("playend", {});
     if (this.publicCall) this.emitPublic("callend", {});
-    if (window.SceneVoiceAPI?.apiVersion === API_VERSION) delete window.SceneVoiceAPI;
+    if (window.SceneVoiceAPI?.apiVersion === API_VERSION)
+      delete window.SceneVoiceAPI;
     this.publicListeners = null;
     this.publicPlaying = false;
     this.publicCall = false;
