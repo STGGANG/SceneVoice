@@ -1481,6 +1481,29 @@ export class SceneService {
       }
       return { status: "success" };
     }
+    // 미적용 기억 → 다시 적용: texts go back to a chat message (its mark and the swipe showing now).
+    if (path === "/voice-messages/reanchor" && method === "POST") {
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : [])
+          .slice(0, 2000)
+          .map((id) => String(id)),
+      );
+      const at = text(body.anchor_message_id, 100);
+      if (!ids.size || !/^\d+$/.test(at))
+        throw new UserError("다시 적용할 문자가 올바르지 않습니다.");
+      const items = data.messages.filter((x) => ids.has(x.id));
+      items.forEach((item) => checkChat(item, body));
+      const stamp = identity({ ...body, chat_id: body.chat_id || "x" });
+      for (const item of items) {
+        item.anchor_message_id = at;
+        item.anchor_fingerprint = stamp.anchor_fingerprint;
+        if ("anchor_tag" in stamp) item.anchor_tag = stamp.anchor_tag;
+        else delete item.anchor_tag;
+        if ("anchor_swipe" in stamp) item.anchor_swipe = stamp.anchor_swipe;
+        else delete item.anchor_swipe;
+      }
+      return { status: "success", moved: items.length };
+    }
     if (path === "/voice-messages/delete" && method === "POST") {
       const ids = new Set(
         (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),

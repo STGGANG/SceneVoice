@@ -2776,6 +2776,7 @@
 }
 .sv-memory-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 7px;
 }
@@ -2790,6 +2791,14 @@
 }
 .sv-memory-actions button:hover {
   background: var(--sv-soft2);
+}
+.sv-memory-actions button {
+  white-space: nowrap;
+}
+.sv-memory-actions .sv-memory-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .sv-memory-actions .sv-danger {
   border-color: var(--sv-danger-line);
@@ -8130,6 +8139,30 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 #sv-smartphone .sv-msg-frozen > i {
   margin-right: 6px;
+}
+/* 다시 적용: beside the note, a small pill of the phone's own kind. */
+#sv-smartphone .sv-msg-reapply {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 0 10px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ph-surface2);
+  color: var(--ph-blue);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#sv-smartphone .sv-msg-reapply:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+#sv-smartphone .sv-msg-reapply:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
 }
 
 /* 음성 사서함: the message left after an unanswered call, marked in the call's transcript. */

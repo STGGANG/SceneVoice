@@ -9,6 +9,18 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.3.1",
+    sections: [
+      [
+        "새로 생긴 것",
+        [
+          "미적용 기억의 대화를 원래 메시지(같은 번호)에 다시 적용하기 (그 메시지에 다른 기록이 있으면 덮어쓸지 확인 · 대화가 그 뒤로 이어졌으면 시간 순서대로 끼워진다고 안내)",
+          "채팅 기억에서 해당 통화·문자를 스마트폰으로 바로 열기 (‘스마트폰에서 보기’)",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.3.0",
     highlight: [
       "꼭 확인해 주세요",

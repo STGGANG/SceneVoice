@@ -8,7 +8,7 @@ import {
   textSystem,
   phoneMessages,
 } from "./prompts.js";
-import { escapeHtml, normalizeTags, stOf } from "./common.js";
+import { escapeHtml, normalizeTags, stOf, CHAT_MEMORY_KEY } from "./common.js";
 import { cardCanBeAnswered, REACTIONS } from "./cards.js";
 import { validReaction } from "../shared/store.js";
 
@@ -233,6 +233,153 @@ export const messages = {
     );
   },
 
+  /** A button that is pressed shows it is working, and can't be pressed twice meanwhile. */
+  async withBusyButton(button, work) {
+    if (!button || button.disabled) return work();
+    button.disabled = true;
+    const icon = button.querySelector("i");
+    const before = icon?.className;
+    if (icon) icon.className = "fa-solid fa-spinner fa-spin";
+    try {
+      return await work();
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        if (icon) icon.className = before;
+      }
+    }
+  },
+
+  /**
+   * 미적용 기억 → 다시 적용: a conversation's texts go back to the chat message they were made at
+   * (the same number, on the swipe showing now) and into the chat memory again. A message that
+   * already holds other calls or texts is asked about first: on 확인 they give way and wait in
+   * 미적용 기억 instead (nothing is deleted). A message no longer in the chat can't take them.
+   */
+  async reapplyAwayThread(key) {
+    const chat = stOf(this)?.chat || [];
+    const operation = this.captureChat();
+    const everything = await this.loadMessages({ hidden: true, all: true });
+    const items = everything.filter(
+      (item) =>
+        this.messageThreadOf(item) === key &&
+        !this.anchorShown(item) &&
+        /^\d+$/.test(String(item.anchor_message_id ?? "")),
+    );
+    if (!items.length) return;
+    const points = [
+      ...new Set(items.map((item) => String(item.anchor_message_id))),
+    ];
+    const present = points.filter((at) => chat[Number(at)]);
+    const missing = points.filter((at) => !chat[Number(at)]);
+    if (!present.length) {
+      this.notify(
+        `이 문자들이 오갔던 메시지(${missing.map((at) => `#${at}`).join(", ")})가 지금 채팅에 없어 다시 적용할 수 없습니다.`,
+        "info",
+      );
+      return;
+    }
+    const taken = present.filter(
+      (at) => this.chatMemoryEventsOf(chat[Number(at)]).length,
+    );
+    // The same conversation went on meanwhile (texts used now, at other messages): these are
+    // put back among them by the time they were sent, which can read oddly.
+    const continued = everything.some(
+      (item) =>
+        this.messageThreadOf(item) === key &&
+        !item.hidden &&
+        this.anchorShown(item) &&
+        !taken.includes(String(item.anchor_message_id)),
+    );
+    const notes = [
+      continued &&
+        "이 대화에는 그 뒤에 오간 문자가 있습니다. 다시 적용하면 보낸 시각 순서대로 기존 대화 사이에 끼워져, 대화 흐름이 어색할 수 있습니다.",
+      taken.length &&
+        `${taken.map((at) => `#${at}`).join(", ")} 메시지에 이미 다른 전화·문자 기록이 있습니다. 덮어쓰면 원래 있던 기록은 미적용 기억으로 옮겨집니다(지워지지 않습니다).`,
+    ].filter(Boolean);
+    if (
+      notes.length &&
+      !confirm(
+        `${notes.join("\n\n")}\n\n확인: ${taken.length ? "덮어쓰고 " : ""}다시 적용 · 취소: 그만두기`,
+      )
+    )
+      return;
+    const group = this.isGroupThread(key);
+    const asText = (item) =>
+      group || (item.kind || "voice") === "text" || item.origin === "reply";
+    let moved = 0;
+    for (const at of present) {
+      this.assertChat(operation);
+      const index = Number(at);
+      const message = chat[index];
+      const here = items.filter(
+        (item) => String(item.anchor_message_id) === at,
+      );
+      // Made on another swipe of this message: the memory kept with that swipe lets them go.
+      const swipes = here.filter((item) => this.anchorPlace(item) === "swipe");
+      if (taken.includes(at)) {
+        // What is there now gives way: a new mark, and its memory on this swipe taken out.
+        this.renewAnchorTag(index);
+        const swipe =
+          typeof message.swipe_id === "number" ? message.swipe_id : 0;
+        const events = message.extra?.[CHAT_MEMORY_KEY];
+        if (Array.isArray(events)) {
+          message.extra[CHAT_MEMORY_KEY] = events.filter(
+            (item) =>
+              typeof item?.swipe_id === "number" && item.swipe_id !== swipe,
+          );
+          if (!message.extra[CHAT_MEMORY_KEY].length)
+            delete message.extra[CHAT_MEMORY_KEY];
+        }
+        await stOf(this)?.saveChat?.();
+      }
+      const response = await this.request(
+        "/api/plugins/scenevoice/voice-messages/reanchor",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            chat_id: this.currentChatId(),
+            ids: here.map((item) => item.id),
+            anchor_message_id: at,
+            ...this.anchorStamp(index),
+          }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.detail || "다시 적용하지 못했습니다.");
+      moved += here.filter((item) => !item.hidden).length;
+      for (const item of swipes)
+        if (asText(item))
+          await this.persistTextThreadMemory(key, at, {
+            swipe: item.anchor_swipe,
+          });
+        else
+          await this.rewriteSwipeMemory(at, item.anchor_swipe, item.id, null);
+      // Into the chat memory again: the conversation at this point, or each voice message.
+      if (here.some((item) => !item.hidden && asText(item)))
+        await this.persistTextThreadMemory(key, at);
+      for (const item of here)
+        if (!item.hidden && !asText(item))
+          await this.persistVoiceMessageToMessage({
+            ...item,
+            ...this.anchorStamp(index),
+            anchor_message_id: at,
+            type: "voice_message",
+            reason: item.reason || "",
+          });
+    }
+    await this.refreshChatMemory?.();
+    this.messageThreadKey = key;
+    this.phoneShelf ||= {};
+    this.phoneShelf.message = "applied";
+    await this.renderSmartphone();
+    this.notify(
+      `문자 ${moved}개를 다시 적용했습니다.${missing.length ? ` (${missing.map((at) => `#${at}`).join(", ")} 메시지는 지금 채팅에 없어 그대로 남았습니다.)` : ""}`,
+      "success",
+    );
+  },
+
   /** 미적용 기억: the conversations with texts the chat doesn't use now, one row each. */
   renderAwayThreads(body, away) {
     const rows = [...new Set(away.map((item) => this.messageThreadOf(item)))]
@@ -327,7 +474,7 @@ export const messages = {
             })
             .join("")}
         </div>
-        <p class="sv-msg-frozen"><i class="fa-solid fa-lock" aria-hidden="true"></i>보기만 할 수 있는 대화입니다</p>
+        <p class="sv-msg-frozen"><i class="fa-solid fa-lock" aria-hidden="true"></i>보기만 할 수 있는 대화입니다<button type="button" class="sv-msg-reapply" data-thread-reapply title="다시 적용: 이 문자들이 오갔던 채팅 메시지(같은 번호)에 다시 붙이고 채팅 기억에도 다시 넣습니다"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>다시 적용</span></button></p>
       </div>`;
     body.querySelector("[data-thread-back]").addEventListener("click", () => {
       this.messageThreadKey = "";
@@ -337,6 +484,15 @@ export const messages = {
       .querySelector("[data-thread-aloud]")
       ?.addEventListener("click", () =>
         this.run(() => this.playThreadAloud(key, thread)),
+      );
+    body
+      .querySelector("[data-thread-reapply]")
+      ?.addEventListener("click", (event) =>
+        this.run(() =>
+          this.withBusyButton(event.currentTarget, () =>
+            this.reapplyAwayThread(key),
+          ),
+        ),
       );
     const record = (button) => this.messageRecord(button);
     const lit = body.querySelector(".sv-msg-play.sv-playing");

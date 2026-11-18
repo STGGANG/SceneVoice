@@ -658,6 +658,7 @@ export const memory = {
                             ${(bubbles && memoryBubblesHtml(item.llm_text, me)) || `<pre class="sv-memory-body">${escapeHtml(item.llm_text)}</pre>`}
                             <textarea class="sv-memory-editor hidden" spellcheck="false">${escapeHtml(item.llm_text)}</textarea>
                             <div class="sv-memory-actions">
+                                <button type="button" data-sv-memory-action="open" class="sv-memory-open" title="스마트폰에서 이 ${item.type === "call" ? "통화" : "대화"}를 바로 엽니다"><i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>스마트폰에서 보기</button>
                                 <button type="button" data-sv-memory-action="edit">편집</button>
                                 <button type="button" data-sv-memory-action="save" class="hidden">저장</button>
                                 <button type="button" data-sv-memory-action="cancel" class="hidden">취소</button>
@@ -672,6 +673,50 @@ export const memory = {
       },
     );
     restoreMemoryScroll(scroll);
+  },
+
+  /**
+   * 스마트폰에서 보기: the phone opens on what a chat memory record is (a call in the call history,
+   * a conversation in 문자). A conversation is found by the record's own key: texts of a person
+   * or room at that message, or the voice message itself.
+   */
+  async openMemoryOnPhone(event, messageIndex) {
+    if (event.type === "call") {
+      this.historyFocus = String(event.id);
+      this.phoneShelf ||= {};
+      this.phoneShelf.history = "applied";
+      return this.openSmartphone("history");
+    }
+    const items = await this.loadMessages();
+    const at = String(messageIndex);
+    let key = "";
+    if (event.type === "voice_message")
+      key = this.messageThreadOf(
+        items.find((item) => String(item.id) === String(event.id)) || {},
+      );
+    else {
+      const keys = [
+        ...new Set(
+          items
+            .filter((item) => String(item.anchor_message_id) === at)
+            .map((item) => this.messageThreadOf(item)),
+        ),
+      ];
+      key =
+        keys.find(
+          (thread) =>
+            `texts-${simpleHash(thread).slice(0, 12)}-${at}` === event.id,
+        ) || (keys.length === 1 ? keys[0] : "");
+    }
+    if (!key) {
+      this.notify("스마트폰에서 이 대화를 찾지 못했습니다.", "info");
+      return;
+    }
+    this.leaveVisit?.({ draw: false });
+    this.messageThreadKey = key;
+    this.phoneShelf ||= {};
+    this.phoneShelf.message = "applied";
+    return this.openSmartphone("message");
   },
 
   async refreshChatMemory() {
@@ -706,6 +751,7 @@ export const memory = {
       (item) => item?.id === record?.dataset?.eventId,
     );
     if (!event || !record) return;
+    if (action === "open") return this.openMemoryOnPhone(event, messageIndex);
     const pre = record.querySelector(".sv-memory-body");
     const editor = record.querySelector(".sv-memory-editor");
     const editButton = record.querySelector('[data-sv-memory-action="edit"]');

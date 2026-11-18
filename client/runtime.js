@@ -76,6 +76,20 @@ export const runtime = {
     }
     return String(tag);
   },
+  /**
+   * A new mark for a chat message, on the swipe showing now: what was made at its old mark stops
+   * counting as here (it goes to 미적용 기억, nothing is deleted).
+   */
+  renewAnchorTag(index) {
+    const message = stOf(this)?.chat?.[Number(index)];
+    if (!message) return "";
+    if (message.extra && typeof message.extra === "object")
+      delete message.extra.scenevoice_anchor;
+    const info = message.swipe_info?.[message.swipe_id];
+    if (info?.extra && typeof info.extra === "object")
+      delete info.extra.scenevoice_anchor;
+    return this.anchorTag(index);
+  },
   /** The swipe a record was made on, or null when unknown. */
   anchorSwipeOf(record) {
     return Number.isInteger(record?.anchor_swipe) ? record.anchor_swipe : null;

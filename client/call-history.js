@@ -75,6 +75,18 @@ export const callHistory = {
       // Calls of a swipe not showing now, or of a part of the chat taken back, wait in 미적용
       // 기억 (one ringing there is left alone).
       const items = data.items || [];
+      // Opened from a chat memory record (스마트폰에서 보기): that call.
+      const focus = this.historyFocus;
+      this.historyFocus = "";
+      const focused = focus && items.find((session) => session.id === focus);
+      if (focused) {
+        this.renderPhoneHistoryDetail(
+          body,
+          focused,
+          !this.anchorShown(focused),
+        );
+        return;
+      }
       // After a reload: back to the call last looked at (its paused part, or its page).
       const view = this.callViewRestored ? null : this.savedCallView();
       this.callViewRestored = true;
