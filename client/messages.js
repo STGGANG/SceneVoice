@@ -1338,11 +1338,6 @@ export const messages = {
   },
 
   /**
-   * 한 번에 듣기 in the conversation shown: the message being read is put mid-screen. Done when
-   * the conversation is drawn too, since a draw (a voice made ahead being saved) would otherwise
-   * put the view back where it was, or at the end. False when nothing is being read here.
-   */
-  /**
    * 한 번에 듣기 waiting for a voice still being made: the listen button turns while it waits,
    * and that message is marked, so a gap between two voices doesn't look like the end.
    */
@@ -1362,6 +1357,11 @@ export const messages = {
         ?.classList.add("sv-msg-making");
   },
 
+  /**
+   * 한 번에 듣기 in the conversation shown: the message being read is put mid-screen. Done when
+   * the conversation is drawn too, since a draw (a voice made ahead being saved) would otherwise
+   * put the view back where it was, or at the end. False when nothing is being read here.
+   */
   showReadingMessage(shown = null, smooth = false) {
     const row =
       this.threadPlayback?.at &&

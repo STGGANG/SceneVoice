@@ -203,6 +203,20 @@ export const memos = {
   },
 
   /** A memo's voice, made (or remade) and linked to it; played right away. */
+  /** 내려받기: the memo's voice as a file, sounding as it plays (with the phone's sound when on). */
+  async downloadMemoVoice(memo) {
+    if (!memo?.audio_url) throw new Error("내려받을 음성이 없습니다.");
+    await this.downloadJoinedAudio(
+      [
+        {
+          url: this.apiUrl(memo.audio_url),
+          filter: this.shouldApplyCommunicationFilter("voice_message", memo),
+        },
+      ],
+      `${memo.character_name || "음성 메모"}-음성메모-${this.fileStamp()}`,
+    );
+  },
+
   async playMemo(body, memo, button, regenerate = false) {
     this.unheardMemos?.delete(memo.id);
     if (memo.audio_url && !regenerate) {
@@ -433,7 +447,7 @@ export const memos = {
                 ${this.translationHtml(memo)}
                 <div class="sv-call-line-tools${index === 0 ? " sv-labeled" : ""}">${
                   memo.audio_url
-                    ? `<button type="button" data-memo-reroll="${escapeHtml(memo.id)}" aria-label="음성 재생성" title="음성 재생성: 같은 메모로 목소리만 새로 만듭니다"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>${named("음성 재생성")}</button>`
+                    ? `<button type="button" data-memo-reroll="${escapeHtml(memo.id)}" aria-label="음성 재생성" title="음성 재생성: 같은 메모로 목소리만 새로 만듭니다"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>${named("음성 재생성")}</button><button type="button" data-memo-download="${escapeHtml(memo.id)}" aria-label="내려받기" title="내려받기: 이 메모의 음성을 파일로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>`
                     : ""
                 }<button type="button" data-memo-edit="${escapeHtml(memo.id)}" aria-label="고치기" title="고치기: 메모를 고친 뒤 음성을 새로 만듭니다"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><button type="button" data-memo-delete="${escapeHtml(memo.id)}" aria-label="삭제" title="삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
               </article>`;
@@ -468,6 +482,17 @@ export const memos = {
               record(button.dataset.memoReroll),
               button,
               true,
+            ),
+          ),
+        ),
+      );
+    body
+      .querySelectorAll("[data-memo-download]")
+      .forEach((button) =>
+        button.addEventListener("click", () =>
+          this.run(() =>
+            this.withBusyButton(button, () =>
+              this.downloadMemoVoice(record(button.dataset.memoDownload)),
             ),
           ),
         ),

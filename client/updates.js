@@ -9,6 +9,15 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.3.2",
+    sections: [
+      [
+        "새로 생긴 것",
+        ["음성 메모를 바로 내려받기 (음성을 만든 메모 아래 ⤓ 버튼)"],
+      ],
+    ],
+  },
+  {
     version: "1.3.1",
     sections: [
       [
