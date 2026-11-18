@@ -9,6 +9,23 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.3.3",
+    sections: [
+      [
+        "새로 생긴 것",
+        [
+          "채팅 흐름이 바뀌어 숨겨진 음성 메모는 메모 화면 아래 '숨겨진 메모'에서 듣고 내려받기",
+        ],
+      ],
+      [
+        "고친 것",
+        [
+          "그리팅만 있는 채팅에서 캐릭터 카드를 저장하면 그 그리팅에서 만든 음성 메모가 사라져 보이던 것",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.3.2",
     sections: [
       [

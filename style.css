@@ -27,9 +27,10 @@
 #sv-phone-launcher,
 #sv-smartphone,
 .sv-toast {
-  --sv-font: "Pretendard Variable", Pretendard, -apple-system,
-    BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
-    system-ui, sans-serif;
+  --sv-font:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui,
+    sans-serif;
   --sv-mono: ui-monospace, "SF Mono", Menlo, Consolas, "D2Coding", monospace;
 
   --sv-fg: var(--SmartThemeBodyColor, #dcdcd2);
@@ -180,8 +181,8 @@
 /* Font Awesome may load after this file; keep icon glyphs from falling back to the text font. */
 :is(#sv-overlay, .sv-dialog, #sv-smartphone, #sv-phone-launcher)
   [class*="fa-"]::before {
-  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", "FontAwesome",
-    sans-serif !important;
+  font-family:
+    "Font Awesome 6 Free", "Font Awesome 5 Free", "FontAwesome", sans-serif !important;
   font-weight: 900;
   font-style: normal;
   -webkit-font-smoothing: antialiased;
@@ -442,7 +443,8 @@
   background: var(--sv-soft2);
 }
 #sv-panel:not([data-tab="settings"]) .sv-settings-subtabs,
-#sv-panel:not([data-tab="history"], [data-tab="favorites"]) .sv-history-subtabs {
+#sv-panel:not([data-tab="history"], [data-tab="favorites"])
+  .sv-history-subtabs {
   display: none;
 }
 .sv-history-subtabs {
@@ -1035,7 +1037,8 @@
   input[type="checkbox"]:not(.sv-switch):checked::before {
   transform: scale(1) !important;
 }
-:is(#sv-overlay, .sv-dialog) input[type="checkbox"]:not(.sv-switch):focus-visible {
+:is(#sv-overlay, .sv-dialog)
+  input[type="checkbox"]:not(.sv-switch):focus-visible {
   outline: 2px solid var(--sv-brand-line) !important;
   outline-offset: 2px !important;
 }
@@ -1164,7 +1167,8 @@
   accent-color: var(--sv-brand);
   cursor: pointer;
 }
-:is(#sv-overlay, .sv-dialog) input[type="range"]::-webkit-slider-runnable-track {
+:is(#sv-overlay, .sv-dialog)
+  input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
   border: 0;
   border-radius: 999px;
@@ -2054,7 +2058,10 @@
 }
 .sv-filter-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(130px, 200px) minmax(130px, 200px);
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 200px) minmax(
+      130px,
+      200px
+    );
   gap: 8px;
 }
 .sv-search-box {
@@ -2411,8 +2418,15 @@
   border-radius: 9px;
   background: #13a094;
   color: #fff;
-  font: 700 11px / 18px "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font:
+    700 11px / 18px "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    system-ui,
+    sans-serif;
   font-variant-numeric: tabular-nums;
   text-align: center;
   vertical-align: middle;
@@ -2520,12 +2534,23 @@
 }
 /* A playing button pulses with a ring that fades in and out. Only its opacity changes, so
    nothing is painted again on each frame (a moving shadow would be). */
-:is(.sv-play-btn, .sv-call-replay, .sv-msg-play, .sv-msg-aloud, .sv-msg-forward-play, .sv-memo-play).sv-playing::before {
+:is(
+    .sv-play-btn,
+    .sv-call-replay,
+    .sv-msg-play,
+    .sv-msg-aloud,
+    .sv-msg-forward-play,
+    .sv-memo-play
+  ).sv-playing::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: 0 0 0 4px var(--sv-pulse-ring, color-mix(in srgb, var(--ph-blue, #0a84ff) 22%, transparent));
+  box-shadow: 0 0 0 4px
+    var(
+      --sv-pulse-ring,
+      color-mix(in srgb, var(--ph-blue, #0a84ff) 22%, transparent)
+    );
   opacity: 0;
   pointer-events: none;
   animation: sv-ring-pulse 1.2s ease-in-out infinite;
@@ -2539,7 +2564,14 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.sv-play-btn, .sv-call-replay, .sv-msg-play, .sv-msg-aloud, .sv-msg-forward-play, .sv-memo-play).sv-playing::before {
+  :is(
+      .sv-play-btn,
+      .sv-call-replay,
+      .sv-msg-play,
+      .sv-msg-aloud,
+      .sv-msg-forward-play,
+      .sv-memo-play
+    ).sv-playing::before {
     animation: none;
   }
 }
@@ -2569,7 +2601,8 @@
   cursor: pointer;
 }
 /* Collapsed: only play and ⋯. */
-.sv-inline-actions:not(.sv-open) > :is(.sv-reroll-btn, .sv-edit-btn, .sv-download-btn) {
+.sv-inline-actions:not(.sv-open)
+  > :is(.sv-reroll-btn, .sv-edit-btn, .sv-download-btn) {
   display: none;
 }
 .sv-inline-actions:not(.sv-open) > select.sv-speaker-select {
@@ -2595,14 +2628,18 @@
 }
 /* Making or playing: the one button of the row in the extension's colour. */
 :is(#chat#chat#chat, body)
-  .mes_button.sv-message-generate:is([data-state="waiting"], [data-state="stop"]) {
+  .mes_button.sv-message-generate:is(
+    [data-state="waiting"],
+    [data-state="stop"]
+  ) {
   color: var(--sv-brand-text) !important;
   opacity: 1 !important;
 }
 .mes_button.sv-message-generate[data-state="waiting"]::before {
   animation: sv-status-pulse 1.4s ease-in-out infinite;
 }
-:is(#chat#chat#chat, body) .mes_button:is(.sv-message-generate, .sv-message-tool).disabled {
+:is(#chat#chat#chat, body)
+  .mes_button:is(.sv-message-generate, .sv-message-tool).disabled {
   opacity: 0.4 !important;
   pointer-events: none;
 }
@@ -2685,8 +2722,7 @@
   border-radius: 8px;
   background: var(--sv-soft2);
   color: inherit;
-  font:
-    11px/1.55 var(--sv-mono);
+  font: 11px/1.55 var(--sv-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2770,8 +2806,7 @@
   border-radius: 8px;
   background: var(--sv-soft2);
   color: inherit;
-  font:
-    11px/1.55 var(--sv-mono);
+  font: 11px/1.55 var(--sv-mono);
   resize: vertical;
 }
 .sv-memory-actions {
@@ -3182,7 +3217,8 @@
 #sv-smartphone[data-screen="app"] .sv-phone-nav {
   border-bottom: 0.5px solid var(--ph-line);
 }
-#sv-smartphone:is([data-screen="home"], [data-screen="call"]) .sv-smartphone-title {
+#sv-smartphone:is([data-screen="home"], [data-screen="call"])
+  .sv-smartphone-title {
   visibility: hidden;
 }
 /* On a call the background can be any shade, so the back button sits on its own glass pill. */
@@ -3204,7 +3240,8 @@
 .sv-smartphone-body::-webkit-scrollbar {
   display: none;
 }
-#sv-smartphone:is([data-screen="home"], [data-screen="call"]) .sv-smartphone-body {
+#sv-smartphone:is([data-screen="home"], [data-screen="call"])
+  .sv-smartphone-body {
   padding: 0;
 }
 .sv-phone-homebar {
@@ -3410,8 +3447,20 @@
   scroll-padding: 0 10px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--sv-fade-start, 0px), #000 calc(100% - var(--sv-fade-end, 0px)), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 var(--sv-fade-start, 0px), #000 calc(100% - var(--sv-fade-end, 0px)), transparent);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--sv-fade-start, 0px),
+    #000 calc(100% - var(--sv-fade-end, 0px)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--sv-fade-start, 0px),
+    #000 calc(100% - var(--sv-fade-end, 0px)),
+    transparent
+  );
 }
 .sv-app-track.sv-app-scroll::-webkit-scrollbar {
   display: none;
@@ -5100,7 +5149,12 @@
   --ph-avatar: linear-gradient(160deg, #e2d2c0, #bfa68d);
   --ph-app-memo: linear-gradient(180deg, #d4c8e4, #a996c6);
   --ph-app-radio: linear-gradient(180deg, #f1d3a6, #d8a46a);
-  --ph-call-dark: linear-gradient(180deg, #5d4e42 0%, #3b3129 55%, #221c17 100%);
+  --ph-call-dark: linear-gradient(
+    180deg,
+    #5d4e42 0%,
+    #3b3129 55%,
+    #221c17 100%
+  );
 }
 #sv-smartphone[data-phone-theme="pink"] {
   /* Dreamy pastel: #f7a0b8 · #fbb6c4 pinks on #faf5ec cream and #fae9d7 peach, with soft sparkles. */
@@ -5119,7 +5173,8 @@
     var(--ph-sparkle) 84% 9% / 26px 26px no-repeat,
     var(--ph-sparkle) 9% 46% / 14px 14px no-repeat,
     var(--ph-sparkle) 76% 71% / 18px 18px no-repeat,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23cfe0ff' d='M12 0C12.8 7.6 16.4 11.2 24 12C16.4 12.8 12.8 16.4 12 24C11.2 16.4 7.6 12.8 0 12C7.6 11.2 11.2 7.6 12 0Z'/%3E%3C/svg%3E") 18% 90% / 11px 11px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23cfe0ff' d='M12 0C12.8 7.6 16.4 11.2 24 12C16.4 12.8 12.8 16.4 12 24C11.2 16.4 7.6 12.8 0 12C7.6 11.2 11.2 7.6 12 0Z'/%3E%3C/svg%3E")
+      18% 90% / 11px 11px no-repeat,
     radial-gradient(60% 40% at 16% 8%, #faf5ec 0%, transparent 70%),
     radial-gradient(55% 38% at 90% 34%, #fbb6c4 0%, transparent 72%),
     radial-gradient(60% 42% at 18% 80%, #fae9d7 0%, transparent 70%),
@@ -5136,7 +5191,10 @@
   --ph-avatar: linear-gradient(160deg, #fbc8d3, #f7a0b8);
   --ph-app-memo: linear-gradient(180deg, #ecd0f7, #cfa6ec);
   --ph-app-radio: linear-gradient(180deg, #ffdcbc, #f6b083);
-  --ph-call-dark: var(--ph-sparkle) 86% 8% / 18px 18px no-repeat, var(--ph-sparkle) 10% 30% / 10px 10px no-repeat, linear-gradient(180deg, #7b4559 0%, #4f2c3a 55%, #2e1922 100%);
+  --ph-call-dark:
+    var(--ph-sparkle) 86% 8% / 18px 18px no-repeat,
+    var(--ph-sparkle) 10% 30% / 10px 10px no-repeat,
+    linear-gradient(180deg, #7b4559 0%, #4f2c3a 55%, #2e1922 100%);
 }
 #sv-smartphone[data-phone-theme="pink"] .sv-app-settings {
   color: #ef8fab;
@@ -5159,7 +5217,12 @@
     var(--ph-star) 12% 44% / 15px 15px no-repeat,
     var(--ph-star) 70% 66% / 20px 20px no-repeat,
     var(--ph-star) 24% 88% / 11px 11px no-repeat,
-    radial-gradient(75% 36% at 100% 0%, rgba(255, 241, 196, 0.6) 0%, rgba(255, 241, 196, 0.22) 45%, transparent 75%),
+    radial-gradient(
+      75% 36% at 100% 0%,
+      rgba(255, 241, 196, 0.6) 0%,
+      rgba(255, 241, 196, 0.22) 45%,
+      transparent 75%
+    ),
     radial-gradient(70% 45% at 14% 4%, #ffffff 0%, transparent 66%),
     radial-gradient(60% 40% at 92% 40%, #e2eff6 0%, transparent 70%),
     radial-gradient(75% 50% at 88% 100%, #8dbedc 0%, transparent 70%),
@@ -5175,7 +5238,12 @@
   --ph-avatar: linear-gradient(160deg, #b7d7ea, #64a4ce);
   --ph-app-memo: linear-gradient(180deg, #c2cbf3, #8b9ade);
   --ph-app-radio: linear-gradient(180deg, #a8dbe9, #5aaecb);
-  --ph-call-dark: linear-gradient(180deg, #365e82 0%, #1f3a56 55%, #101e2e 100%);
+  --ph-call-dark: linear-gradient(
+    180deg,
+    #365e82 0%,
+    #1f3a56 55%,
+    #101e2e 100%
+  );
 }
 #sv-smartphone[data-phone-theme="blue"] .sv-app-settings {
   color: #4893c6;
@@ -5197,106 +5265,239 @@
   color: #c99a1e;
 }
 /* Pastel icons cast a tinted shadow instead of a grey one. */
-#sv-smartphone:is([data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-icon {
+#sv-smartphone:is([data-phone-theme="pink"], [data-phone-theme="blue"])
+  .sv-app-icon {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 5px 14px color-mix(in srgb, var(--ph-blue) 30%, transparent);
 }
 
 /* Shared by the three light themes */
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-answer-call, .sv-call-start, .sv-widget-call) {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-answer-call, .sv-call-start, .sv-widget-call) {
   box-shadow: 0 8px 20px color-mix(in srgb, var(--ph-green) 35%, transparent);
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-end {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-end {
   box-shadow: 0 10px 24px color-mix(in srgb, var(--ph-red) 32%, transparent);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) {
+#sv-smartphone:is(
+  [data-phone-theme="white"],
+  [data-phone-theme="pink"],
+  [data-phone-theme="blue"]
+) {
   --ph-glass: rgba(255, 255, 255, 0.7);
   --ph-glass-strong: rgba(255, 255, 255, 0.82);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-frame {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-frame {
   background: linear-gradient(145deg, #ffffff 0%, #eef0f4 45%, #f9fafb 100%);
   box-shadow:
     inset 0 0 0 1.5px rgba(0, 0, 0, 0.06),
     inset 0 0 0 4px #e8eaee,
     0 24px 44px rgba(60, 50, 70, 0.22);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-phone-key, .sv-phone-key-power) {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-phone-key, .sv-phone-key-power) {
   background: linear-gradient(90deg, #d8dbe1, #f3f4f6);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-battery {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-battery {
   border-color: color-mix(in srgb, var(--ph-fg) 45%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-battery::after {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-battery::after {
   background: color-mix(in srgb, var(--ph-fg) 45%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-smartphone-close {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-smartphone-close {
   background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
   color: var(--ph-fg);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="app"] :is(.sv-phone-status, .sv-phone-nav) {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="app"]
+  :is(.sv-phone-status, .sv-phone-nav) {
   background: color-mix(in srgb, var(--ph-bg) 86%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-homebar > span {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-homebar
+  > span {
   background: color-mix(in srgb, var(--ph-fg) 70%, transparent);
 }
 /* Initials too: this has to outrank the dark default for initials further down. */
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-phone-avatar, .sv-avatar-initial) {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-phone-avatar, .sv-avatar-initial) {
   background: var(--ph-avatar) !important;
   color: #fff !important;
 }
 /* Wallpapers: the character's portrait shows through softly instead of darkened. */
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-smartphone-app-home {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-smartphone-app-home {
   background: var(--ph-wall);
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) [data-phone-wallpaper].sv-has-wall::before {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  [data-phone-wallpaper].sv-has-wall::before {
   filter: blur(34px) saturate(1.05) brightness(1.12);
   opacity: 0.4;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-date {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-date {
   color: var(--ph-muted);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-bigclock {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-bigclock {
   color: var(--ph-fg);
   text-shadow: none !important;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-widget {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-widget {
   border-color: rgba(255, 255, 255, 0.7);
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-phone-widget:hover {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-phone-widget:hover {
   background: var(--ph-glass-strong);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-widget-text small {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-widget-text
+  small {
   color: var(--ph-muted);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-track > button {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-track
+  > button {
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-phone {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-phone {
   background: var(--ph-app-phone);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-message {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-message {
   background: var(--ph-app-message);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-history {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-history {
   background: var(--ph-app-history);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-settings {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-settings {
   background: var(--ph-app-settings);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-memo {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-memo {
   background: var(--ph-app-memo);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-app-radio {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-app-radio {
   background: var(--ph-app-radio);
 }
 /* Call screens */
 /* Call screens stay dark on the light themes too, in the theme's own colour: everything on them
    reads in white as on the default look (their tokens turn light here). */
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-incoming-call, .sv-call-screen, .sv-call-contact) {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-incoming-call, .sv-call-screen, .sv-call-contact) {
   --ph-fg: #fff;
   --ph-muted: rgba(255, 255, 255, 0.72);
   --ph-faint: rgba(255, 255, 255, 0.45);
@@ -5306,94 +5507,248 @@
   background: var(--ph-call-dark);
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-incoming-call, .sv-call-screen, .sv-call-contact).sv-has-wall::before {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(
+    .sv-incoming-call,
+    .sv-call-screen,
+    .sv-call-contact
+  ).sv-has-wall::before {
   filter: blur(34px) saturate(1.1) brightness(0.52);
   opacity: 0.75;
 }
 /* Over them the status bar, the close button and the home bar turn light as well. */
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] :is(.sv-phone-status, .sv-phone-nav) {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  :is(.sv-phone-status, .sv-phone-nav) {
   color: #fff;
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-phone-battery {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  .sv-phone-battery {
   border-color: rgba(255, 255, 255, 0.6);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-phone-battery::after {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  .sv-phone-battery::after {
   background: rgba(255, 255, 255, 0.6);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-phone-battery > span {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  .sv-phone-battery
+  > span {
   background: #fff;
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-smartphone-close {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  .sv-smartphone-close {
   background: rgba(120, 120, 128, 0.32);
   color: rgba(255, 255, 255, 0.85);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"])[data-screen="call"] .sv-phone-homebar > span {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )[data-screen="call"]
+  .sv-phone-homebar
+  > span {
   background: rgba(255, 255, 255, 0.86);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-action {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-contact-action {
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-action:hover > span {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-contact-action:hover
+  > span {
   background: var(--ph-glass-strong);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-contact-action, .sv-contact-main) > small {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-contact-action, .sv-contact-main)
+  > small {
   color: var(--ph-muted);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-audio-actions button {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-audio-actions
+  button {
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-audio-actions button:first-child {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-audio-actions
+  button:first-child {
   background: var(--ph-blue);
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-typing > i {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-typing
+  > i {
   background: var(--ph-muted);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose {
   border-color: rgba(255, 255, 255, 0.7);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose
+  textarea {
   color: var(--ph-fg);
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea::placeholder {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose
+  textarea::placeholder {
   color: var(--ph-faint);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-contact-pill {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-contact-pill {
   color: var(--ph-fg);
 }
 /* Lists, voice messages and transcripts */
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) :is(.sv-call-history-session, .sv-contact-row):hover {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  :is(.sv-call-history-session, .sv-contact-row):hover {
   background: color-mix(in srgb, var(--ph-fg) 5%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-voice-message-play {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-voice-message-play {
   background: var(--ph-blue);
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-vm-wave > i {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-vm-wave
+  > i {
   background: color-mix(in srgb, var(--ph-fg) 35%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-vm-player:has(.sv-playing) .sv-vm-wave > i {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-vm-player:has(.sv-playing)
+  .sv-vm-wave
+  > i {
   background: var(--ph-blue);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-transcript article.sv-call-user {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-transcript
+  article.sv-call-user {
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-replay {
   background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
   color: var(--ph-fg);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-character .sv-call-line-tools button {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-character
+  .sv-call-line-tools
+  button {
   background: color-mix(in srgb, var(--ph-fg) 8%, transparent);
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-replay.sv-playing {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-replay.sv-playing {
   background: var(--ph-blue);
   color: #fff;
 }
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-ph-sheet {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-ph-sheet {
   background: color-mix(in srgb, var(--ph-fg) 25%, transparent);
 }
 /* White on a pastel accent is faint: the pill takes some of the theme's ink. */
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-return.sv-return-listen {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-return.sv-return-listen {
   background: color-mix(in srgb, var(--ph-blue) 72%, var(--ph-fg));
 }
 
@@ -5907,10 +6262,14 @@
     border-color var(--sv-ease),
     border-width var(--sv-ease);
 }
-:is(#sv-overlay, .sv-dialog, #sv-smartphone) .sv-choice input[type="radio"]:checked {
+:is(#sv-overlay, .sv-dialog, #sv-smartphone)
+  .sv-choice
+  input[type="radio"]:checked {
   border: 6px solid var(--sv-brand);
 }
-:is(#sv-overlay, .sv-dialog, #sv-smartphone) .sv-choice input[type="radio"]:focus-visible {
+:is(#sv-overlay, .sv-dialog, #sv-smartphone)
+  .sv-choice
+  input[type="radio"]:focus-visible {
   outline: 2px solid var(--sv-brand-line);
   outline-offset: 2px;
 }
@@ -6769,7 +7128,13 @@
   background: rgba(255, 255, 255, 0.16);
   color: #fff;
 }
-:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose button.sv-ghostwrite {
+:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose
+  button.sv-ghostwrite {
   background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
   color: var(--ph-fg);
 }
@@ -7055,8 +7420,15 @@
   backdrop-filter: blur(18px) saturate(1.4);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   color: #f5f5f7;
-  font: 500 14px/1.35 "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font:
+    500 14px/1.35 "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    system-ui,
+    sans-serif;
   text-align: left;
   cursor: pointer;
   transform: translateX(-50%);
@@ -7126,19 +7498,32 @@
 :is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-icon {
   background: #0a84ff;
 }
-:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-icon i {
+:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"]
+  .sv-call-banner-icon
+  i {
   animation: none;
 }
-:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"] .sv-call-banner-text small {
+:is(#sv-call-banner, #sv-phone-notice)[data-kind="text"]
+  .sv-call-banner-text
+  small {
   overflow: hidden;
   max-width: 46vw;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-:is(#sv-call-banner, #sv-phone-notice):is([data-kind="voicemail"], [data-kind="overheard"]) .sv-call-banner-icon {
+:is(#sv-call-banner, #sv-phone-notice):is(
+    [data-kind="voicemail"],
+    [data-kind="overheard"]
+  )
+  .sv-call-banner-icon {
   background: #5e5ce6;
 }
-:is(#sv-call-banner, #sv-phone-notice):is([data-kind="voicemail"], [data-kind="overheard"]) .sv-call-banner-icon i {
+:is(#sv-call-banner, #sv-phone-notice):is(
+    [data-kind="voicemail"],
+    [data-kind="overheard"]
+  )
+  .sv-call-banner-icon
+  i {
   animation: none;
 }
 @keyframes sv-call-banner-in {
@@ -7236,7 +7621,9 @@
   color: var(--sv-faint);
   font-size: 11px;
   cursor: pointer;
-  transition: transform var(--sv-ease), color var(--sv-ease);
+  transition:
+    transform var(--sv-ease),
+    color var(--sv-ease);
 }
 .sv-voice-pick.sv-open .sv-voice-pick-caret {
   color: var(--sv-brand-text);
@@ -7405,7 +7792,8 @@
   }
 }
 /* A switch with no line under it is as tall as its switch, so the group doesn't gape below it. */
-:is(.sv-group-body, .sv-basic-on, .sv-basic-chat) > .sv-switch-row:not(:has(.sv-hint)) {
+:is(.sv-group-body, .sv-basic-on, .sv-basic-chat)
+  > .sv-switch-row:not(:has(.sv-hint)) {
   align-items: center;
   min-height: 0;
 }
@@ -7484,7 +7872,10 @@
 body.sv-hide-line-buttons .sv-inline-actions {
   display: none !important;
 }
-#sv-panel.sv-phone-off #sv-fold-smartphone .sv-group-body > :not(.sv-phone-app-row),
+#sv-panel.sv-phone-off
+  #sv-fold-smartphone
+  .sv-group-body
+  > :not(.sv-phone-app-row),
 #sv-panel.sv-phone-off #sv-fold-apps,
 #sv-panel.sv-phone-off #sv-fold-prompts,
 #sv-panel.sv-phone-off .sv-tab[data-tab="phone"] {
@@ -7495,7 +7886,9 @@ body.sv-hide-line-buttons .sv-inline-actions {
 #sv-smartphone :is(.sv-msg-compose, .sv-call-compose) textarea {
   scrollbar-width: none;
 }
-#sv-smartphone :is(.sv-msg-compose, .sv-call-compose) textarea::-webkit-scrollbar {
+#sv-smartphone
+  :is(.sv-msg-compose, .sv-call-compose)
+  textarea::-webkit-scrollbar {
   display: none;
 }
 /* The triangle beats while its message is read, and the message's bubbles are outlined. */
@@ -7554,14 +7947,26 @@ body.sv-hide-line-buttons .sv-inline-actions {
 }
 /* WebKit (every iPhone browser) paints form text with -webkit-text-fill-color. */
 #sv-smartphone .sv-call-compose textarea,
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose
+  textarea {
   color: #fff;
   -webkit-text-fill-color: #fff;
   caret-color: #fff;
   opacity: 1;
 }
 #sv-smartphone .sv-call-compose textarea::placeholder,
-#sv-smartphone:is([data-phone-theme="white"], [data-phone-theme="pink"], [data-phone-theme="blue"]) .sv-call-compose textarea::placeholder {
+#sv-smartphone:is(
+    [data-phone-theme="white"],
+    [data-phone-theme="pink"],
+    [data-phone-theme="blue"]
+  )
+  .sv-call-compose
+  textarea::placeholder {
   color: rgba(255, 255, 255, 0.78);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.78);
   opacity: 1;
@@ -7588,8 +7993,15 @@ body.sv-hide-line-buttons .sv-inline-actions {
   background: #1d1f24;
   box-shadow: 0 3px 10px rgb(0 0 0 / 0.14);
   color: var(--sv-now-ink);
-  font: 500 14px/1.55 "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font:
+    500 14px/1.55 "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    system-ui,
+    sans-serif;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -6px);
@@ -7614,7 +8026,10 @@ body.sv-hide-line-buttons .sv-inline-actions {
   -webkit-tap-highlight-color: transparent;
 }
 #sv-now-reading.sv-at-bottom {
-  top: var(--sv-now-top, calc(100dvh - 120px - env(safe-area-inset-bottom, 0px)));
+  top: var(
+    --sv-now-top,
+    calc(100dvh - 120px - env(safe-area-inset-bottom, 0px))
+  );
   bottom: auto;
   transform: translate(-50%, calc(-100% + 6px));
 }
@@ -7716,8 +8131,20 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 }
 #sv-now-reading.sv-long .sv-now-reading-window {
   flex: 1 1 auto;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent
+  );
 }
 #sv-now-reading .sv-now-reading-text {
   display: inline-block;
@@ -8035,7 +8462,9 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   font: 600 13px / 1.2 var(--sv-font);
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 #sv-smartphone .sv-shelf-tab > i {
   font-size: 12px;
@@ -8344,6 +8773,44 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   background: var(--ph-surface);
   color: var(--ph-fg);
 }
+#sv-smartphone .sv-memo-hidden {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+#sv-smartphone .sv-memo-hidden > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px;
+  padding: 8px 2px;
+  color: var(--ph-muted, var(--ph-fg));
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+#sv-smartphone .sv-memo-hidden > summary::-webkit-details-marker {
+  display: none;
+}
+#sv-smartphone .sv-memo-hidden > summary > i {
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+#sv-smartphone .sv-memo-hidden[open] > summary > i {
+  transform: rotate(90deg);
+}
+#sv-smartphone .sv-memo-hidden > summary:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+#sv-smartphone .sv-memo-hidden > .sv-room-hint {
+  margin: -4px 16px 0;
+}
+#sv-smartphone .sv-memo-hidden > .sv-memo {
+  opacity: 0.78;
+}
 #sv-smartphone .sv-memo > header {
   display: flex;
   align-items: center;
@@ -8529,7 +8996,12 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   justify-content: space-between;
   margin-top: 6px;
   padding-top: 10px;
-  background: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 10%) top / 100% 7px no-repeat;
+  background: repeating-linear-gradient(
+      90deg,
+      currentColor 0 1px,
+      transparent 1px 10%
+    )
+    top / 100% 7px no-repeat;
   color: inherit;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
@@ -8668,7 +9140,11 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   width: auto;
   height: auto;
 }
-#sv-smartphone .sv-listen-between .sv-call-identity .sv-room-avatar .sv-phone-avatar {
+#sv-smartphone
+  .sv-listen-between
+  .sv-call-identity
+  .sv-room-avatar
+  .sv-phone-avatar {
   position: static;
   width: 80px;
   height: 80px;
@@ -8694,7 +9170,11 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 #sv-smartphone .sv-listen-many .sv-call-identity .sv-room-avatar {
   gap: 10px;
 }
-#sv-smartphone .sv-listen-many .sv-call-identity .sv-room-avatar .sv-phone-avatar {
+#sv-smartphone
+  .sv-listen-many
+  .sv-call-identity
+  .sv-room-avatar
+  .sv-phone-avatar {
   width: 60px;
   height: 60px;
   font-size: 22px;
@@ -9151,8 +9631,18 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 /* 선물: wrapping paper with a ribbon across, and the box on top. */
 [data-card="gift"] > .sv-card-art {
   background:
-    linear-gradient(90deg, transparent 0 calc(50% - 9px), #fff7 calc(50% - 9px) calc(50% + 9px), transparent calc(50% + 9px)),
-    linear-gradient(0deg, transparent 0 calc(50% - 9px), #fff7 calc(50% - 9px) calc(50% + 9px), transparent calc(50% + 9px)),
+    linear-gradient(
+      90deg,
+      transparent 0 calc(50% - 9px),
+      #fff7 calc(50% - 9px) calc(50% + 9px),
+      transparent calc(50% + 9px)
+    ),
+    linear-gradient(
+      0deg,
+      transparent 0 calc(50% - 9px),
+      #fff7 calc(50% - 9px) calc(50% + 9px),
+      transparent calc(50% + 9px)
+    ),
     repeating-linear-gradient(45deg, #fbd5e1 0 10px, #fde6ee 10px 20px);
 }
 .sv-card-bow,
@@ -9766,68 +10256,141 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 
 /* 설정 목록: in 공통 and 스마트폰 each setting is one line, its name (and note) on the left and
    its control on the right, with a thin line between settings. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row {
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-stack-col, .sv-sub-block, .sv-toggle-group, .sv-basic-on, .sv-basic-chat) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(
+    .sv-group-body,
+    .sv-sub-body,
+    .sv-stack-col,
+    .sv-sub-block,
+    .sv-toggle-group,
+    .sv-basic-on,
+    .sv-basic-chat
+  ) {
   gap: 0;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > :is(.sv-field, .sv-switch-row, .sv-stack),
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-basic-on, .sv-sub-body) > .sv-switch-row {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row
+  > :is(.sv-field, .sv-switch-row, .sv-stack),
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-basic-on, .sv-sub-body)
+  > .sv-switch-row {
   width: auto;
   padding: 11px 0;
   /* Fainter and dashed, so a line between two settings never reads as a section's own line. */
   border-bottom: 1px dashed color-mix(in srgb, var(--sv-line) 62%, transparent);
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-switch-row {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-switch-row {
   align-items: center;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row
+  > .sv-field:not(.sv-field-plain, .sv-field-action) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(200px, 320px);
   align-items: center;
   gap: 2px 24px;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > .sv-label-line {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row
+  > .sv-field:not(.sv-field-plain, .sv-field-action)
+  > .sv-label-line {
   grid-column: 1;
   grid-row: 1;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > .sv-hint {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row
+  > .sv-field:not(.sv-field-plain, .sv-field-action)
+  > .sv-hint {
   grid-column: 1;
   grid-row: 2;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) > :not(.sv-label-line, .sv-hint) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row
+  > .sv-field:not(.sv-field-plain, .sv-field-action)
+  > :not(.sv-label-line, .sv-hint) {
   grid-column: 2;
   grid-row: 1 / span 2;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-sec {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-sub-sec {
   padding-top: 22px;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-group-body > .sv-sub-sec:first-child {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-group-body
+  > .sv-sub-sec:first-child {
   padding-top: 6px;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-sec > .sv-sub-body {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-sub-sec
+  > .sv-sub-body {
   padding-top: 4px;
 }
 /* Whatever is not a setting line (a note, a list, a row of buttons, a block of its own) keeps
    some air above and below it. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-stack-col, .sv-basic-on, .sv-basic-chat) > :not(.sv-row, .sv-switch-row, .sv-sub-sec, .sv-stack-col, .sv-toggle-group, .sv-sub-block, .sv-basic-on, .sv-basic-chat, .sv-state-block, [hidden]) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-sub-body, .sv-stack-col, .sv-basic-on, .sv-basic-chat)
+  > :not(
+    .sv-row,
+    .sv-switch-row,
+    .sv-sub-sec,
+    .sv-stack-col,
+    .sv-toggle-group,
+    .sv-sub-block,
+    .sv-basic-on,
+    .sv-basic-chat,
+    .sv-state-block,
+    [hidden]
+  ) {
   margin-block: 12px !important;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > :first-child:not(.sv-row, .sv-switch-row) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-sub-body)
+  > :first-child:not(.sv-row, .sv-switch-row) {
   margin-top: 0 !important;
 }
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > :last-child:not(.sv-row, .sv-switch-row) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-sub-body)
+  > :last-child:not(.sv-row, .sv-switch-row) {
   margin-bottom: 0 !important;
 }
 /* The last line of a group or a section needs no line under it. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body, .sv-sub-block) > .sv-row:last-child > :last-child,
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) :is(.sv-group-body, .sv-sub-body) > .sv-switch-row:last-child {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-sub-body, .sv-sub-block)
+  > .sv-row:last-child
+  > :last-child,
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  :is(.sv-group-body, .sv-sub-body)
+  > .sv-switch-row:last-child {
   border-bottom: 0;
 }
 @media (max-width: 640px) {
-  #sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row > .sv-field:not(.sv-field-plain, .sv-field-action) {
+  #sv-settings-tab
+    :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+    .sv-row
+    > .sv-field:not(.sv-field-plain, .sv-field-action) {
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -9835,20 +10398,33 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   }
 }
 /* A setting right above a section's heading: the heading's own line is enough. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row:has(+ .sv-sub-sec) > :last-child,
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-switch-row:has(+ :is(.sv-sub-sec, .sv-basic-on)) {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row:has(+ .sv-sub-sec)
+  > :last-child,
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-switch-row:has(+ :is(.sv-sub-sec, .sv-basic-on)) {
   border-bottom: 0;
 }
 /* Nothing shows under it, or a section's heading comes next (client/ui.js: tidySettingLines). */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-line-end.sv-line-end {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-line-end.sv-line-end {
   border-bottom: 0;
 }
 /* The model (whichever engine's shows) is the last line before the engine's first heading. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-row.sv-engine-main > .sv-engine-section {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row.sv-engine-main
+  > .sv-engine-section {
   border-bottom: 0;
 }
 /* A note box right under a section's heading keeps a little air from it. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-body > .sv-notice:first-child {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-sub-body
+  > .sv-notice:first-child {
   margin-top: 8px !important;
 }
 /* 봇카드 공통 설정 → 스마트폰 is laid out the same way (one setting a line); what a switch opens
@@ -9889,11 +10465,17 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   }
 }
 /* 연결 확인 sits right under the key, without a gap of its own on top. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-sub-body > .sv-engine-check {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-sub-body
+  > .sv-engine-check {
   margin-top: 0 !important;
 }
 /* 세 방식 자세히 비교: right under the mode's note, lightly in the brand colour. */
-#sv-settings-tab :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone) .sv-stack-col > .sv-read-actions {
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-stack-col
+  > .sv-read-actions {
   margin-top: 0 !important;
 }
 #sv-outreach-compare {
@@ -9939,7 +10521,12 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   min-width: 0;
   margin-left: 6px;
   padding-left: 14px;
-  border-left: 2px solid color-mix(in srgb, var(--SmartThemeBodyColor, currentColor) 18%, transparent);
+  border-left: 2px solid
+    color-mix(
+      in srgb,
+      var(--SmartThemeBodyColor, currentColor) 18%,
+      transparent
+    );
 }
 #sv-panel .sv-range-pair {
   display: flex;
@@ -10090,21 +10677,26 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
     background-color 0.15s ease,
     border-color 0.15s ease;
 }
-#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::before,
-#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::after {
+#sv-smartphone
+  input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::before,
+#sv-smartphone
+  input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *)::after {
   content: none !important;
 }
-#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):checked {
+#sv-smartphone
+  input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):checked {
   border-color: var(--ph-blue) !important;
   background: var(--ph-blue)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E")
     50% 50% / 13px 13px no-repeat !important;
 }
-#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):focus-visible {
+#sv-smartphone
+  input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):focus-visible {
   outline: 2px solid var(--ph-blue) !important;
   outline-offset: 2px !important;
 }
-#sv-smartphone input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):disabled {
+#sv-smartphone
+  input[type="checkbox"]:not(.sv-ph-toggle *, .sv-room-person *):disabled {
   opacity: 0.45;
   cursor: default;
 }

@@ -202,7 +202,21 @@ export const memos = {
     if (this.phoneActiveTab === "memo") this.renderSmartphone();
   },
 
-  /** A memo's voice, made (or remade) and linked to it; played right away. */
+  /**
+   * A memo shows with the chat as it is now (see anchorPlace). Memos stay out of the chat memory,
+   * so one whose message lost its mark but reads the same (실리태번 makes the greeting anew when
+   * the card is saved in a chat that has only it) is still that message's.
+   */
+  memoShown(memo) {
+    const place = this.anchorPlace(memo);
+    if (place === "here") return true;
+    return (
+      place === "gone" &&
+      Boolean(memo.anchor_fingerprint) &&
+      memo.anchor_fingerprint === this.anchorFingerprint(memo.anchor_message_id)
+    );
+  },
+
   /** 내려받기: the memo's voice as a file, sounding as it plays (with the phone's sound when on). */
   async downloadMemoVoice(memo) {
     if (!memo?.audio_url) throw new Error("내려받을 음성이 없습니다.");
@@ -325,7 +339,7 @@ export const memos = {
     const data = await response.json();
     if (!response.ok)
       throw new Error(data.detail || "메모를 지우지 못했습니다.");
-    if (this.anchorShown(memo))
+    if (this.memoShown(memo))
       await this.removeChatMemoryEvent(memo.anchor_message_id, memo.id);
     else await this.forgetSwipeMemory(memo);
     this.unheardMemos?.delete(memo.id);
@@ -410,14 +424,19 @@ export const memos = {
     body.innerHTML =
       '<div class="sv-phone-list-empty"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i><p>음성 메모를 불러오는 중…</p></div>';
     let items;
+    let hidden;
     try {
-      items = (await this.loadMemos()).filter((memo) => this.anchorShown(memo));
+      const all = await this.loadMemos();
+      items = all.filter((memo) => this.memoShown(memo));
+      hidden = all.filter((memo) => !this.memoShown(memo));
     } catch (error) {
       body.innerHTML = `<div class="sv-phone-list-empty"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><p>${escapeHtml(error.message)}</p></div>`;
       return;
     }
     if (this.phoneActiveTab !== "memo" || this.memoEditor) return;
-    this.memoRecords = new Map(items.map((memo) => [memo.id, memo]));
+    this.memoRecords = new Map(
+      [...items, ...hidden].map((memo) => [memo.id, memo]),
+    );
     const add = contacts.length
       ? '<button type="button" class="sv-msg-new-group sv-memo-new" data-memo-new><i class="fa-solid fa-plus" aria-hidden="true"></i><span>새 메모</span></button>'
       : "";
@@ -425,17 +444,10 @@ export const memos = {
       this.playingMessageId === memo.id && this.currentAudio
         ? " sv-playing"
         : "";
-    body.innerHTML = `
-      <div class="sv-memo-list">
-        ${add}
-        ${
-          items.length
-            ? items
-                .map((memo, index) => {
-                  const fresh = this.unheardMemos?.has(memo.id);
-                  const named = (label) =>
-                    index === 0 ? `<span>${label}</span>` : "";
-                  return `
+    const article = (memo, index, gone = false) => {
+      const fresh = this.unheardMemos?.has(memo.id);
+      const named = (label) => (index === 0 ? `<span>${label}</span>` : "");
+      return `
               <article class="sv-memo${playing(memo) ? " sv-msg-reading" : ""}" data-memo="${escapeHtml(memo.id)}">
                 <header>
                   ${this.contactAvatarMarkup(this.phoneContact(memo.character_key))}
@@ -446,16 +458,36 @@ export const memos = {
                 <p>${escapeHtml(memo.text)}</p>
                 ${this.translationHtml(memo)}
                 <div class="sv-call-line-tools${index === 0 ? " sv-labeled" : ""}">${
-                  memo.audio_url
+                  memo.audio_url && !gone
                     ? `<button type="button" data-memo-reroll="${escapeHtml(memo.id)}" aria-label="음성 재생성" title="음성 재생성: 같은 메모로 목소리만 새로 만듭니다"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>${named("음성 재생성")}</button><button type="button" data-memo-download="${escapeHtml(memo.id)}" aria-label="내려받기" title="내려받기: 이 메모의 음성을 파일로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>`
-                    : ""
-                }<button type="button" data-memo-edit="${escapeHtml(memo.id)}" aria-label="고치기" title="고치기: 메모를 고친 뒤 음성을 새로 만듭니다"><i class="fa-solid fa-pen" aria-hidden="true"></i></button><button type="button" data-memo-delete="${escapeHtml(memo.id)}" aria-label="삭제" title="삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
+                    : memo.audio_url
+                      ? `<button type="button" data-memo-download="${escapeHtml(memo.id)}" aria-label="내려받기" title="내려받기: 이 메모의 음성을 파일로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i>${named("내려받기")}</button>`
+                      : ""
+                }${gone ? "" : `<button type="button" data-memo-edit="${escapeHtml(memo.id)}" aria-label="고치기" title="고치기: 메모를 고친 뒤 음성을 새로 만듭니다"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>`}<button type="button" data-memo-delete="${escapeHtml(memo.id)}" aria-label="삭제" title="삭제"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
               </article>`;
-                })
-                .join("")
+    };
+    const fold = hidden.length
+      ? `<details class="sv-memo-hidden" ${this.memoHiddenOpen ? "open" : ""}>
+          <summary><i class="fa-solid fa-chevron-right" aria-hidden="true"></i>숨겨진 메모 ${hidden.length}개</summary>
+          <p class="sv-room-hint">다시 생성하거나 스와이프를 넘겨 채팅 흐름이 바뀌어, 지금 채팅에는 없는 메시지에서 만든 메모입니다.</p>
+          ${hidden.map((memo, index) => article(memo, index, true)).join("")}
+        </details>`
+      : "";
+    body.innerHTML = `
+      <div class="sv-memo-list">
+        ${add}
+        ${
+          items.length
+            ? items.map((memo, index) => article(memo, index)).join("")
             : '<div class="sv-phone-list-empty"><span class="sv-empty-badge sv-app-memo"><i class="fa-solid fa-wave-square" aria-hidden="true"></i></span><strong>음성 메모</strong><p>아직 남긴 메모가 없습니다.</p></div>'
         }
+        ${fold}
       </div>`;
+    body
+      .querySelector(".sv-memo-hidden")
+      ?.addEventListener("toggle", (event) => {
+        this.memoHiddenOpen = event.currentTarget.open;
+      });
     const record = (id) => this.memoRecords.get(id);
     body.querySelector("[data-memo-new]")?.addEventListener("click", () => {
       this.memoEditor = { key: contacts[0].key, about: "", busy: false };
