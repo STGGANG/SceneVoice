@@ -568,7 +568,7 @@ export const panel = {
           ${switchHtml({ id: "sv-voice-message-auto-audio", label: "음성 메시지는 받는 즉시 음성까지 생성", hint: "켜면 듣지 않은 음성 메시지도 음성 생성 비용이 듭니다.", tip: "문자는 이 설정과 상관없이 ‘재생’을 누를 때만 음성을 만듭니다.", checked: config.voice_message?.auto_generate_audio })}
         </div>
         <div class="sv-row">
-          ${switchHtml({ id: "sv-other-chats", label: "자기가 속한 다른 문자·전화 내용도 알기", hint: "문자나 전화를 할 때, 그 인물이 들어 있던 다른 대화와 통화의 내용을 기억하고 말합니다.", tip: "그 인물이 속한 1:1 문자, 단체방, 인물끼리의 방, 통화의 최근 내용을 함께 보냅니다(문자는 방마다 ‘참고할 문자 수’만큼, 통화는 ‘참고할 다른 통화 수’만큼 통화 전체).\n글자 수로 자르지 않습니다. 연결 프로필의 최대 입력 토큰을 넘을 때만 줄이는데, 다른 방·통화 → 나와의 1:1 문자 → 지금 대화 순으로, 오래된 것부터 뺍니다.\n자기가 들어 있지 않은 방의 내용은 모릅니다.\n끄면 지금 대화와 지난 통화만 압니다.", checked: config.voice_message?.other_chats !== false })}
+          ${switchHtml({ id: "sv-other-chats", label: "자기가 속한 다른 문자·전화 내용도 알기", hint: "문자나 전화를 할 때, 그 인물이 들어 있던 다른 대화와 통화의 내용을 기억하고 말합니다.", tip: "그 인물이 속한 1:1 문자, 단체방, 인물끼리의 방, 통화의 최근 내용을 함께 보냅니다(문자는 방마다 ‘참고할 문자 수’만큼, 통화는 ‘참고할 다른 통화 수’만큼 통화 전체).\n연결 프로필의 최대 입력 토큰을 넘을 때만 줄이는데, 다른 방·통화 → 나와의 1:1 문자 → 지금 대화 순으로, 오래된 것부터 뺍니다.\n자기가 들어 있지 않은 방의 내용은 모릅니다.\n끄면 지금 대화와 지난 통화만 압니다.", checked: config.voice_message?.other_chats !== false })}
         </div>
         <div class="sv-row">
           ${fieldHtml({ id: "sv-thread-messages", label: "참고할 문자 수 (대화마다)", control: number("sv-thread-messages", Number(config.voice_message?.thread_messages ?? 40), 'min="0" max="1000"'), hint: "지금 대화와 다른 대화 모두, 대화마다 최근 이만큼의 문자를 보냅니다. 0이면 전부.", tip: "많을수록 요청이 길어져 비용이 늘어납니다.\n연결 프로필의 최대 입력 토큰을 넘으면 다른 방·통화의 오래된 것부터 뺍니다." })}
@@ -751,14 +751,12 @@ export const panel = {
       title: "프롬프트 직접 수정",
       badge: `<span class="sv-badge" id="sv-prompt-badge"></span>`,
       tip: [
-        "전화·문자·단체 통화·단체 문자에서 말투·길이·대화 흐름·인물 묘사를 정하는 지시문입니다. 실제로 보내는 글 그대로 보입니다.",
-        "‘## ’으로 시작하는 줄은 묶음 제목, ‘- ’로 시작하는 줄은 지시 하나입니다. 제목과 묶음은 자유롭게 고치거나 새로 만들 수 있습니다.",
-        "적은 그대로 보냅니다. ‘-’나 ‘##’를 자동으로 붙이지 않으니 필요한 줄에 직접 적으십시오(빈 줄만 지워집니다).",
-        "한국어로 쓸 때 페르소나 인물은 ‘유저’가 아니라 ‘유저 캐릭터’라고 쓰십시오(‘유저’는 실제 사용자로 읽힙니다).",
+        "전화·문자·단체 통화·단체 문자에서 말투·길이·대화 흐름·인물 묘사를 정하는 지시문입니다. 적은 그대로 보냅니다.",
+        "‘-’나 ‘##’를 자동으로 붙이지 않으니 필요한 줄에 직접 적으십시오(빈 줄만 지워집니다).",
+        "페르소나 인물은 ‘User’가 아니라 ‘User's character’라고 쓰는 걸 권장합니다(다른 프롬프트와 통일).",
         "역할, 자료 읽는 법, 출력 형식은 고정이라 여기서 바꿔도 답의 형식은 유지됩니다.",
         "한국어로 써도 되지만 영어가 더 잘 지켜집니다.",
         "음성 메시지, 음성 메모, 라디오는 기본 지시문을 그대로 씁니다.",
-        "고쳐 두면 이후 업데이트로 기본 지시문이 나아져도 고친 쪽을 계속 씁니다.",
       ].join("\n"),
       body: `<div class="sv-seg sv-prompt-pick" role="radiogroup" aria-label="고칠 지시문">
           ${PROMPT_KINDS.map(([field, label], index) => `<label><input type="radio" name="sv-prompt-pick" value="${field}" ${index ? "" : "checked"}><span>${label}</span></label>`).join("")}
