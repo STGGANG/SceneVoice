@@ -713,7 +713,15 @@ export const dialogue = {
     const button =
       source?.buttons[0] || container.querySelector(".sv-play-btn");
     if (!button || button.dataset.status === "ready") return;
-    await this.analyzeUtterance(button);
+    try {
+      await this.analyzeUtterance(button);
+    } catch (error) {
+      if (error.name !== "AnalysisFailedError") throw error;
+      this.notify(
+        `새 메시지를 미리 분석하지 못했습니다. (${error.reason})`,
+        "error",
+      );
+    }
   },
 
   /** A line read by someone whose play buttons are switched off disappears. */
@@ -797,7 +805,10 @@ export const dialogue = {
         return this.generateForButton(button);
       })
       .catch((error) => {
-        if (error.name !== "AbortError") this.notify(error.message, "error");
+        if (error.name === "AnalysisFailedError")
+          this.notifyAnalysisFailed(error, () => this.handlePlayClick(button));
+        else if (error.name !== "AbortError")
+          this.notify(error.message, "error");
       });
   },
 
@@ -843,7 +854,12 @@ export const dialogue = {
         return this.generateForButton(button, { regenerate: true });
       })
       .catch((error) => {
-        if (error.name !== "AbortError") this.notify(error.message, "error");
+        if (error.name === "AnalysisFailedError")
+          this.notifyAnalysisFailed(error, () =>
+            this.handleRerollClick(button),
+          );
+        else if (error.name !== "AbortError")
+          this.notify(error.message, "error");
       });
     return this.queue;
   },
@@ -1029,6 +1045,13 @@ export const dialogue = {
         button.dataset.status = "waiting";
         button.classList.remove("sv-loading", "sv-queued");
         this.setPlayButtonIcon(button, "waiting");
+        throw error;
+      }
+      if (error.name === "AnalysisFailedError") {
+        button.dataset.status = "waiting";
+        button.classList.remove("sv-loading", "sv-queued");
+        this.setPlayButtonIcon(button, "waiting");
+        button.title = error.message;
         throw error;
       }
       console.error("[SceneVoice] 생성 실패", error);

@@ -9,6 +9,18 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.3.4",
+    sections: [
+      [
+        "바뀐 것",
+        [
+          "분석을 켜 둔 상태에서 대사 분석이 실패하면 음성을 만들지 않고 알립니다. 알림의 '분석 없이 생성'을 누르면 그 메시지만 분석 없이 만듭니다.",
+          "메시지 버튼(이어 듣기·분석 보기)의 설명을 짧게 (메시지 버튼을 정리하는 다른 확장에서 이름이 길게 보이던 것)",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.3.3",
     sections: [
       [

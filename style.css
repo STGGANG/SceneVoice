@@ -11123,3 +11123,29 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
     justify-content: flex-end;
   }
 }
+
+/* 분석 실패 notice: its 분석 없이 생성 button (실리태번's toast). */
+.sv-toast-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.sv-toast-action {
+  padding: 4px 12px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-toast-action:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.sv-toast-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

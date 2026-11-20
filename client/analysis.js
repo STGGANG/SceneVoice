@@ -16,6 +16,15 @@ import {
 import { normalizeSpeech } from "../shared/providers.js";
 import { SPEECH_LANGUAGES } from "../shared/settings.js";
 
+export class AnalysisFailedError extends Error {
+  constructor(reason, analysisKey) {
+    super(`대사 분석에 실패해 음성을 만들지 않았습니다. (${reason})`);
+    this.name = "AnalysisFailedError";
+    this.reason = reason;
+    this.analysisKey = analysisKey;
+  }
+}
+
 export const analysis = {
   /**
    * Where a message's analysis is kept: its chat, its place and its lines as they are written
@@ -358,6 +367,16 @@ export const analysis = {
       return stored[selectedIndex] || stored[0];
     }
     if (storedOnly) return null;
+    // 분석 없이 생성 was pressed after this message's analysis failed: plain delivery this time,
+    // each line read by whoever the message is from (or the person the user chose for it).
+    if (!force && this.analysisSkipped?.has(analysisKey)) {
+      const plain = fallbackBatch.map((item) => ({
+        ...item,
+        needs_confirmation: false,
+      }));
+      this.applyMessageAnalyses(batch.buttons, plain);
+      return plain[selectedIndex] || plain[0];
+    }
 
     const roster = this.speakerAnalysisContext(batch.utterances);
     const profileId = this.config.connection_profile_id;
@@ -453,6 +472,7 @@ export const analysis = {
         { temperature: 0.2 },
       );
       const analyses = this.parseMessageAnalysis(response, batch.utterances);
+      this.analysisSkipped?.delete(analysisKey);
       this.analysisCache.set(analysisKey, analyses);
       this.applyMessageAnalyses(batch.buttons, analyses);
       await this.saveStoredMessageAnalysis(analysisKey, button, analyses);
@@ -461,17 +481,48 @@ export const analysis = {
       return analyses[selectedIndex] || analyses[0];
     } catch (error) {
       if (error.name === "AbortError" || force) throw error;
-      console.warn(
-        "[SceneVoice] 메시지 일괄 감정 분석 실패, 기본값으로 진행합니다.",
-        error,
-      );
-      this.notify(
-        `메시지 분석에 실패해 기본 연기로 생성합니다. (${this.failureReason(error)})`,
-        "info",
-      );
-      // Transient failures must remain retryable; do not cache the fallback.
-      this.applyMessageAnalyses(batch.buttons, fallbackBatch);
-      return fallbackBatch[selectedIndex] || fallbackBatch[0];
+      console.warn("[SceneVoice] 메시지 일괄 감정 분석 실패", error);
+      // No voice without the analysis the user turned on: the notice offers 분석 없이 생성.
+      throw new AnalysisFailedError(this.failureReason(error), analysisKey);
     }
+  },
+
+  /**
+   * An analysis failed and nothing was made. `retry` does the same work again; the notice's
+   * 분석 없이 생성 runs it with plain delivery for that message.
+   */
+  notifyAnalysisFailed(error, retry) {
+    const toastr = window.toastr;
+    if (!toastr || !window.jQuery) {
+      this.notify(error.message, "error");
+      return;
+    }
+    if (this.analysisFailToast)
+      toastr.clear(this.analysisFailToast, { force: true });
+    const body = document.createElement("div");
+    body.className = "sv-toast-body";
+    const text = document.createElement("div");
+    text.textContent = error.message;
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "sv-toast-action";
+    action.textContent = "분석 없이 생성";
+    body.append(text, action);
+    const toast = toastr.error(window.jQuery(body), "씬보이스", {
+      timeOut: 15000,
+      extendedTimeOut: 10000,
+      tapToDismiss: false,
+      closeButton: true,
+      escapeHtml: false,
+    });
+    this.analysisFailToast = toast;
+    action.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      (this.analysisSkipped ||= new Set()).add(error.analysisKey);
+      toastr.clear(toast, { force: true });
+      if (this.analysisFailToast === toast) this.analysisFailToast = null;
+      retry();
+    });
   },
 };

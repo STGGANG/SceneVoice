@@ -17,7 +17,10 @@ const GENERATE_STATES = {
   stop: ["fa-stop", "이어 듣기 멈추기"],
 };
 
-/** A message button in 실리태번's own form: a div carrying its icon class, clicked by Enter too. */
+/**
+ * A message button in 실리태번's own form: a div carrying its icon class, clicked by Enter too.
+ * Its title stays a short name like 실리태번's own: other extensions list the buttons by it.
+ */
 function messageButton(name, icon, title, onClick) {
   const button = document.createElement("div");
   button.className = `mes_button ${name} fa-solid ${icon}`;
@@ -78,7 +81,7 @@ export const messageGeneration = {
     const button = messageButton(
       "sv-message-generate",
       GENERATE_STATES.idle[0],
-      "이어 듣기: 이 메시지의 대사·생각을 차례로 만들며 이어서 들려줍니다. 앞의 몇 대사가 준비되면 시작합니다. 번역 확장으로 번역문이 보이는 메시지는 원문으로 만듭니다.",
+      "이어 듣기",
       () => this.queueMessageGeneration(container, button),
     );
     button.dataset.print = print;
@@ -89,7 +92,7 @@ export const messageGeneration = {
     const again = messageButton(
       "sv-message-tool sv-message-reanalyze",
       "fa-wand-magic-sparkles",
-      "분석 보기: 이 메시지 대사들의 화자·연기를 확인하고, 골라서 다시 분석하거나 직접 고칩니다. 음성 내려받기도 여기 있습니다.",
+      "분석 보기",
       () => this.run(() => this.openMessageAnalysis(container, button)),
     );
     again.hidden = !container.querySelector(
@@ -476,7 +479,17 @@ export const messageGeneration = {
     Promise.all([prepared, playing])
       .catch((error) => {
         playback.stopped = true;
-        if (error.name !== "AbortError") this.notify(error.message, "error");
+        if (error.name === "AnalysisFailedError")
+          this.notifyAnalysisFailed(error, () => {
+            if (
+              control.isConnected &&
+              container.isConnected &&
+              !this.messageJobs.has(control)
+            )
+              this.queueMessageGeneration(container, control, { silent });
+          });
+        else if (error.name !== "AbortError")
+          this.notify(error.message, "error");
         // Redrawn with the same words: once the line playing now ends, go on from the next one
         // with the new drawing's buttons (the made voices come back to them).
         if (job.redrawn)
