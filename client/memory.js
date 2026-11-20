@@ -13,6 +13,12 @@ import {
 } from "./common.js";
 
 import { memoryBubblesHtml } from "./memory-view.js";
+import {
+  memoryOut,
+  REACH_LABELS,
+  threadMemoryId,
+  threadOfEvent,
+} from "./memory-out.js";
 
 const memoryChatKey = (context) =>
   simpleHash(
@@ -98,6 +104,7 @@ function placeMemoryAfterText(details, text) {
 }
 
 export const memory = {
+  ...memoryOut,
   memoryAttribute(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -265,12 +272,19 @@ export const memory = {
       llm_text: String(event.llm_text).trim(),
       // The swipe it was made on; another swipe of the same message doesn't show it.
       swipe_id: typeof message.swipe_id === "number" ? message.swipe_id : 0,
+      ...(event.thread ? { thread: String(event.thread) } : {}),
     };
     const events = message.extra[CHAT_MEMORY_KEY];
     // Records this one takes the place of (the same conversation under an older key).
     const replaced = new Set(
       Array.isArray(event.replaces) ? event.replaces : [],
     );
+    // 기억에서 빼기 stays with the record when it is written again.
+    const kept = events.find(
+      (item) =>
+        item?.excluded && (item.id === normalized.id || replaced.has(item.id)),
+    );
+    if (kept) normalized.excluded = kept.excluded === "all" ? "all" : "story";
     for (let at = events.length - 1; at >= 0; at--)
       if (replaced.has(events[at]?.id)) events.splice(at, 1);
     const existingIndex = events.findIndex(
@@ -350,8 +364,11 @@ export const memory = {
       stOf(this)?.chat?.[Number(anchor)] === sourceMessage &&
       (away || sourceMessage?.swipe_id === sourceSwipe);
     // A group keeps every message of its room; a one-to-one thread its texts and replies.
+    // Texts left out one by one (from their ⋯) aren't in it.
+    const forgotten = this.forgottenTexts();
     const items = (await this.loadMessages({ all: away })).filter(
       (item) =>
+        !forgotten.has(String(item.id)) &&
         this.messageThreadOf(item) === key &&
         String(item.anchor_message_id) === anchor &&
         (!away ||
@@ -489,6 +506,7 @@ export const memory = {
       anchor_fingerprint: item?.anchor_fingerprint,
       anchor_swipe: item?.anchor_swipe,
       anchor_tag: item?.anchor_tag,
+      thread: threadMemoryId(this.messageThreadOf(item)),
       type: "voice_message",
       character_name: item?.character_name || "",
       llm_text: this.formatVoiceMessageMemoryText(item),
@@ -517,8 +535,12 @@ export const memory = {
       return;
     const chat = Array.isArray(context.chat) ? context.chat : [];
     const chatKey = simpleHash(context.chatId || "chat");
+    const rooms = this.memoryRooms();
+    const forgotten = this.forgottenTexts();
     chat.forEach((message, index) => {
-      const events = this.chatMemoryEventsOf(message);
+      const events = this.chatMemoryEventsOf(message).filter(
+        (item) => !this.memoryLeftOut(item, rooms, forgotten).reach,
+      );
       if (!events.length) return;
       const depth = chat.length - 1 - index;
       if (depth < 0 || depth > 10000) return;
@@ -579,6 +601,8 @@ export const memory = {
     const context = stOf(this) || {};
     const chat = Array.isArray(context.chat) ? context.chat : [];
     const chatKey = memoryChatKey(context);
+    const rooms = this.memoryRooms();
+    const forgotten = this.forgottenTexts();
     if (
       this.chatMemoryRenderedChat !== chat ||
       this.chatMemoryRenderedKey !== chatKey
@@ -613,8 +637,11 @@ export const memory = {
         // 말풍선 보기: the same memory drawn as bubbles (the text itself is what 편집 changes).
         const bubbles = this.config?.chat_memory?.view === "bubble";
         const me = this.memoryUserName();
+        const out = events.map((item) =>
+          this.memoryLeftOut(item, rooms, forgotten),
+        );
         const signature = simpleHash(
-          JSON.stringify([events, bubbles ? me : null]),
+          JSON.stringify([events, bubbles ? me : null, out]),
         );
         if (
           existing?.dataset.signature === signature &&
@@ -647,18 +674,31 @@ export const memory = {
             ? '<i class="fa-solid fa-wave-square" aria-hidden="true"></i>'
             : "",
         ].join("");
+        const outCount = out.filter((item) => item.reach).length;
+        // 기억에서 빼기, on the record: how far it is left out, and by what.
+        const outTag = (left) =>
+          left.reach
+            ? `<span class="sv-memory-out-tag"><i class="fa-solid fa-brain sv-reach-${left.reach}" aria-hidden="true"></i>${left.room ? "방 전체 · " : left.single ? "문자 하나 · " : ""}${left.reach === "all" ? "본 채팅·스마트폰 기억에서 뺌" : "본 채팅 기억에서 뺌"}</span>`
+            : "";
+        const outButton = (left) =>
+          left.room
+            ? '<button type="button" data-sv-memory-action="room-include" title="이 방의 대화를 다시 기억에 넣습니다(이 방의 다른 기억도 함께)">방 기억 다시 넣기</button>'
+            : left.reach
+              ? '<button type="button" data-sv-memory-action="exclude" title="이 기억을 다시 넣습니다">기억에 다시 넣기</button>'
+              : `<button type="button" data-sv-memory-action="exclude" title="지우지 않고 AI가 모르게 합니다: ${REACH_LABELS.story} / ${REACH_LABELS.all}"><i class="fa-solid fa-brain" aria-hidden="true"></i>기억에서 빼기</button>`;
         details.innerHTML = `
-                <summary><span class="sv-memory-icons">${icon}</span>전화·문자 채팅 기억 <span class="sv-memory-count">${events.length}</span></summary>
+                <summary><span class="sv-memory-icons">${icon}</span>전화·문자 채팅 기억 <span class="sv-memory-count">${events.length}</span>${outCount ? `<span class="sv-memory-out-note">${outCount === events.length ? "모두 " : `${outCount}개 `}기억에서 뺌</span>` : ""}</summary>
                 <div class="sv-memory-records">
                     ${events
                       .map(
-                        (item) => `
-                        <article class="sv-memory-record" data-event-id="${escapeHtml(item.id)}">
-                            <small>${item.type === "call" ? "통화" : item.type === "texts" ? "문자" : "음성 메시지"} · ${escapeHtml(item.character_name || "")}</small>
+                        (item, at) => `
+                        <article class="sv-memory-record${out[at].reach ? " sv-memory-left-out" : ""}" data-event-id="${escapeHtml(item.id)}">
+                            <small>${item.type === "call" ? "통화" : item.type === "texts" ? "문자" : "음성 메시지"} · ${escapeHtml(item.character_name || "")}${outTag(out[at])}</small>
                             ${(bubbles && memoryBubblesHtml(item.llm_text, me)) || `<pre class="sv-memory-body">${escapeHtml(item.llm_text)}</pre>`}
                             <textarea class="sv-memory-editor hidden" spellcheck="false">${escapeHtml(item.llm_text)}</textarea>
                             <div class="sv-memory-actions">
                                 <button type="button" data-sv-memory-action="open" class="sv-memory-open" title="스마트폰에서 이 ${item.type === "call" ? "통화" : "대화"}를 바로 엽니다"><i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>스마트폰에서 보기</button>
+                                ${outButton(out[at])}
                                 <button type="button" data-sv-memory-action="edit">편집</button>
                                 <button type="button" data-sv-memory-action="save" class="hidden">저장</button>
                                 <button type="button" data-sv-memory-action="cancel" class="hidden">취소</button>
@@ -752,6 +792,27 @@ export const memory = {
     );
     if (!event || !record) return;
     if (action === "open") return this.openMemoryOnPhone(event, messageIndex);
+    if (action === "room-include")
+      return this.setRoomReachById(threadOfEvent(event), "");
+    if (action === "exclude") {
+      const left = this.memoryLeftOut(event);
+      if (left.single) {
+        const texts = this.forgottenTexts();
+        texts.delete(String(event.id));
+        await this.saveMemoryOut({ texts });
+        await this.refreshChatMemory();
+        return;
+      }
+      if (left.reach) delete event.excluded;
+      else {
+        const reach = await this.pickMemoryReach(button);
+        if (!reach) return;
+        event.excluded = reach;
+      }
+      await context.saveChat?.();
+      await this.refreshChatMemory();
+      return;
+    }
     const pre = record.querySelector(".sv-memory-body");
     const editor = record.querySelector(".sv-memory-editor");
     const editButton = record.querySelector('[data-sv-memory-action="edit"]');

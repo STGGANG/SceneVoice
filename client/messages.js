@@ -710,14 +710,19 @@ export const messages = {
         : "";
     // 재생 stays in sight (so does a voice being made); the rest sits behind ⋯.
     const made = reroll.includes('class="sv-msg-reroll" data-id');
-    const extra = `${made ? reroll : ""}${save}${quoteButton}${edit}${share}${remove}`;
+    // 기억에서 빼기, one text: the AI doesn't see it anywhere (this room's conversation too).
+    const forgotten = this.forgottenTexts?.().has(String(item.id));
+    const forget = frozen
+      ? ""
+      : `<button type="button" class="sv-msg-forget${forgotten ? " sv-memory-off sv-reach-all" : ""}" data-id="${record}" aria-pressed="${Boolean(forgotten)}" aria-label="${forgotten ? "기억에 다시 넣기" : "기억에서 빼기"}" title="${forgotten ? "기억에 다시 넣기: 이 문자를 AI가 다시 알게 합니다" : "기억에서 빼기: 지우지 않고, 본 채팅·스마트폰 어디서도 AI가 이 문자를 모르게 합니다"}"><i class="fa-solid fa-brain" aria-hidden="true"></i></button>`;
+    const extra = `${made ? reroll : ""}${save}${quoteButton}${edit}${share}${forget}${remove}`;
     const open = this.messageMoreOpen === item.id;
     // Someone else's text can be answered with an emoji at a tap.
     const reacts =
       item.role !== "user" && !frozen
         ? `<span class="sv-msg-reacts" role="group" aria-label="반응 남기기">${REACTIONS.map((emoji) => `<button type="button" data-react="${emoji}" data-id="${record}" aria-label="반응 ${emoji}" title="반응 남기기">${emoji}</button>`).join("")}<button type="button" class="sv-msg-react-own" data-react-own data-id="${record}" aria-label="다른 이모지로 반응" title="다른 이모지 직접 넣기"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></span>`
         : "";
-    const more = `<button type="button" class="sv-msg-more" data-id="${record}" aria-expanded="${open}" aria-label="더 보기" title="더 보기: 음성 재생성 · 내려받기 · 답장 · 고치기 · 삭제"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><span class="sv-msg-extra" ${open ? "" : "hidden"}>${extra}${reacts}</span>`;
+    const more = `<button type="button" class="sv-msg-more" data-id="${record}" aria-expanded="${open}" aria-label="더 보기" title="더 보기: 음성 재생성 · 내려받기 · 답장 · 고치기 · 기억에서 빼기 · 삭제"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button><span class="sv-msg-extra" ${open ? "" : "hidden"}>${extra}${reacts}</span>`;
     // 답변 재생성 and ‹ 1/2 › go on a line of their own under the buttons.
     const meta = `<div class="sv-msg-meta">${this.reactionsHtml?.(item) || ""}${item.forward ? "" : play}${made ? "" : reroll}${more}</div>${again || pager ? `<div class="sv-msg-meta sv-msg-again-line">${again}${pager}</div>` : ""}`;
     const lines = String(
@@ -821,6 +826,13 @@ export const messages = {
                 }</small>`
               : ""
           }</span></div>
+          ${(() => {
+            const reach = this.roomReach(key);
+            const title = reach
+              ? `이 방은 ${reach === "all" ? "본 채팅·스마트폰" : "본 채팅"} 기억에서 뺐습니다 · 누르면 다시 넣습니다`
+              : "이 방 기억에서 빼기";
+            return `<button type="button" class="sv-msg-aloud sv-msg-memory${reach ? ` sv-memory-off sv-reach-${reach}` : ""}" data-thread-memory aria-pressed="${Boolean(reach)}" aria-label="${title}" title="${title}"><i class="fa-solid fa-brain" aria-hidden="true"></i></button>`;
+          })()}
           <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화에서 목소리를 만든 문자를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
           <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 문자 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? (this.threadPlayback.making ? "fa-spinner fa-spin" : "fa-stop") : "fa-headphones"}" aria-hidden="true"></i></button>
           ${contact.group && !this.messageGroup(key)?.without_user && contact.members.length > 1 ? '<button type="button" class="sv-msg-aloud" data-group-call-room aria-label="단체 통화" title="단체 통화: 이 방 사람들에게 한꺼번에 전화합니다"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
@@ -829,8 +841,10 @@ export const messages = {
         <div class="sv-msg-list" role="log" aria-live="polite">
           ${
             thread.length
-              ? thread
-                  .map((item, index) => {
+              ? this.leftOutRunsHtml(
+                  thread,
+                  key,
+                  thread.map((item, index) => {
                     const before = thread[index - 1];
                     const sameSender =
                       before &&
@@ -864,8 +878,8 @@ export const messages = {
                             })
                           : null,
                     });
-                  })
-                  .join("")
+                  }),
+                )
               : `<p class="sv-msg-empty">${contact.group ? "단체방에 첫 문자를 보내 보십시오." : `${escapeHtml(contact.name)}에게 먼저 문자를 보내 보십시오.`}</p>`
           }
           ${typing ? '<div class="sv-msg-row sv-msg-theirs"><div class="sv-msg-bubble sv-msg-typing" aria-label="입력 중"><span class="sv-typing" aria-hidden="true"><i></i><i></i><i></i></span></div></div>' : ""}
@@ -1064,6 +1078,20 @@ export const messages = {
       ?.addEventListener("click", () =>
         this.run(() => this.playThreadAloud(key)),
       );
+    body
+      .querySelector("[data-thread-memory]")
+      ?.addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        this.run(async () => {
+          if (this.roomReach(key)) await this.setRoomReach(key, "");
+          else {
+            const reach = await this.pickMemoryReach(button);
+            if (!reach) return;
+            await this.setRoomReach(key, reach);
+          }
+          await this.renderSmartphone();
+        });
+      });
     const save = body.querySelector("[data-thread-download]");
     save?.addEventListener("click", () =>
       this.run(() =>
@@ -1092,6 +1120,18 @@ export const messages = {
           this.run(() => this.deleteMessage(record(button))),
         ),
       );
+    body.querySelectorAll(".sv-msg-forget").forEach((button) =>
+      button.addEventListener("click", () =>
+        this.run(async () => {
+          const item = record(button);
+          await this.setTextForgotten(
+            item,
+            !this.forgottenTexts().has(String(item.id)),
+          );
+          await this.renderSmartphone();
+        }),
+      ),
+    );
     this.bindMessageMore(body);
     body
       .querySelectorAll(".sv-msg-round")
@@ -1691,7 +1731,7 @@ export const messages = {
         });
         return;
       }
-      const whole = (await this.loadMessages()).filter(
+      const whole = this.keptForAI(await this.loadMessages(), key).filter(
         (item) => this.messageThreadOf(item) === key,
       );
       const thread = this.lastTexts ? this.lastTexts(whole) : whole.slice(-40);
@@ -2365,7 +2405,7 @@ export const messages = {
     const emotions = Array.from(this.analysisEmotionCandidates()).sort();
     const thread =
       kind === "text"
-        ? (await this.loadMessages())
+        ? this.keptForAI(await this.loadMessages(), character.key)
             .filter((item) => this.messageThreadOf(item) === character.key)
             .slice(-20)
         : [];

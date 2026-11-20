@@ -120,4 +120,4 @@ export {
  * card, client/visit.js) that card's chat. Everything that reads the chat goes through here.
  */
 export const stOf = (app) =>
-  app?.scopeContext ?? window.SillyTavern?.getContext?.();
+  app?.scopeContext ?? globalThis.window?.SillyTavern?.getContext?.();

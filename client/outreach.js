@@ -568,7 +568,9 @@ export const outreach = {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       // Calls of a part of the chat that was taken back (or another swipe) don't count, nor
       // calls between two other people (엿듣는 통화).
-      const sessions = ((await response.json()).items || []).filter(
+      const sessions = this.callsForAI(
+        (await response.json()).items || [],
+      ).filter(
         (session) =>
           session.call_direction !== "overheard" &&
           this.anchorShown?.(session) !== false,

@@ -2830,7 +2830,7 @@
 .sv-memory-actions button {
   white-space: nowrap;
 }
-.sv-memory-actions .sv-memory-open {
+.sv-memory-actions :is(.sv-memory-open, [data-sv-memory-action="exclude"]) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2842,6 +2842,108 @@
 .sv-memory-actions .hidden,
 .sv-memory-record .hidden {
   display: none !important;
+}
+
+/* 기억에서 빼기 marks, one brain everywhere: dimmed while left out of the story only
+   (본 채팅 기억에서만), crossed out while left out of the phone's memory too (둘 다). */
+.sv-memory-off.sv-reach-story,
+i.sv-reach-story {
+  opacity: 0.55;
+}
+.sv-memory-off.sv-reach-all,
+i.sv-reach-all {
+  position: relative;
+}
+.sv-memory-off.sv-reach-all {
+  opacity: 0.6;
+}
+:is(.sv-memory-off.sv-reach-all, i.sv-reach-all)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.15em;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+i.sv-reach-all::after {
+  width: 1.2em;
+  height: 1.5px;
+}
+#sv-smartphone .sv-msg-memory,
+#sv-smartphone .sv-msg-forget {
+  position: relative;
+}
+/* 기억에서 빼기: how far, picked from a small menu under the button. */
+.sv-reach-menu {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  max-width: min(290px, 86vw);
+  padding: 5px;
+  border: 1px solid var(--sv-line-strong, rgba(128, 128, 128, 0.35));
+  border-radius: 12px;
+  background: var(--sv-surface-solid, #1c1c1e);
+  box-shadow: var(--sv-shadow-pop, 0 10px 28px rgba(0, 0, 0, 0.35));
+  color: var(--sv-fg, inherit);
+}
+.sv-reach-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 600 12px/1.4 var(--sv-font, inherit);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sv-reach-menu > button:hover,
+.sv-reach-menu > button:focus-visible {
+  outline: none;
+  background: var(--sv-soft2, rgba(128, 128, 128, 0.16));
+}
+.sv-reach-menu > button > i {
+  width: 16px;
+  text-align: center;
+}
+#sv-smartphone .sv-reach-menu {
+  border-color: var(--ph-line);
+  background: var(--ph-surface);
+  color: var(--ph-fg);
+}
+#sv-smartphone .sv-reach-menu > button:hover,
+#sv-smartphone .sv-reach-menu > button:focus-visible {
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+}
+/* 기억에서 빼기: a record kept under its message but not sent to the AI. */
+.sv-memory-left-out > pre,
+.sv-memory-left-out > .sv-memory-bubbles {
+  opacity: 0.5;
+}
+.sv-memory-out-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--sv-soft2);
+  color: var(--sv-muted);
+  font-weight: 600;
+}
+.sv-memory-out-note {
+  margin-left: 6px;
+  color: var(--sv-faint);
+  font-size: 0.9em;
+  font-weight: 400;
 }
 
 /* ----- 16. 플로팅 전화 버튼 ----- */
@@ -8535,6 +8637,35 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 #sv-smartphone .sv-shelf-clear:hover {
   background: color-mix(in srgb, var(--ph-red) 22%, transparent);
 }
+/* 기억에서 뺀 문자: a run of messages left out of the chat memory, framed and dimmed a little. */
+#sv-smartphone .sv-msg-out-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 0 10px;
+  border-bottom: 1px dashed var(--ph-line);
+}
+#sv-smartphone .sv-msg-out-run > .sv-msg-row {
+  opacity: 0.55;
+}
+#sv-smartphone .sv-msg-out-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ph-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+#sv-smartphone .sv-msg-out-mark::before,
+#sv-smartphone .sv-msg-out-mark::after {
+  flex: 1;
+  border-top: 1px dashed var(--ph-line);
+  content: "";
+}
+#sv-smartphone .sv-msg-out-mark i {
+  margin-right: 5px;
+  font-size: 10px;
+}
 /* A conversation in 미적용 기억: where in the chat each part was made, and no sending. */
 #sv-smartphone .sv-msg-point {
   display: flex;
@@ -11148,4 +11279,17 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 .sv-toast-action:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+/* An icon named in an update note: drawn like the small button it stands for. */
+.sv-update-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7em;
+  height: 1.7em;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: var(--sv-soft2);
+  font-size: 0.8em;
+  vertical-align: 0.05em;
 }

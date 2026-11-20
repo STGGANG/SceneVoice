@@ -9,13 +9,27 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.3.5",
+    sections: [
+      [
+        "새로 생긴 것",
+        [
+          "기억에서 빼기: 지우지 않고 AI가 모르게 합니다. '본 채팅 기억에서만 빼기'(스마트폰 안에서는 기억함)와 '본 채팅·스마트폰 기억 둘 다 빼기' 중에서 고릅니다. '채팅 기억 연동' 기능을 안 쓰는 봇은 따로 선택하지 않아도 스마트폰 기억에서만 빠집니다.",
+          "기억 하나: 채팅 메시지 아래 '전화·문자 채팅 기억'의 {icon:fa-brain} 기억에서 빼기",
+          "방 전체: 스마트폰 문자방 위쪽 {icon:fa-brain} 버튼 (앞으로 오갈 문자도. 그 방 안의 대화는 그대로 이어집니다)",
+          "문자 하나: 문자 ⋯ 안의 {icon:fa-brain} 버튼 (본 채팅·스마트폰 둘 다)",
+          "뺀 문자는 문자방에서 점선 안에 흐리게 보입니다. 아이콘은 본 채팅에서만 뺐으면 흐리게, 둘 다 뺐으면 사선이 그어집니다.",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.3.4",
     sections: [
       [
         "바뀐 것",
         [
           "분석을 켜 둔 상태에서 대사 분석이 실패하면 음성을 만들지 않고 알립니다. 알림의 '분석 없이 생성'을 누르면 그 메시지만 분석 없이 만듭니다.",
-          "메시지 버튼(이어 듣기·분석 보기)의 설명을 짧게 (메시지 버튼을 정리하는 다른 확장에서 이름이 길게 보이던 것)",
         ],
       ],
     ],
@@ -339,8 +353,14 @@ function notesSeen(seen) {
   );
 }
 
+// {icon:fa-name} in a line shows that Font Awesome icon (the button it names).
+const withIcons = (text) =>
+  escapeHtml(text).replace(
+    /\{icon:(fa-[a-z0-9-]+)\}/g,
+    '<i class="fa-solid $1 sv-update-icon" aria-hidden="true"></i>',
+  );
 const listHtml = (lines) =>
-  `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
+  `<ul>${lines.map((line) => `<li>${withIcons(line)}</li>`).join("")}</ul>`;
 const notesHtml = (entry) =>
   (entry.bubble
     ? `<div class="sv-update-bubble"><span class="sv-update-face" aria-hidden="true"><i class="fa-solid fa-microphone-lines"></i></span><p>${escapeHtml(entry.bubble)}</p></div>`

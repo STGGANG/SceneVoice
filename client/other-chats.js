@@ -33,11 +33,13 @@ export const otherChats = {
     if (!this.otherChatsOn() || !keys.length) return [];
     const writers = new Set(keys);
     const me = this.userCharacterName?.() || "User";
-    const [items, sessions] = await Promise.all([
+    const [all, sessions] = await Promise.all([
       this.loadMessages(),
       this.otherChatSessions(),
       this.loadMessageGroups?.().catch(() => []),
     ]);
+    // What 둘 다 빼기 took out isn't known to anyone here.
+    const items = this.keptForAI(all);
     const nameOf = (key, fallback = "") =>
       this.phoneContact?.(key)?.name || fallback || key;
     const rooms = new Map();
@@ -173,7 +175,7 @@ export const otherChats = {
         5000,
       );
       if (!response.ok) return [];
-      return ((await response.json()).items || [])
+      return this.callsForAI((await response.json()).items || [])
         .filter(
           (session) =>
             FINISHED.has(session.status) &&

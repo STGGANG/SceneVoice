@@ -81,12 +81,14 @@ export const radio = {
       { cache: "no-store" },
     );
     const sessions = response.ok
-      ? ((await response.json()).items || [])
+      ? this.callsForAI((await response.json()).items || [])
           .filter((session) => this.anchorShown(session))
           .slice(0, 5)
           .reverse()
       : [];
-    const texts = (await this.loadMessages().catch(() => [])).slice(-20);
+    const texts = this.keptForAI(
+      await this.loadMessages().catch(() => []),
+    ).slice(-20);
     return {
       calls: sessions.map((session) => ({
         on_call: this.callNames(session).join(", "),

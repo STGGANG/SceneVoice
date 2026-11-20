@@ -1761,7 +1761,7 @@ export const calls = {
       );
       if (!response.ok) return [];
       const last = (stOf(this)?.chat || []).length - 1;
-      return ((await response.json()).items || [])
+      return this.callsForAI((await response.json()).items || [])
         .filter(
           (session) =>
             session.id !== excludeId &&

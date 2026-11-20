@@ -905,7 +905,7 @@ export const groups = {
     if (!this.messageGroup(key)) await this.loadMessageGroups();
     const group = this.messageGroup(key);
     if (!group) return;
-    const mine = (await this.loadMessages()).filter(
+    const mine = this.keptForAI(await this.loadMessages(), key).filter(
       (item) => this.messageThreadOf(item) === key,
     );
     const thread = this.lastTexts ? this.lastTexts(mine) : mine.slice(-40);

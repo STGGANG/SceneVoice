@@ -56,7 +56,7 @@ export const ghostwrite = {
         })),
       );
     } else {
-      const all = (await this.loadMessages()).filter(
+      const all = this.keptForAI(await this.loadMessages(), key).filter(
         (item) => this.messageThreadOf(item) === key,
       );
       const thread = this.lastTexts ? this.lastTexts(all) : all.slice(-40);
