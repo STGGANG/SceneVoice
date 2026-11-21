@@ -327,7 +327,7 @@
   width: 36px;
   height: 36px;
   border-radius: 11px;
-  background: linear-gradient(135deg, #2cc3b2, #0e7c8b);
+  background: var(--sv-brand);
   color: #fff;
   font-size: 16px;
 }
@@ -2872,7 +2872,6 @@ i.sv-reach-all::after {
   width: 1.2em;
   height: 1.5px;
 }
-#sv-smartphone .sv-msg-memory,
 #sv-smartphone .sv-msg-forget {
   position: relative;
 }
@@ -3421,10 +3420,8 @@ i.sv-reach-all::after {
   min-height: 100%;
   padding: 74px 18px 34px;
   overflow: hidden;
-  background:
-    radial-gradient(110% 70% at 15% 0%, #6a55e0 0%, transparent 62%),
-    radial-gradient(90% 60% at 100% 95%, #128a8a 0%, transparent 60%),
-    linear-gradient(165deg, #1d2142, #0b0d18);
+  /* A phone left on at night: one deep navy, a touch lighter at the top. */
+  background: #10131f linear-gradient(170deg, #1a1e30 0%, #0c0e17 100%);
 }
 .sv-phone-lock {
   margin-top: 18px;
@@ -6895,7 +6892,7 @@ i.sv-reach-all::after {
 }
 .sv-pron-word {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px 8px 8px 12px;
@@ -6915,11 +6912,9 @@ i.sv-reach-all::after {
   color: var(--sv-faint);
   font-size: 0.85em;
 }
-.sv-pron-word:not([data-auto]) .sv-pron-auto-mark {
-  display: none;
-}
-.sv-pron-word[data-auto] {
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto auto;
+.sv-pron-word[data-auto] .sv-pron-mark {
+  background: var(--sv-brand-soft);
+  color: var(--sv-brand-text);
 }
 
 /* ----- 23. 좁은 화면 · 터치 ----- */
@@ -7916,9 +7911,6 @@ i.sv-reach-all::after {
   font-size: 13px;
   cursor: pointer;
 }
-.sv-msg-download + .sv-msg-aloud {
-  margin-left: 6px;
-}
 .sv-msg-aloud + .sv-msg-group-edit {
   margin-left: 6px;
 }
@@ -8665,6 +8657,72 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 #sv-smartphone .sv-msg-out-mark i {
   margin-right: 5px;
   font-size: 10px;
+}
+/* 영상 저장 · 구간 고르기: the room as a picker (tap the first and the last message). */
+#sv-smartphone
+  .sv-msg-picking
+  :is(
+    .sv-msg-compose,
+    .sv-card-tray,
+    .sv-msg-replying,
+    .sv-msg-waiting,
+    .sv-msg-observer
+  ) {
+  display: none;
+}
+#sv-smartphone .sv-msg-picking .sv-msg-row {
+  cursor: pointer;
+  opacity: 0.45;
+}
+#sv-smartphone .sv-msg-picking .sv-msg-row.sv-msg-picked {
+  opacity: 1;
+}
+#sv-smartphone .sv-msg-picking .sv-msg-row * {
+  pointer-events: none;
+}
+#sv-smartphone .sv-msg-picking .sv-msg-row:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+#sv-smartphone .sv-msg-pickbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 30px;
+  border-top: 0.5px solid var(--ph-line);
+  background: var(--ph-bg);
+  color: var(--ph-muted);
+  font-size: 12.5px;
+}
+#sv-smartphone .sv-msg-pickbar > span {
+  flex: 1;
+  min-width: 0;
+}
+#sv-smartphone .sv-msg-pickbar > button {
+  flex: none;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ph-fg) 10%, transparent);
+  color: var(--ph-fg);
+  font: 600 13px/1.2 inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#sv-smartphone .sv-msg-pickbar > .sv-pick-make {
+  background: var(--ph-blue);
+  color: #fff;
+}
+#sv-smartphone .sv-msg-pickbar > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#sv-smartphone .sv-msg-pickbar > button:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
 }
 /* A conversation in 미적용 기억: where in the chat each part was made, and no sending. */
 #sv-smartphone .sv-msg-point {
@@ -10733,6 +10791,9 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 .sv-card-shares b {
   font-weight: 600;
   white-space: nowrap;
+}
+.sv-card-shares .sv-card-share-none {
+  opacity: 0.55;
 }
 .sv-card-winner {
   display: flex;

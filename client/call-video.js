@@ -3,8 +3,8 @@
 // otherwise recorded in real time.
 import { mp4Parts } from "./mp4.js";
 
-const WIDTH = 720;
-const HEIGHT = 1280;
+export const WIDTH = 720;
+export const HEIGHT = 1280;
 const FPS = 15;
 const LEAD = 0.8;
 const GAP = 0.5;
@@ -24,7 +24,7 @@ const AAC_RATES = [
   96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
   8000, 7350,
 ];
-const FONT =
+export const FONT =
   '"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Hiragino Sans", "Malgun Gothic", system-ui, sans-serif';
 
 const recordingType = () =>
@@ -48,7 +48,7 @@ const readingSeconds = (text) =>
     Math.max(1.6, 1.2 + Array.from(String(text || "")).length * 0.09),
   );
 
-function roundRect(ctx, x, y, w, h, r) {
+export function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -59,7 +59,7 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /** Lines that fit `width`: broken at spaces, or anywhere for text without them (Japanese, Chinese). */
-function wrap(ctx, text, width) {
+export function wrap(ctx, text, width) {
   const lines = [];
   for (const paragraph of String(text || "").split("\n")) {
     let line = "";
@@ -83,7 +83,7 @@ function wrap(ctx, text, width) {
   return lines;
 }
 
-function loadImage(url) {
+export function loadImage(url) {
   return new Promise((resolve) => {
     if (!url) return resolve(null);
     const image = new Image();
@@ -100,7 +100,7 @@ function loadImage(url) {
   });
 }
 
-function canvasOf(width, height) {
+export function canvasOf(width, height) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -170,7 +170,7 @@ function backdrop(image) {
   return canvas;
 }
 
-function avatar(image, name, size) {
+export function avatar(image, name, size) {
   const canvas = canvasOf(size, size);
   const ctx = canvas.getContext("2d");
   ctx.beginPath();
@@ -371,6 +371,8 @@ export const callVideo = {
     gather,
     name,
     trackOptions = null,
+    // A conversation shown as text may have no voice at all.
+    silentOk = false,
   }) {
     if (!this.canMakeCallVideo())
       throw new Error("이 브라우저에서는 영상을 만들 수 없습니다.");
@@ -384,7 +386,7 @@ export const callVideo = {
       gathered = await gather((done, total) =>
         view.status(`목소리 준비 중 ${done + 1}/${total}`),
       );
-      if (!gathered.clips.some((clip) => clip.url))
+      if (!gathered.clips.some((clip) => clip.url || (silentOk && clip.silent)))
         throw new Error("영상에 넣을 음성이 없습니다.");
       const blob = await this.recordCallVideo(
         scene,
@@ -520,7 +522,12 @@ export const callVideo = {
             ((source[Math.floor(i * step)] || 0) * level) /
             buffer.numberOfChannels;
       }
-      lines.push({ start: at / rate, end: (at + length) / rate, turn });
+      lines.push({
+        start: at / rate,
+        end: (at + length) / rate,
+        turn,
+        silent: !buffer,
+      });
       at += length + frames(gap);
     }
     mix?.(data, rate, lines);
@@ -535,7 +542,9 @@ export const callVideo = {
       trackOptions,
     );
     if (view.cancelled) return null;
-    const { canvas, draw } = await this.callVideoScene(session, lines);
+    const { canvas, draw } = await (session.call_direction === "texts"
+      ? this.textsVideoScene(session, lines)
+      : this.callVideoScene(session, lines));
     view.show(canvas);
     if (await encodesHere(track.sampleRate)) {
       view.status("영상 만드는 중…");

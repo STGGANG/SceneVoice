@@ -243,18 +243,34 @@ export const memoryOut = {
       this.notify("스마트폰 안 기억에서 빠집니다.", "info");
       return Promise.resolve("all");
     }
+    return this.pickFromMenu(anchor, this.reachMenuItems());
+  },
+
+  reachMenuItems() {
+    return ["story", "all"].map((reach) => ({
+      id: reach,
+      icon: `fa-brain sv-reach-${reach}`,
+      label: REACH_LABELS[reach],
+    }));
+  },
+
+  /**
+   * A small menu by `anchor` (above it in the chat, under it on the phone): resolves to the
+   * picked item's id, or null when closed. `items`: { id, icon, label }.
+   */
+  pickFromMenu(anchor, items) {
     document.querySelector(".sv-reach-menu")?.remove();
     return new Promise((resolve) => {
       const menu = document.createElement("div");
       menu.className = "sv-reach-menu";
       menu.setAttribute("role", "menu");
-      for (const reach of ["story", "all"]) {
+      for (const { id, icon, label } of items) {
         const item = document.createElement("button");
         item.type = "button";
         item.setAttribute("role", "menuitem");
-        item.dataset.reach = reach;
-        item.innerHTML = `<i class="fa-solid fa-brain sv-reach-${reach}" aria-hidden="true"></i><span></span>`;
-        item.querySelector("span").textContent = REACH_LABELS[reach];
+        item.dataset.pick = id;
+        item.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i><span></span>`;
+        item.querySelector("span").textContent = label;
         menu.append(item);
       }
       const holder = anchor.parentElement;
@@ -300,11 +316,11 @@ export const memoryOut = {
         }
       };
       menu.addEventListener("click", (event) => {
-        const picked = event.target.closest("[data-reach]");
+        const picked = event.target.closest("[data-pick]");
         if (picked) {
           event.preventDefault();
           event.stopPropagation();
-          done(picked.dataset.reach);
+          done(picked.dataset.pick);
         }
       });
       setTimeout(() => {

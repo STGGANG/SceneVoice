@@ -1,6 +1,12 @@
 // 화자 설정 (캐릭터별 목소리): bot cards, the people under them and global people, each
 // with their voice, language, gender and switches.
-import { escapeHtml, contentKey, LANGUAGE_CHOICES, stOf } from "./common.js";
+import {
+  escapeHtml,
+  contentKey,
+  LANGUAGE_CHOICES,
+  setText,
+  stOf,
+} from "./common.js";
 import { fieldHtml, switchHtml, infoTip } from "./ui.js";
 import { TIME_ZONES, cardHoldsPerson, cardStandIn } from "../shared/casting.js";
 import { voicePickHtml } from "./voice-picker.js";
@@ -892,18 +898,22 @@ export const casting = {
       ids
         .filter(([id]) => document.getElementById(id)?.checked)
         .map(([, label]) => label);
-    note.textContent = [
-      "봇카드 공통 설정",
-      ...checked([["sv-cast-single", "목소리 하나"]]),
-    ].join(" · ");
-    const phone = document.querySelector("#sv-cast-panel [data-card-phone]");
-    if (phone)
-      phone.textContent = checked([
+    setText(
+      note,
+      [
+        "봇카드 공통 설정",
+        ...checked([["sv-cast-single", "목소리 하나"]]),
+      ].join(" · "),
+    );
+    setText(
+      document.querySelector("#sv-cast-panel [data-card-phone]"),
+      checked([
         ["sv-cast-outreach", "선연락"],
         ["sv-cast-realtime", "실제 시간"],
         ["sv-cast-memory", "채팅 기억"],
         ["sv-cast-lore", "월드인포"],
-      ]).join(" · ");
+      ]).join(" · "),
+    );
   },
 
   onCastInput(event) {
@@ -994,11 +1004,23 @@ export const casting = {
       return;
     }
     if (member) {
-      const entry = this.voiceDraft[key] || {};
-      member.querySelector("[data-member-label]").textContent =
-        entry.name || "이름 없음";
-      member.querySelector("[data-member-sub]").textContent =
-        this.castMemberSummary(entry);
+      // The row's name and summary follow once the typing pauses (see setText in common.js).
+      clearTimeout(this.memberLabelTimer);
+      const label = () => {
+        if (!member.isConnected) return;
+        const entry = this.voiceDraft[key] || {};
+        setText(
+          member.querySelector("[data-member-label]"),
+          entry.name || "이름 없음",
+        );
+        setText(
+          member.querySelector("[data-member-sub]"),
+          this.castMemberSummary(entry),
+        );
+      };
+      if (event.type === "input" && event.target.matches("input, textarea"))
+        this.memberLabelTimer = setTimeout(label, 400);
+      else label();
       if (field === "use_here")
         member.classList.toggle("sv-member-off", !value);
     }

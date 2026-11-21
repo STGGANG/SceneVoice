@@ -1,4 +1,4 @@
-import { escapeHtml, mergeConfig } from "./common.js";
+import { escapeHtml, mergeConfig, setText } from "./common.js";
 import { cleanPronunciation } from "../shared/settings.js";
 import { infoTip, subTitle, switchHtml } from "./ui.js";
 
@@ -13,7 +13,7 @@ function wordRow(word = {}) {
     <input type="text" data-word-field="from" value="${escapeHtml(word.from || "")}" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="대사에 적힌 표기" placeholder="적힌 표기">
     <i class="fa-solid fa-arrow-right sv-pron-arrow" aria-hidden="true"></i>
     <input type="text" data-word-field="to" value="${escapeHtml(word.to || "")}" maxlength="120" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="읽는 법" placeholder="읽는 법">
-    <span class="sv-badge sv-pron-auto-mark">자동</span>
+    <span class="sv-badge sv-pron-mark">${auto ? "자동" : "수동"}</span>
     <button type="button" class="sv-icon-btn sv-read-remove" data-word-remove aria-label="단어 삭제" title="단어 삭제"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
   </li>`;
 }
@@ -75,7 +75,7 @@ export const pronunciation = {
     return `${subTitle("sv-sub-pronunciation", "spell-check", "발음 사전", { open: false, note: `${infoTip(tip, "발음 사전 설명")}<small id="sv-pron-count" ${shown ? "" : "hidden"}>${shown}개</small>` })}
       <div class="sv-notice sv-read-lead"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>음성 엔진이 잘못 읽는 이름이나 단어를, <b>읽을 때만</b> 적어 둔 글자로 바꿔 보냅니다(예: 遥斗 → はると). 화면의 글은 바뀌지 않습니다.</span></div>
       <div class="sv-row sv-chat-only">
-        ${switchHtml({ id: "sv-pron-auto", label: "읽는 법 알아서 찾기", hint: "보조모델이 채팅 대사를 분석할 때, 읽는 법이 헷갈릴 이름을 함께 찾아 그 봇카드의 사전에 넣습니다.", tip: "대사를 분석하는 요청에 함께 물어봅니다(추가 요청 없음).\n봇카드 설명이나 등록한 이름·별명으로 읽는 법이 확실할 때만 넣고, 넣은 단어에는 ‘자동’ 표시가 붙습니다.\n찾은 단어는 그 채팅의 봇카드에서만 씁니다.\n틀리게 넣은 것은 고치면 되고, 지우면 다시 넣지 않습니다.\n전화·문자 대사에서는 찾지 않습니다. 사전에 든 단어는 거기서도 바꿔 읽습니다.\n‘보조모델 분석’이 꺼져 있으면 찾지 않습니다.", checked: config.pronunciation?.auto !== false })}
+        ${switchHtml({ id: "sv-pron-auto", label: "읽는 법 알아서 찾기", hint: "보조모델이 채팅 대사를 분석할 때, 읽는 법이 헷갈릴 이름을 함께 찾아 그 봇카드의 사전에 넣습니다.", tip: "대사를 분석하는 요청에 함께 물어봅니다(추가 요청 없음).\n봇카드 설명이나 등록한 이름·별명으로 읽는 법이 확실할 때만 넣고, 넣은 단어에는 ‘자동’, 직접 적거나 고친 단어에는 ‘수동’ 표시가 붙습니다.\n찾은 단어는 그 채팅의 봇카드에서만 씁니다.\n틀리게 넣은 것은 고치면 되고, 지우면 다시 넣지 않습니다.\n전화·문자 대사에서는 찾지 않습니다. 사전에 든 단어는 거기서도 바꿔 읽습니다.\n‘보조모델 분석’이 꺼져 있으면 찾지 않습니다.", checked: config.pronunciation?.auto !== false })}
       </div>
       <div id="sv-pron-words">
         ${wordList(
@@ -123,7 +123,11 @@ export const pronunciation = {
     });
     lists.addEventListener("input", (event) => {
       // Edited by hand, it is the user's own word from then on.
-      event.target.closest(".sv-pron-word")?.removeAttribute("data-auto");
+      const row = event.target.closest(".sv-pron-word");
+      if (row?.hasAttribute("data-auto")) {
+        row.removeAttribute("data-auto");
+        row.querySelector(".sv-pron-mark").textContent = "수동";
+      }
       this.notePronunciationCount();
     });
   },
@@ -133,8 +137,8 @@ export const pronunciation = {
     const lists = document.getElementById("sv-pron-words");
     if (!badge || !lists) return;
     const count = this.shownPronunciation(lists).length;
-    badge.hidden = !count;
-    badge.textContent = `${count}개`;
+    if (badge.hidden !== !count) badge.hidden = !count;
+    setText(badge, `${count}개`);
   },
 
   /** Rows with both sides filled in; a row still being typed is left out of the save. */

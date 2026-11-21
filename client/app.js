@@ -40,6 +40,7 @@ import { multicast } from "./multicast.js";
 import { publicApi } from "./public-api.js";
 import { updates } from "./updates.js";
 import { callVideo } from "./call-video.js";
+import { textsVideo } from "./texts-video.js";
 import { voicemail } from "./voicemail.js";
 import { memos } from "./memos.js";
 import { forward } from "./forward.js";
@@ -123,6 +124,7 @@ export const SceneVoice = {
   ...publicApi,
   ...updates,
   ...callVideo,
+  ...textsVideo,
   ...voicemail,
   ...memos,
   ...forward,

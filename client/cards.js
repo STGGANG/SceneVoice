@@ -64,11 +64,28 @@ const CARD_ANSWERS = {
   gift: {
     accept: ["받기", "선물 받음", "Accepted the gift"],
     decline: ["거절", "선물 거절", "Declined the gift"],
+    // Opened a random draw and got nothing.
+    miss: ["", "꽝", "Opened the gift draw and got nothing"],
   },
 };
-// Money split or a gift drawn at random in a group is not accepted or declined: it just lands.
+/**
+ * A card of mine in a group shared out at random (`claim`): the dice are rolled when it is sent
+ * but nothing shows until a member opens it in a reply, each finding their own result then.
+ * Cards sent before this (shares or a winner with no `claim`) just landed, with no answer.
+ */
 export const cardCanBeAnswered = (card) =>
-  Boolean(CARD_ANSWERS[card?.type]) && !card.shares && !card.winner;
+  Boolean(CARD_ANSWERS[card?.type]) &&
+  (Boolean(card.claim) || (!card.shares && !card.winner));
+/** What `name` finds on opening a claim card: an amount, an item, or "" (nothing). */
+export const claimOutcome = (card, name) =>
+  (card?.type === "transfer"
+    ? card.shares?.find((share) => share.name === name)?.amount
+    : card?.prizes?.find((prize) => prize.name === name)?.item) || "";
+/** The members a claim card is shared among. */
+export const claimNames = (card) =>
+  card?.among?.length
+    ? card.among
+    : (card?.shares || card?.prizes || []).map((row) => row.name);
 // 송금의 통화: code, name in the list, how an amount reads with it. "" = 직접 작성.
 export const CURRENCIES = [
   ["KRW", "원 (KRW)", (amount) => `${amount}원`],
@@ -172,6 +189,11 @@ const IMAGES_PER_REQUEST = 3;
 const IMAGE_REACH = 8;
 
 export const cards = {
+  /** A gift in a group holds at most one thing per member. */
+  giftItemsMax(key) {
+    return Math.max(1, (this.messageGroup(key)?.members || []).length);
+  },
+
   /** The card kinds switched on (설정 없이 문자 화면의 + 메뉴에서 켜고 끔). */
   cardKindsOn() {
     const chosen = this.config.voice_message?.cards || {};
@@ -201,11 +223,17 @@ export const cards = {
         ? ` / ${card.detail}`
         : ` (${card.detail})`
       : "";
-    const luck = card.shares?.length
-      ? `, split at random among the members: ${card.shares.map((share) => `${share.name} ${share.amount}`).join(", ")}`
-      : card.winner
-        ? `, drawn at random among the members: only ${card.winner} gets it`
-        : "";
+    // A claim card's results stay out of this line (it is read on screen and in the chat memory):
+    // they come out one by one, in the members' own answers.
+    const luck = card.claim
+      ? card.type === "transfer"
+        ? ", split at random among the members who open it"
+        : ", drawn at random among the members who open it"
+      : card.shares?.length
+        ? `, split at random among the members: ${card.shares.map((share) => `${share.name} ${share.amount}`).join(", ")}`
+        : card.winner
+          ? `, drawn at random among the members: only ${card.winner} gets it`
+          : "";
     return `[${kind[5]}: ${title}${luck}${detail}]`;
   },
 
@@ -287,7 +315,7 @@ export const cards = {
    * A card as the messaging app shows it: a picture part on top (a little map, a wrapped gift,
    * the amount sent, a calendar page, the photo itself) and its words under it.
    */
-  cardHtml(item, { answered = "", canAnswer = false } = {}) {
+  cardHtml(item, { answered = "", canAnswer = false, claims = null } = {}) {
     const card = item?.card;
     // Any other answer to a card: a small line of its own, not a card with a picture.
     // Money or a gift taken: a card like the one that was sent, saying who has it now.
@@ -311,7 +339,7 @@ export const cards = {
       return `<div class="sv-msg-bubble sv-msg-card sv-card-received" data-card="${card.about}" data-card-answered="accept">${art}<div class="sv-card-words"><small><i class="fa-solid fa-circle-check" aria-hidden="true"></i>${money ? "송금 완료" : "선물 전달 완료"}</small>${!money && what ? `<strong>${what}</strong>` : ""}<span>${got}</span></div></div>`;
     }
     if (card?.type === "reply")
-      return `<div class="sv-msg-bubble sv-msg-card-answer" data-card-answered="${escapeHtml(card.answer)}"><i class="fa-solid fa-${card.answer === "decline" ? "xmark" : "check"}" aria-hidden="true"></i><span><b>${escapeHtml(card.title || "")}</b>${card.detail ? escapeHtml(card.detail) : ""}</span></div>`;
+      return `<div class="sv-msg-bubble sv-msg-card-answer" data-card-answered="${escapeHtml(card.answer)}"><i class="fa-solid fa-${card.answer === "accept" ? "check" : "xmark"}" aria-hidden="true"></i><span><b>${escapeHtml(card.title || "")}</b>${card.detail ? escapeHtml(card.detail) : ""}</span></div>`;
     const kind = kindOf(card?.type);
     if (!kind) return "";
     const [type, name, icon] = kind;
@@ -357,11 +385,25 @@ export const cards = {
         : `<small><i class="fa-solid fa-${icon}" aria-hidden="true"></i>${name}</small>${title ? `<strong>${title}</strong>` : ""}${detail ? `<span>${detail}</span>` : ""}${korean}`;
     // Answered once, by a button (theirs) or in their reply (mine): the card then says how.
     const answers = cardCanBeAnswered(card) ? CARD_ANSWERS[type] : null;
-    const luck = card.shares?.length
-      ? `<ul class="sv-card-shares">${card.shares.map((share) => `<li><span>${escapeHtml(share.name)}</span><b>${escapeHtml(share.amount)}</b></li>`).join("")}</ul>`
-      : card.winner
-        ? `<p class="sv-card-winner"><i class="fa-solid fa-dice" aria-hidden="true"></i><span>랜덤 당첨</span><b>${escapeHtml(card.winner)}</b></p>`
-        : "";
+    // A claim card: who opened it so far and what they found; nothing shows before that.
+    const opened = claims || [];
+    const among = claimNames(card).length;
+    const luck = card.claim
+      ? `${
+          opened.length
+            ? `<ul class="sv-card-shares">${opened
+                .map(
+                  (row) =>
+                    `<li${row.answer === "accept" ? "" : ' class="sv-card-share-none"'}><span>${escapeHtml(row.name)}</span><b>${row.answer === "accept" ? escapeHtml(row.detail) : row.answer === "miss" ? "꽝" : "거절"}</b></li>`,
+                )
+                .join("")}</ul>`
+            : ""
+        }<p class="sv-card-winner"><i class="fa-solid fa-dice" aria-hidden="true"></i><span>${type === "transfer" ? "랜덤으로 나눔" : "랜덤 추첨"}</span><b>${opened.length ? `${among}명 중 ${opened.length}명 열어 봄` : "아직 아무도 안 열어 봄"}</b></p>`
+      : card.shares?.length
+        ? `<ul class="sv-card-shares">${card.shares.map((share) => `<li><span>${escapeHtml(share.name)}</span><b>${escapeHtml(share.amount)}</b></li>`).join("")}</ul>`
+        : card.winner
+          ? `<p class="sv-card-winner"><i class="fa-solid fa-dice" aria-hidden="true"></i><span>랜덤 당첨</span><b>${escapeHtml(card.winner)}</b></p>`
+          : "";
     const foot = !answers
       ? ""
       : answered
@@ -383,8 +425,14 @@ export const cards = {
   },
 
   /** The card that answers the other side's card (see CARD_ANSWERS): mine goes out on its own. */
-  cardAnswer(item, answer) {
+  cardAnswer(item, answer, member = null) {
     const card = item?.card;
+    // A claim card opened: the member's own share or prize, or nothing.
+    const found =
+      card?.claim && answer === "accept"
+        ? claimOutcome(card, member?.name)
+        : "";
+    if (card?.claim && answer === "accept" && !found) answer = "miss";
     const words = CARD_ANSWERS[card?.type]?.[answer];
     if (!words) return null;
     return {
@@ -393,9 +441,11 @@ export const cards = {
       answer,
       re: item.id,
       title: words[1],
-      detail: [card.title, card.type === "appointment" ? card.detail : ""]
-        .filter(Boolean)
-        .join(" / "),
+      detail:
+        found ||
+        [card.title, card.type === "appointment" ? card.detail : ""]
+          .filter(Boolean)
+          .join(" / "),
       ...(item.role === "user" ? {} : { solo: true }),
     };
   },
@@ -405,9 +455,18 @@ export const cards = {
    * I answered by a tap → "pick:" and the choice.
    */
   cardAnswers(thread = []) {
+    // A claim card is answered by each member in turn (see cardClaims), never as a whole.
+    const claim = new Set(
+      thread.filter((item) => item.card?.claim).map((item) => item.id),
+    );
     const answers = new Map(
       thread
-        .filter((item) => item.card?.type === "reply" && item.card.re)
+        .filter(
+          (item) =>
+            item.card?.type === "reply" &&
+            item.card.re &&
+            !claim.has(item.card.re),
+        )
         .map((item) => [item.card.re, item.card.answer]),
     );
     const polls = new Set(
@@ -419,6 +478,31 @@ export const cards = {
       if (item.role === "user" && polls.has(item.quote?.id))
         answers.set(item.quote.id, `pick:${item.text}`);
     return answers;
+  },
+
+  /**
+   * Who opened each claim card so far: message id → [{ key, name, answer, detail }], in the
+   * order they did.
+   */
+  cardClaims(thread = []) {
+    const claims = new Map(
+      thread.filter((item) => item.card?.claim).map((item) => [item.id, []]),
+    );
+    for (const item of thread)
+      if (item.card?.type === "reply" && claims.has(item.card.re))
+        claims.get(item.card.re).push({
+          key: item.character_key || "",
+          name: item.character_name || "",
+          answer: item.card.answer,
+          detail: item.card.detail || "",
+        });
+    return claims;
+  },
+
+  /** The members of a claim card who haven't opened it yet (names). */
+  claimLeft(item, claims) {
+    const done = new Set((claims.get(item.id) || []).map((row) => row.name));
+    return claimNames(item.card).filter((name) => !done.has(name));
   },
 
   /** The emoji left on a text, as chips under it; mine is taken back by a tap. */
@@ -472,20 +556,34 @@ export const cards = {
   /** A card of mine still waiting for their answer is in the thread. */
   hasOpenCard(thread = []) {
     const answers = this.cardAnswers(thread);
+    const claims = this.cardClaims(thread);
     return thread.some(
       (item) =>
         item.role === "user" &&
         cardCanBeAnswered(item.card) &&
-        !answers.has(item.id),
+        (item.card.claim
+          ? this.claimLeft(item, claims).length > 0
+          : !answers.has(item.id)),
     );
   },
 
   /** Their reply answers a card of mine (its `card_answer`: {n, answer}), once. */
-  cardAnswerFromReply(parsed, thread = []) {
+  cardAnswerFromReply(parsed, thread = [], member = null) {
     const item = thread[Number(parsed?.card_answer?.n) - 1];
     const answer = String(parsed?.card_answer?.answer || "").toLowerCase();
-    if (!item || item.role !== "user" || this.cardAnswers(thread).has(item.id))
+    if (
+      !item ||
+      item.role !== "user" ||
+      !["accept", "decline"].includes(answer)
+    )
       return null;
+    // A claim card: each member once, and only someone it is shared among.
+    if (item.card?.claim)
+      return member?.name &&
+        this.claimLeft(item, this.cardClaims(thread)).includes(member.name)
+        ? this.cardAnswer(item, answer, member)
+        : null;
+    if (this.cardAnswers(thread).has(item.id)) return null;
     return this.cardAnswer(item, answer);
   },
 
@@ -678,12 +776,15 @@ export const cards = {
                 ? `<input type="text" data-card-detail maxlength="240" placeholder="${second}" value="${escapeHtml(tray.detail || "")}" autocomplete="off" aria-label="${second}">
                   <div class="sv-poll-edit">${(tray.options ||= ["", ""]).map((option, index) => `<input type="text" data-poll-option="${index}" maxlength="40" placeholder="항목 ${index + 1}" value="${escapeHtml(option)}" autocomplete="off" aria-label="항목 ${index + 1}">`).join("")}</div>
                   <button type="button" class="sv-poll-add" data-poll-add ${tray.options.length >= POLL_MAX ? "disabled" : ""}><i class="fa-solid fa-plus" aria-hidden="true"></i><span>항목 추가</span></button>`
-                : `<input type="text" data-card-title maxlength="240" placeholder="${first}" value="${escapeHtml(tray.title || "")}" autocomplete="off" aria-label="${first}">`
+                : type === "gift" && this.isGroupThread(key)
+                  ? `<div class="sv-poll-edit">${(tray.items ||= [tray.title || ""]).map((option, index) => `<input type="text" data-gift-item="${index}" maxlength="80" placeholder="${index ? `선물 ${index + 1}` : first}" value="${escapeHtml(option)}" autocomplete="off" aria-label="선물 ${index + 1}">`).join("")}</div>
+                  <button type="button" class="sv-poll-add" data-gift-add ${tray.items.length >= this.giftItemsMax(key) ? "disabled" : ""}><i class="fa-solid fa-plus" aria-hidden="true"></i><span>선물 추가 (인원수까지)</span></button>`
+                  : `<input type="text" data-card-title maxlength="240" placeholder="${first}" value="${escapeHtml(tray.title || "")}" autocomplete="off" aria-label="${first}">`
           }
           ${second && type !== "poll" ? `<input type="text" data-card-detail maxlength="240" placeholder="${second}" value="${escapeHtml(tray.detail || "")}" autocomplete="off" aria-label="${second}">` : ""}
           ${
             this.isGroupThread(key) && (type === "transfer" || type === "gift")
-              ? `<label class="sv-card-random"><input type="checkbox" data-card-random ${tray.random ? "checked" : ""}><span>${type === "transfer" ? "인물별 금액 랜덤 추첨 (돈 뿌리기)" : "랜덤 추첨 (한 명만 수령)"}</span></label>`
+              ? `<label class="sv-card-random"><input type="checkbox" data-card-random ${tray.random || (tray.items?.length || 0) > 1 ? "checked" : ""} ${(tray.items?.length || 0) > 1 ? "disabled" : ""}><span>${type === "transfer" ? "인물별 금액 랜덤 추첨 (돈 뿌리기)" : (tray.items?.length || 0) > 1 ? "랜덤 추첨 (선물마다 한 명씩)" : "랜덤 추첨 (한 명만 수령)"}</span></label>`
               : ""
           }
           ${type === "song" || type === "video" ? '<p class="sv-card-tray-note">제목을 적습니다. AI는 링크를 열어 볼 수 없어 주소로는 알아보지 못합니다.</p>' : ""}
@@ -838,7 +939,35 @@ export const cards = {
             .querySelector(`[data-poll-option="${tray.options.length - 1}"]`)
             ?.focus();
       });
+    box.querySelectorAll("[data-gift-item]").forEach((input) =>
+      input.addEventListener("input", () => {
+        tray.items[Number(input.dataset.giftItem)] = input.value;
+      }),
+    );
+    box
+      .querySelector("[data-gift-add]")
+      ?.addEventListener("click", async () => {
+        if (tray.items.length >= this.giftItemsMax(key)) return;
+        tray.items.push("");
+        await redraw();
+        if (!this.isMobilePhoneLayout())
+          document
+            .querySelector(`[data-gift-item="${tray.items.length - 1}"]`)
+            ?.focus();
+      });
     const submit = () => {
+      // 선물 여러 개 (a group): kept in the title one after another, like a poll's choices.
+      const gifts =
+        tray.type === "gift" && tray.items
+          ? tray.items
+              .map((item) =>
+                String(item)
+                  .trim()
+                  .replace(/\s*\/\s*/g, "·"),
+              )
+              .filter(Boolean)
+          : null;
+      if (gifts) tray.title = gifts.join(" / ").slice(0, 240);
       // 투표: its choices are kept in the title, one after another (a slash inside one would part it).
       if (tray.type === "poll") {
         const choices = (tray.options || [])
@@ -866,9 +995,13 @@ export const cards = {
         return this.notify("보낼 내용을 적어 주십시오.", "info");
       if (tray.type === "appointment" && !detail)
         return this.notify("약속 시간을 적어 주십시오.", "info");
-      // 랜덤으로 나누기 (a group only): the dice are rolled here, once, and kept with the card.
+      // 랜덤으로 나누기 (a group only): the dice are rolled here, once, and kept with the card,
+      // unseen until the members open it (claim).
       const luck = {};
-      if (tray.random && this.isGroupThread(key)) {
+      if (
+        (tray.random || (gifts?.length || 0) > 1) &&
+        this.isGroupThread(key)
+      ) {
         const names = (this.messageGroup(key)?.members || []).map(
           (member) => this.memberContact(member).name,
         );
@@ -879,8 +1012,19 @@ export const cards = {
               "랜덤으로 나누려면 금액을 숫자로, 인원수 이상으로 적어 주십시오.",
               "info",
             );
-        } else if (tray.type === "gift" && names.length)
-          luck.winner = names[Math.floor(Math.random() * names.length)];
+          luck.claim = true;
+        } else if (tray.type === "gift" && names.length) {
+          const drawn = [...names];
+          for (let at = drawn.length - 1; at > 0; at -= 1) {
+            const other = Math.floor(Math.random() * (at + 1));
+            [drawn[at], drawn[other]] = [drawn[other], drawn[at]];
+          }
+          luck.prizes = (gifts?.length ? gifts : [title])
+            .slice(0, names.length)
+            .map((item, index) => ({ name: drawn[index], item }));
+          luck.among = names;
+          luck.claim = true;
+        }
       }
       this.cardTray = null;
       send({

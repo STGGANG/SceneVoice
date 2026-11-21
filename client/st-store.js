@@ -22,6 +22,23 @@ import { slimPart, fullPart } from "../shared/records-codec.js";
 // most this often: a write right after another would only copy nearly the same file again.
 const BACKUP_EVERY = 10 * 60 * 1000;
 const PART_FORMAT = "scenevoice-part-v1";
+// The media part once its voice records are kept in segments (see writeMedia). A page still
+// running an older version refuses this format instead of writing over it.
+const SPLIT_FORMAT = "scenevoice-part-v2";
+const SEGMENT_FORMAT = "scenevoice-segment-v1";
+// Voice records per segment file: a new voice rewrites one segment and the small index, however
+// many voices there are.
+const SEGMENT_ROWS = 100;
+const segmentFile = (id) => `scenevoice_media_${id}.json`;
+const segmentBackup = (id) => `scenevoice_media_${id}_previous.json`;
+// The whole media file as it was before it was first split, kept once.
+const BEFORE_SPLIT = "scenevoice_media_before_split.json";
+const sortedKeys = (object) =>
+  Object.fromEntries(
+    Object.entries(object || {}).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    ),
+  );
 /**
  * The records, split by how often and how much each part changes, so a write sends only the
  * parts it changed: settings, the analysis cache, people's states, calls and texts, and voices.
@@ -54,6 +71,11 @@ export class STFileStore {
   parts = {};
   // Per part: when its backup was last written by this page.
   backedUp = {};
+  // The media part's segments, in order: { id, revision, generations, audioFiles, missing }.
+  // null while the media file is still whole (an older version's) or doesn't exist yet.
+  segments = null;
+  // The media index file's own data as last read or written (for its backup).
+  mediaMain = null;
   constructor(name, network) {
     this.local = new BrowserStore(name);
     this.network = network;
@@ -104,6 +126,12 @@ export class STFileStore {
       );
     const file = await response.json().catch(() => null);
     if (generation !== this.generation) return this.parts[name];
+    if (name === "media" && file?.format === SPLIT_FORMAT)
+      return this.loadSplitMedia(
+        file,
+        response.headers.get("ETag") || "",
+        generation,
+      );
     if (
       file?.format !== PART_FORMAT ||
       file.part !== name ||
@@ -112,10 +140,102 @@ export class STFileStore {
       typeof file.data !== "object"
     )
       throw brokenFile();
+    if (name === "media") {
+      this.segments = null;
+      this.mediaMain = null;
+    }
     return (this.parts[name] = {
       etag: response.headers.get("ETag") || "",
       revision: file.revision,
       value: fullPart(name, file.data),
+    });
+  }
+  /**
+   * The media part kept split: its index file lists the segments; a segment is read again only
+   * when the index names another revision of it than the one kept.
+   */
+  async loadSplitMedia(file, etag, generation) {
+    const listed = file.data?.segments;
+    if (
+      file.part !== "media" ||
+      typeof file.revision !== "string" ||
+      !Array.isArray(listed) ||
+      listed.some(
+        (segment) =>
+          !/^[a-f0-9]{8}$/.test(segment?.id) ||
+          typeof segment.revision !== "string",
+      )
+    )
+      throw brokenFile();
+    const kept = new Map(
+      (this.segments || []).map((segment) => [segment.id, segment]),
+    );
+    const segments = await Promise.all(
+      listed.map(async ({ id, revision }) => {
+        const known = kept.get(id);
+        if (known && known.revision === revision && !known.missing)
+          return known;
+        const response = await this.network(
+          `/user/files/${segmentFile(id)}?v=${Date.now()}`,
+          { cache: "no-store" },
+        );
+        // A segment whose file is gone: its records can't be shown, but it stays listed (and
+        // is never written over), so they are back if the file is.
+        if (response.status === 404) {
+          console.warn(`[SceneVoice] 음성 기록 묶음 파일이 없습니다: ${id}`);
+          return {
+            id,
+            revision,
+            generations: [],
+            audioFiles: {},
+            missing: true,
+          };
+        }
+        if (!response.ok)
+          throw new UserError(
+            `실리태번 목록 읽기 실패 (${response.status}). 기존 목록은 유지됩니다.`,
+          );
+        const segment = await response.json().catch(() => null);
+        if (
+          segment?.format !== SEGMENT_FORMAT ||
+          segment.id !== id ||
+          !Array.isArray(segment.data?.generations)
+        )
+          throw brokenFile();
+        return {
+          id,
+          revision,
+          generations: fullPart("media", {
+            generations: segment.data.generations,
+          }).generations,
+          audioFiles:
+            segment.data.audioFiles &&
+            typeof segment.data.audioFiles === "object"
+              ? segment.data.audioFiles
+              : {},
+        };
+      }),
+    );
+    if (generation !== this.generation) return this.parts.media;
+    const { segments: _index, ...rest } = file.data;
+    const main = fullPart("media", rest);
+    this.segments = segments;
+    this.mediaMain = file.data;
+    return (this.parts.media = {
+      etag,
+      revision: file.revision,
+      value: {
+        ...main,
+        generations: [
+          ...(Array.isArray(main.generations) ? main.generations : []),
+          ...segments.flatMap((segment) => segment.generations),
+        ],
+        audioFiles: Object.assign(
+          {},
+          main.audioFiles,
+          ...segments.map((segment) => segment.audioFiles),
+        ),
+      },
     });
   }
   /** The parts put together as one records object (what the service works with). */
@@ -155,6 +275,202 @@ export class STFileStore {
     this.generation++;
     this.parts[name] = { etag: "", revision, value: pick(data, name) };
     return revision;
+  }
+  /**
+   * Writes the media part split: voice records in segment files of up to SEGMENT_ROWS, each with
+   * the audio entries of its records, and a small index file (favourites, line edits, the other
+   * audio entries, the list of segments). Only the segments that changed are written. A record
+   * stays in its segment for good; new ones fill the last. Order is kept as the array has it.
+   * `before`/`revision`: the records and the media revision this write started from.
+   */
+  async writeMedia(data, before, revision) {
+    const media = pick(data, "media");
+    const rows = Array.isArray(media.generations) ? media.generations : [];
+    const old = this.segments || [];
+    const oldById = new Map(old.map((segment) => [segment.id, segment]));
+    const home = new Map();
+    for (const segment of old)
+      for (const row of segment.generations) home.set(row.id, segment.id);
+    let plan = [];
+    const planned = new Map();
+    let grouped = true;
+    for (const row of rows) {
+      const last = plan.at(-1);
+      let id = home.get(row.id);
+      if (id === undefined) {
+        if (last && last.generations.length < SEGMENT_ROWS) id = last.id;
+        else {
+          id = newId().slice(0, 8);
+          while (oldById.has(id) || planned.has(id)) id = newId().slice(0, 8);
+        }
+      }
+      if (last?.id === id) last.generations.push(row);
+      else if (planned.has(id)) {
+        // A segment's records no longer sit together (the list was put in another order).
+        grouped = false;
+        break;
+      } else {
+        const segment = { id, generations: [row], audioFiles: {} };
+        planned.set(id, segment);
+        plan.push(segment);
+      }
+    }
+    if (!grouped) {
+      plan = [];
+      for (let at = 0; at < rows.length; at += SEGMENT_ROWS) {
+        let id = newId().slice(0, 8);
+        while (oldById.has(id) || plan.some((segment) => segment.id === id))
+          id = newId().slice(0, 8);
+        plan.push({
+          id,
+          generations: rows.slice(at, at + SEGMENT_ROWS),
+          audioFiles: {},
+        });
+      }
+    }
+    // An audio entry rides with the first record that plays it; the rest stay in the index.
+    const audioHome = new Map();
+    for (const segment of plan)
+      for (const row of segment.generations)
+        if (row?.audio_filename && !audioHome.has(row.audio_filename))
+          audioHome.set(row.audio_filename, segment);
+    const mainAudio = {};
+    for (const [name, entry] of Object.entries(media.audioFiles || {})) {
+      const segment = audioHome.get(name);
+      if (segment) segment.audioFiles[name] = entry;
+      else mainAudio[name] = entry;
+    }
+    for (const segment of plan) {
+      segment.audioFiles = sortedKeys(segment.audioFiles);
+      const was = oldById.get(segment.id);
+      segment.revision = was?.revision;
+      segment.changed =
+        !was ||
+        was.missing ||
+        JSON.stringify([was.generations, sortedKeys(was.audioFiles)]) !==
+          JSON.stringify([segment.generations, segment.audioFiles]);
+    }
+    const slimRows = (list) =>
+      slimPart("media", { generations: list }).generations;
+    const wasSplit = this.segments !== null;
+    if (!wasSplit && revision)
+      // First split of a media file kept whole: that file as it was, kept once.
+      await this.upload(
+        BEFORE_SPLIT,
+        encode({
+          format: PART_FORMAT,
+          part: "media",
+          revision,
+          data: slimPart("media", pick(before, "media")),
+        }),
+      );
+    else if (
+      wasSplit &&
+      revision &&
+      this.mediaMain &&
+      !(Date.now() - (this.backedUp.media || 0) < BACKUP_EVERY)
+    ) {
+      await this.upload(
+        backupFile("media"),
+        encode({
+          format: SPLIT_FORMAT,
+          part: "media",
+          revision,
+          data: this.mediaMain,
+        }),
+      );
+      this.backedUp.media = Date.now();
+    }
+    for (const segment of plan) {
+      if (!segment.changed) continue;
+      const was = oldById.get(segment.id);
+      const mark = `media:${segment.id}`;
+      if (
+        was &&
+        !was.missing &&
+        !(Date.now() - (this.backedUp[mark] || 0) < BACKUP_EVERY)
+      ) {
+        await this.upload(
+          segmentBackup(segment.id),
+          encode({
+            format: SEGMENT_FORMAT,
+            id: segment.id,
+            revision: was.revision,
+            data: {
+              generations: slimRows(was.generations),
+              audioFiles: was.audioFiles,
+            },
+          }),
+        );
+        this.backedUp[mark] = Date.now();
+      }
+      segment.revision = newId();
+      await this.upload(
+        segmentFile(segment.id),
+        encode({
+          format: SEGMENT_FORMAT,
+          id: segment.id,
+          revision: segment.revision,
+          data: {
+            generations: slimRows(segment.generations),
+            audioFiles: segment.audioFiles,
+          },
+        }),
+      );
+    }
+    // Segments whose files are gone stay listed, untouched, each before the segment that
+    // followed it.
+    const stripped = plan.map(
+      ({ id, revision: own, generations, audioFiles }) => ({
+        id,
+        revision: own,
+        generations,
+        audioFiles,
+      }),
+    );
+    const next = [];
+    const waiting = [];
+    for (const segment of old) {
+      if (segment.missing && !planned.has(segment.id)) waiting.push(segment);
+      else if (waiting.length) {
+        const at = stripped.findIndex((kept) => kept.id === segment.id);
+        if (at >= 0) stripped.splice(at, 0, ...waiting.splice(0));
+      }
+    }
+    next.push(...stripped, ...waiting);
+    const mainRevision = newId();
+    const main = {
+      ...slimPart("media", {
+        ...media,
+        generations: [],
+        audioFiles: mainAudio,
+      }),
+      segments: next.map(({ id, revision: own }) => ({ id, revision: own })),
+    };
+    await this.upload(
+      partFile("media"),
+      encode({
+        format: SPLIT_FORMAT,
+        part: "media",
+        revision: mainRevision,
+        data: main,
+      }),
+    );
+    this.generation++;
+    this.segments = next;
+    this.mediaMain = main;
+    this.parts.media = { etag: "", revision: mainRevision, value: media };
+    // Segments no longer listed: their files go (their backups stay). Best effort.
+    const listed = new Set(next.map((segment) => segment.id));
+    for (const segment of old)
+      if (!listed.has(segment.id))
+        await this.network("/api/files/delete", {
+          method: "POST",
+          body: JSON.stringify({
+            path: `user/files/${segmentFile(segment.id)}`,
+          }),
+        }).catch(() => {});
+    return mainRevision;
   }
   /** The shared records. `clone: false` updates the kept copy without handing one out. */
   async loadShared({ fresh = false, clone = true } = {}) {
@@ -228,6 +544,10 @@ export class STFileStore {
       // simultaneous cross-device writes are not a serializable transaction (documented limitation).
       const written = {};
       for (const name of changed) {
+        if (name === "media") {
+          written[name] = await this.writeMedia(data, before, revisions[name]);
+          continue;
+        }
         if (
           revisions[name] &&
           !(Date.now() - (this.backedUp[name] || 0) < BACKUP_EVERY)

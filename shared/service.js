@@ -133,7 +133,7 @@ const cardOf = (value, role) => {
   if (
     value?.type === "reply" &&
     CARD_ANSWERED.includes(value.about) &&
-    ["accept", "decline"].includes(value.answer)
+    ["accept", "decline", "miss"].includes(value.answer)
   )
     return {
       type: "reply",
@@ -176,6 +176,26 @@ const cardOf = (value, role) => {
   }
   if (role === "user" && card.type === "gift" && text(value.winner, 120))
     card.winner = text(value.winner, 120);
+  // Mine in a group, drawn at random and opened by the members one by one (claim): who would
+  // find what (a gift's prizes; money's shares above), and whom it is shared among.
+  if (role === "user" && card.type === "gift" && Array.isArray(value.prizes)) {
+    const prizes = value.prizes
+      .slice(0, 12)
+      .map((prize) => ({
+        name: text(prize?.name, 120),
+        item: text(prize?.item, 240),
+      }))
+      .filter((prize) => prize.name && prize.item);
+    const among = (Array.isArray(value.among) ? value.among : [])
+      .slice(0, 12)
+      .map((name) => text(name, 120))
+      .filter(Boolean);
+    if (prizes.length && among.length > 1) {
+      card.prizes = prizes;
+      card.among = among;
+    }
+  }
+  if (value.claim === true && (card.shares || card.prizes)) card.claim = true;
   return card.title || card.image ? card : null;
 };
 // 인용 답장: the earlier message this one answers (a copy of its first words, so it still

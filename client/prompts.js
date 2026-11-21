@@ -664,6 +664,9 @@ const REPLY_FIELD =
 // accepted or declined in this reply.
 const CARD_ANSWER_RULE = (who) =>
   `- A text of the user's character marked card_open: true carries an appointment, money or a gift that nobody has answered yet. ${who} may accept or decline it in this reply, deciding as themselves (declining is fine when that is like them or the situation calls for it), and the text says so in their own words.`;
+// 랜덤 카드 (a group): shared out at random and opened by the members one by one.
+const CARD_DRAW_RULE =
+  "- A card that also carries card_draw is shared out at random among the members. card_draw lists what each member who hasn't opened it yet would find: an amount, an item, or nothing. Any of them may open it in this round, each in their own message with card_answer accept (several may in one round, and nobody has to); a member who doesn't want it may decline. A member learns their own result only by opening it, and someone else's only once that member has opened it, so nobody speaks of a result still unopened. The message of a member who opens it reacts, as themselves, to what they found.";
 const CARD_ANSWER_FIELD =
   '- card_answer: an extra field, added only when this reply accepts or declines such an open card: {"n": the n of that message in <text_thread>, "answer": "accept" or "decline"}.';
 // 사진 첨부: what the pictures shown with this request hold, noted once for later.
@@ -1037,6 +1040,7 @@ export function groupTextSystem({
         "- type is usually text. A member may send a voice message instead only when they would naturally do so: a long or emotional message, hands busy, or someone asked to hear them. Then text is what they say aloud, with audio tags as in <delivery_rules>.",
       cardTask(cards, "A member"),
       openCard && CARD_ANSWER_RULE("The member it was meant for"),
+      openCard && CARD_DRAW_RULE,
       "- Never write, act or decide for the user's character, and never mention this task, the state sheet or any analysis.",
     ]),
     // Every message carries audio tags: hidden on screen, used when it is heard.

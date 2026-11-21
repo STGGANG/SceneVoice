@@ -1096,12 +1096,18 @@ export const panel = {
       saved: ["fa-check", "저장됨"],
       error: ["fa-triangle-exclamation", `저장 실패 · ${message}`],
     }[state] || ["fa-check", ""];
+    clearTimeout(this.saveStateTimer);
+    // Asked for on every key: nothing on screen is touched when it already shows this.
+    if (
+      badge.dataset.state === state &&
+      badge.querySelector("span").textContent === view[1]
+    )
+      return;
     badge.dataset.state = state;
     badge.querySelector("i").className = `fa-solid ${view[0]}`;
     badge.querySelector("span").textContent = view[1];
     badge.title =
       state === "error" ? `${message} 값을 고치면 다시 저장합니다.` : "";
-    clearTimeout(this.saveStateTimer);
     if (state === "saved")
       this.saveStateTimer = setTimeout(() => this.setSaveState("idle"), 2500);
   },

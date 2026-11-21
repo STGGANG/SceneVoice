@@ -9,7 +9,7 @@ import {
   phoneMessages,
 } from "./prompts.js";
 import { escapeHtml, normalizeTags, stOf, CHAT_MEMORY_KEY } from "./common.js";
-import { cardCanBeAnswered, REACTIONS } from "./cards.js";
+import { cardCanBeAnswered, claimOutcome, REACTIONS } from "./cards.js";
 import { validReaction } from "../shared/store.js";
 
 // How often a reply is offered the chance to text someone else about it (다른 인물에게 전하기).
@@ -433,6 +433,7 @@ export const messages = {
       `${item.anchor_message_id}|${item.anchor_swipe ?? ""}|${item.anchor_tag || ""}`;
     const shown = body.querySelector(".sv-msg-away");
     const keepScroll = shown?.dataset.thread === key ? body.scrollTop : null;
+    const awayClaims = this.cardClaims(thread);
     // 한 번에 듣기: the messages here that have a voice, in order (none is made for it).
     const voiced = thread.filter((item) => item.audio_url).length;
     const aloud = this.threadPlayback?.key === `away:${key}`;
@@ -461,6 +462,7 @@ export const messages = {
                 item,
                 {
                   frozen: true,
+                  claims: awayClaims.get(item.id),
                   head,
                   sender:
                     contact.group && item.role !== "user"
@@ -580,6 +582,8 @@ export const messages = {
       read = false,
       canQuote = false,
       answered = "",
+      // A random card of mine in a group: who opened it so far (cards.js: cardClaims).
+      claims = null,
     } = {},
   ) {
     // Buttons carry the message's id; the record itself is kept for this drawing (messageRecord).
@@ -732,7 +736,7 @@ export const messages = {
     )
       .split("\n")
       .filter((line) => line.trim());
-    const attached = `${this.quoteHtml?.(item) || ""}${this.cardHtml?.(item, { answered, canAnswer: canQuote && !frozen }) || ""}`;
+    const attached = `${this.quoteHtml?.(item) || ""}${this.cardHtml?.(item, { answered, claims, canAnswer: canQuote && !frozen }) || ""}`;
     const bubbles =
       attached +
       lines
@@ -788,6 +792,7 @@ export const messages = {
     const aloud = this.threadPlayback?.key === key;
     // Cards answered (mine by them in a reply, theirs by me with a button): message id → the answer.
     const answers = this.cardAnswers(thread);
+    const claims = this.cardClaims(thread);
     const observing = Boolean(this.messageGroup(key)?.without_user);
     const replying = this.replyTarget?.key === key ? this.replyTarget : null;
     // The latest round's versions (답변 재생성 in a group): which one is shown, of how many.
@@ -826,17 +831,9 @@ export const messages = {
                 }</small>`
               : ""
           }</span></div>
-          ${(() => {
-            const reach = this.roomReach(key);
-            const title = reach
-              ? `이 방은 ${reach === "all" ? "본 채팅·스마트폰" : "본 채팅"} 기억에서 뺐습니다 · 누르면 다시 넣습니다`
-              : "이 방 기억에서 빼기";
-            return `<button type="button" class="sv-msg-aloud sv-msg-memory${reach ? ` sv-memory-off sv-reach-${reach}` : ""}" data-thread-memory aria-pressed="${Boolean(reach)}" aria-label="${title}" title="${title}"><i class="fa-solid fa-brain" aria-hidden="true"></i></button>`;
-          })()}
-          <button type="button" class="sv-msg-aloud sv-msg-download" data-thread-download aria-label="내려받기" title="내려받기: 이 대화에서 목소리를 만든 문자를 이어진 파일 하나로(WAV)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
           <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 문자 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? (this.threadPlayback.making ? "fa-spinner fa-spin" : "fa-stop") : "fa-headphones"}" aria-hidden="true"></i></button>
           ${contact.group && !this.messageGroup(key)?.without_user && contact.members.length > 1 ? '<button type="button" class="sv-msg-aloud" data-group-call-room aria-label="단체 통화" title="단체 통화: 이 방 사람들에게 한꺼번에 전화합니다"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
-          ${contact.group ? '<button type="button" class="sv-msg-group-edit" data-group-edit aria-label="단체방 설정" title="방 이름·참여자 바꾸기, 나가기"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>' : ""}
+          <button type="button" class="sv-msg-group-edit" data-thread-more aria-haspopup="menu" aria-label="더 보기" title="더 보기: 내려받기 · 기억에서 빼기${contact.group ? " · 단체방 설정" : ""}"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
         </header>
         <div class="sv-msg-list" role="log" aria-live="polite">
           ${
@@ -870,6 +867,7 @@ export const messages = {
                           : !item.unread,
                       canQuote: !observing,
                       answered: answers.get(item.id) || "",
+                      claims: claims.get(item.id),
                       sender:
                         contact.group && item.role !== "user"
                           ? this.memberContact({
@@ -1049,9 +1047,6 @@ export const messages = {
       .querySelector("[data-group-stop]")
       ?.addEventListener("click", () => this.stopTextReply(key));
     body
-      .querySelector("[data-group-edit]")
-      ?.addEventListener("click", () => this.openGroupEditor(key));
-    body
       .querySelector("[data-group-call-room]")
       ?.addEventListener("click", () =>
         this.run(() =>
@@ -1067,6 +1062,7 @@ export const messages = {
       );
     body.querySelector("[data-thread-back]").addEventListener("click", () => {
       this.messageThreadKey = "";
+      this.videoPick = null;
       this.renderSmartphone();
     });
     const record = (button) => this.messageRecord(button);
@@ -1078,26 +1074,81 @@ export const messages = {
       ?.addEventListener("click", () =>
         this.run(() => this.playThreadAloud(key)),
       );
+    // ⋯: what is used now and then (the header keeps 듣기 and the group call in sight).
     body
-      .querySelector("[data-thread-memory]")
-      ?.addEventListener("click", (event) => {
+      .querySelector("[data-thread-more]")
+      .addEventListener("click", (event) => {
         const button = event.currentTarget;
         this.run(async () => {
-          if (this.roomReach(key)) await this.setRoomReach(key, "");
-          else {
-            const reach = await this.pickMemoryReach(button);
-            if (!reach) return;
-            await this.setRoomReach(key, reach);
-          }
+          const reach = this.roomReach(key);
+          const picked = await this.pickFromMenu(button, [
+            {
+              id: "download",
+              icon: "fa-download",
+              label: "음성 내려받기",
+            },
+            ...(this.canMakeCallVideo?.()
+              ? [
+                  {
+                    id: "video-last",
+                    icon: "fa-film",
+                    label: "영상 저장 · 마지막 대화",
+                  },
+                  {
+                    id: "video-pick",
+                    icon: "fa-film",
+                    label: "영상 저장 · 구간 고르기",
+                  },
+                  {
+                    id: "video-all",
+                    icon: "fa-film",
+                    label: "영상 저장 · 전체 대화 (많으면 길어짐)",
+                  },
+                ]
+              : []),
+            ...(reach
+              ? [
+                  {
+                    id: "back",
+                    icon: `fa-brain sv-reach-${reach}`,
+                    label: "이 방 기억에 다시 넣기",
+                  },
+                ]
+              : this.chatMemoryOn?.()
+                ? this.reachMenuItems()
+                : [
+                    {
+                      id: "all",
+                      icon: "fa-brain",
+                      label: "스마트폰 기억에서 빼기",
+                    },
+                  ]),
+            ...(contact.group
+              ? [
+                  {
+                    id: "group",
+                    icon: "fa-user-group",
+                    label: "단체방 설정",
+                  },
+                ]
+              : []),
+          ]);
+          if (picked === "group") return this.openGroupEditor(key);
+          if (picked === "video-pick") return this.startVideoPick(key);
+          if (picked === "video-last" || picked === "video-all")
+            return this.downloadThreadVideo(
+              key,
+              picked === "video-all" ? "all" : "last",
+            );
+          if (picked === "download")
+            return this.withBusyButton(button, () =>
+              this.downloadThreadAudio(key),
+            );
+          if (!picked) return;
+          await this.setRoomReach(key, picked === "back" ? "" : picked);
           await this.renderSmartphone();
         });
       });
-    const save = body.querySelector("[data-thread-download]");
-    save?.addEventListener("click", () =>
-      this.run(() =>
-        this.withBusyButton(save, () => this.downloadThreadAudio(key)),
-      ),
-    );
     body.querySelectorAll(".sv-msg-play").forEach((button) =>
       button.addEventListener("click", () => {
         const item = record(button);
@@ -1133,6 +1184,9 @@ export const messages = {
       ),
     );
     this.bindMessageMore(body);
+    // 구간 고르기 goes on over a room drawn again (a message arriving meanwhile).
+    if (this.videoPick?.key === key) this.showVideoPick(body);
+    else this.videoPick = null;
     body
       .querySelectorAll(".sv-msg-round")
       .forEach((button) =>
@@ -2111,6 +2165,22 @@ export const messages = {
     // n: what a reply's reply_to points at. read: whether I opened their text (one to one).
     // card_open: a card of mine nobody answered yet (their reply may accept or decline it).
     const answers = this.cardAnswers?.(thread) || new Map();
+    const claims = this.cardClaims?.(thread) || new Map();
+    // A claim card still open: what each member who hasn't opened it would find (card_draw).
+    const draw = (item) => {
+      const left = item.card?.claim ? this.claimLeft(item, claims) : [];
+      return left.length
+        ? {
+            card_open: true,
+            card_draw: Object.fromEntries(
+              left.map((member) => [
+                member,
+                claimOutcome(item.card, member) || "nothing",
+              ]),
+            ),
+          }
+        : {};
+    };
     return thread.map((item, index) => ({
       n: index + 1,
       from:
@@ -2129,11 +2199,13 @@ export const messages = {
             })),
           }
         : {}),
-      ...(item.role === "user" &&
-      cardCanBeAnswered(item.card) &&
-      !answers.has(item.id)
-        ? { card_open: true }
-        : {}),
+      ...(item.role !== "user" || !cardCanBeAnswered(item.card)
+        ? {}
+        : item.card.claim
+          ? draw(item)
+          : answers.has(item.id)
+            ? {}
+            : { card_open: true }),
       ...(item.role !== "user" && !item.thread_key
         ? { read: !item.unread }
         : {}),
@@ -2193,7 +2265,7 @@ export const messages = {
     // message of the thread it was written from.
     const card =
       kind === "text"
-        ? (thread && this.cardAnswerFromReply?.(parsed, thread)) ||
+        ? (thread && this.cardAnswerFromReply?.(parsed, thread, character)) ||
           this.cardFromReply?.(parsed)
         : null;
     const quote = thread ? this.quoteFromReply?.(parsed, thread) : null;

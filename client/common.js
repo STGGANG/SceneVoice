@@ -119,5 +119,14 @@ export {
  * 실리태번's context as this app sees it: the open chat's, or (the phone visiting another bot
  * card, client/visit.js) that card's chat. Everything that reads the chat goes through here.
  */
+/**
+ * Text put on screen only when it differs. Any change to the page, however small, can make the
+ * browser work out the styles of the whole chat again (실리태번's and themes' :has() rules reach
+ * from the top of the page), which is felt as lag on every key while typing.
+ */
+export const setText = (node, text) => {
+  if (node && node.textContent !== text) node.textContent = text;
+};
+
 export const stOf = (app) =>
   app?.scopeContext ?? globalThis.window?.SillyTavern?.getContext?.();
