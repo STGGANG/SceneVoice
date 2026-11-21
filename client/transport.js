@@ -26,6 +26,16 @@ function voiceKind(voice) {
   return voice.category ? "library" : "";
 }
 
+/** MP3 (ID3 tag or frame sync), WAV, Ogg or FLAC, or a body the service itself called audio. */
+export function looksLikeAudio(bytes, type = "") {
+  if (/audio|octet-stream/i.test(type || "")) return true;
+  if (bytes.length < 4) return false;
+  const text = String.fromCharCode(...bytes.slice(0, 4));
+  if (["ID3", "RIFF", "OggS", "fLaC"].some((magic) => text.startsWith(magic)))
+    return true;
+  return bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+}
+
 export class Transport {
   mode = "st";
   constructor(getHeaders) {
@@ -195,13 +205,11 @@ export class Transport {
             502,
           );
         }
-        if (
-          !/audio|octet-stream/i.test(
-            response.headers.get("Content-Type") || "",
-          )
-        )
+        // 실리태번's CORS proxy passes the body on without its Content-Type, so the bytes decide.
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (!looksLikeAudio(bytes, response.headers.get("Content-Type")))
           throw new UserError("서비스가 오디오를 반환하지 않았습니다.", 502);
-        return new Uint8Array(await response.arrayBuffer());
+        return bytes;
       },
       // Free calls only: key → voice list (ElevenLabs) or API credit (Fish), then the default voice.
       checkEngine: async (engine, settings, signal) => {
