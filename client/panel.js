@@ -589,7 +589,7 @@ export const panel = {
       badge: badgeHtml("sv-outreach-enabled"),
       tip: [
         "인물이 먼저 걸어 오는 전화, 먼저 보내는 문자, 혼자 남기는 음성 메모, 인물끼리의 통화를 여기서 켜고 끕니다.",
-        "누가 얼마나 자주 연락하는지는 ‘캐릭터’ 탭에서 인물마다 ‘선연락 빈도’로 정합니다. ‘상태 분석에서 제외’한 인물은 연락하지 않습니다.",
+        "누가 얼마나 자주 연락하는지는 ‘캐릭터’ 탭에서 인물마다 ‘선연락 빈도’로 정합니다. ‘선연락에서 제외’한 인물은 연락하지 않습니다.",
         "봇카드마다 ‘캐릭터’ 탭 봇카드 공통 설정 → 스마트폰의 ‘선연락 받기’를 켠 곳에서만 옵니다(기본은 꺼짐).",
         "걸려 온 전화는 받기 전에는 대사나 음성을 만들지 않고, 1분 동안 받지 않으면 부재중이 됩니다.",
       ].join("\n"),
@@ -626,13 +626,6 @@ export const panel = {
             value: ["random", "time"].includes(config.outreach?.mode)
               ? config.outreach.mode
               : "state",
-            tip: [
-              "인물별 상태 추적: 인물들의 상태를 주기마다 갱신하면서 ‘지금 연락할 만한 사람’을 함께 고르고(추가 요청 없음), 인물별 빈도로 실제 연락할지 정합니다. 함께 있는 인물은 고르지 않고, 자는 인물은 연락하지 않습니다.",
-              "랜덤: 실리태번 채팅에 AI 답변이 올 때마다 인물별로 주사위를 굴립니다. 누가 연락할지는 AI가 고르지 않고 주사위가 정하며, 걸리기 전에는 요청이 나가지 않습니다.",
-              "시간: 실리태번 채팅과 상관없이, 실제 시간이 정한 만큼 지나면 누군가 연락합니다. 누가 할지는 인물별 ‘선연락 빈도’가 높을수록 잘 뽑히고, 실리태번 창(탭)이 열려 있는 동안에만 동작합니다.",
-              "어느 방식이든 나에게는 한 번에 두 명까지 연락하고, 그중 전화는 한 명입니다.",
-              "봇카드마다 다른 방식을 쓰려면 ‘캐릭터’ 탭 봇카드 공통 설정 → 스마트폰의 ‘연락 방식’에서 고릅니다. 방식별 세부 설정은 여기서 그 방식을 눌러 바꾸고, 방식을 바꿔도 값은 남습니다.",
-            ].join("\n"),
             choices: [
               [
                 "state",
@@ -719,7 +712,7 @@ export const panel = {
         </div>
         <div class="sv-sub-block sv-auto-text-only">
         <div class="sv-row">
-          ${switchHtml({ id: "sv-text-me", extra: cost("문자마다 요청 1회"), label: "나에게 문자", hint: "인물이 나에게 먼저 문자나 음성 메시지를 보내고, 내가 있는 단체방에서 먼저 말을 꺼냅니다.", tip: "단체방에서 먼저 말을 꺼내는 것은 방 설정의 ‘주기마다 알아서 대화’를 켠 방에서만 합니다.\n이 스위치를 끄면 그 방들도 멈추고, 다시 켜면 방마다 정해 둔 대로 돌아옵니다.", checked: config.voice_message?.text_me !== false })}
+          ${switchHtml({ id: "sv-text-me", extra: cost("메시지마다 요청 1회"), label: "나에게 문자", hint: "인물이 나에게 먼저 문자나 음성 메시지를 보내고, 내가 있는 단체방에서 먼저 말을 꺼냅니다.", tip: "단체방에서 먼저 말을 꺼내는 것은 방 설정의 ‘주기마다 알아서 대화’를 켠 방에서만 합니다.\n이 스위치를 끄면 그 방들도 멈추고, 다시 켜면 방마다 정해 둔 대로 돌아옵니다.", checked: config.voice_message?.text_me !== false })}
           ${switchHtml({ id: "sv-text-overheard", extra: cost("대화마다 요청 1회"), label: "인물끼리 문자 (엿보는 문자)", hint: "나 없는 방에서 인물들이 알아서 대화하고, 문자 목록에서 엿볼 수 있습니다.", tip: "내가 만든 나 없는 방은 방 설정의 ‘주기마다 알아서 대화’를 켜면 주기마다 대화합니다.\n인물들이 스스로 만드는 방은 아래 ‘스스로 대화하기’를 켜면 이야기에 맞을 때만 대화합니다.\n이 스위치를 끄면 그 방들도 멈추고, 다시 켜면 방마다 정해 둔 대로 돌아옵니다.\n꺼 두어도 방 안의 ‘대화 이어 보기’ 버튼으로 직접 이어 볼 수 있습니다.\n내 캐릭터는 이 대화를 모릅니다.", checked: config.voice_message?.overheard_texts === true })}
         </div>
         <div class="sv-row sv-overheard-text-only">
@@ -752,11 +745,8 @@ export const panel = {
       badge: `<span class="sv-badge" id="sv-prompt-badge"></span>`,
       tip: [
         "전화·문자·단체 통화·단체 문자에서 말투·길이·대화 흐름·인물 묘사를 정하는 지시문입니다. 적은 그대로 보냅니다.",
-        "‘-’나 ‘##’를 자동으로 붙이지 않으니 필요한 줄에 직접 적으십시오(빈 줄만 지워집니다).",
         "페르소나 인물은 ‘User’가 아니라 ‘User's character’라고 쓰는 걸 권장합니다(다른 프롬프트와 통일).",
         "역할, 자료 읽는 법, 출력 형식은 고정이라 여기서 바꿔도 답의 형식은 유지됩니다.",
-        "한국어로 써도 되지만 영어가 더 잘 지켜집니다.",
-        "음성 메시지, 음성 메모, 라디오는 기본 지시문을 그대로 씁니다.",
       ].join("\n"),
       body: `<div class="sv-seg sv-prompt-pick" role="radiogroup" aria-label="고칠 지시문">
           ${PROMPT_KINDS.map(([field, label], index) => `<label><input type="radio" name="sv-prompt-pick" value="${field}" ${index ? "" : "checked"}><span>${label}</span></label>`).join("")}
@@ -789,7 +779,6 @@ export const panel = {
         "여기 적은 글을 보조모델에게 보내는 모든 요청(대사 분석, 상태 추적, 전화, 문자, 음성 메모, 라디오 등)의 맨 끝에 사용자 지시로 그대로 덧붙입니다.",
         "비워 두면 아무것도 붙지 않습니다.",
         "답의 형식(JSON)을 바꾸라는 내용은 적지 마십시오. 답을 읽지 못해 기능이 멈춥니다.",
-        "한국어로 써도 되지만 영어가 더 잘 지켜집니다.",
       ].join("\n"),
       body: `<div class="sv-field sv-extra-edit">
           <textarea id="sv-extra-instructions" rows="5" maxlength="6000" spellcheck="false" aria-label="추가 지침">${escapeHtml(config.llm?.extra_instructions || "")}</textarea>
