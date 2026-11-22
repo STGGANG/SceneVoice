@@ -8,6 +8,7 @@ import {
   validModel,
   elevenModelTraits,
 } from "./settings.js";
+import { looseWords } from "./loose.js";
 const CUES = {
   default: "",
   calm: "calm",
@@ -113,8 +114,11 @@ export const stripTags = (value) =>
       },
     ),
   );
-const sameWords = (a, b) => a.replace(/\s+/g, "") === b.replace(/\s+/g, "");
-/** Whether a tagged line still has exactly the words of the line (spacing aside). */
+const sameWords = (a, b) => looseWords(a) === looseWords(b);
+/**
+ * Whether a tagged line still has the words of the line (spacing aside, and marks that mean
+ * the same written another way: see looseWords).
+ */
 export const keepsLine = (script, line) =>
   sameWords(stripTags(script), String(line ?? ""));
 const scriptTags = (script) =>
@@ -122,8 +126,8 @@ const scriptTags = (script) =>
 
 /**
  * A line with audio tags woven in, e.g. "[clears throat] so, you... [chuckles] just kidding."
- * Kept only when removing the tags gives back exactly the line (spacing aside); a script that
- * changed any word, punctuation or ellipsis is dropped and the line falls back to leading tags.
+ * Kept only when removing the tags gives back the line (see keepsLine); a script that changed
+ * a word or what a mark means is dropped and the line falls back to leading tags.
  * Without `line` (a saved manual edit) only the tags are cleaned; it is checked when spoken.
  */
 export function cleanScript(script, line) {

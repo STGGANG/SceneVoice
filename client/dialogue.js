@@ -814,8 +814,9 @@ export const dialogue = {
   },
 
   /**
-   * A pressed line button (다시 생성, 다시 분석) spins and stays disabled until its work is done,
-   * so a press never looks ignored. The play button keeps its own state.
+   * A pressed button (a line's 다시 생성 and 다시 분석, the phone's small buttons) spins and takes
+   * no second press until its work is done, so a press never looks ignored. The play button
+   * keeps its own state.
    */
   async withBusyButton(control, work) {
     if (control.classList.contains("sv-busy")) return;
@@ -889,7 +890,12 @@ export const dialogue = {
       await button.lineSaving;
       await this.loadLineState();
       const lineKey = this.lineIdentity(button);
-      const edit = this.lineEditOf(button);
+      const edit = await this.keepLineEdit(
+        button,
+        lineKey,
+        this.lineEditOf(button),
+      );
+      this.assertChat(operation);
       button.lineEdit = edit;
       button.dataset.speakerOverride = edit.speaker_key || "";
       const analysis = edit.performance
@@ -979,6 +985,9 @@ export const dialogue = {
         chat_id: this.currentChatId(),
         message_id: button.dataset.messageId || "",
         quote_index: Number(button.dataset.quoteIndex || 0),
+        // Says which message (and swipe) the voice is of once the message's text changes.
+        anchor_tag: this.anchorTag(button.dataset.messageId, { lazy: true }),
+        anchor_swipe: this.messageSwipe(button.dataset.messageId),
         variation_token: regenerate
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}`
           : "",

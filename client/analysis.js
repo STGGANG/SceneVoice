@@ -15,6 +15,7 @@ import {
 } from "./common.js";
 import { normalizeSpeech } from "../shared/providers.js";
 import { SPEECH_LANGUAGES } from "../shared/settings.js";
+import { looseWords } from "../shared/loose.js";
 
 export class AnalysisFailedError extends Error {
   constructor(reason, analysisKey) {
@@ -39,8 +40,44 @@ export const analysis = {
     const kept = this.lineState?.analysed;
     return (
       keys.find((key) => kept?.has(key) || this.analysisCache?.has(key)) ||
+      this.looseAnalysisKey(button, batch, keys[0]) ||
       keys[0]
     );
+  },
+  /**
+   * The key of an analysis kept for this message when its lines are the same but for marks
+   * that mean the same (see looseWords), "" when there is none. Its key must be the one these
+   * lines would have had with its words: then it is of this chat, of lines of these kinds, and
+   * made with the two switches as they are now.
+   */
+  looseAnalysisKey(button, batch, own) {
+    const state = this.lineState;
+    if (!state?.analysedLines?.length) return "";
+    state.looseAnalyses ||= new Map();
+    if (state.looseAnalyses.has(own)) return state.looseAnalyses.get(own);
+    const messageId = button.dataset.messageId || "";
+    const kinds = batch.utterances.map((line) => line.kind || "");
+    const words = batch.utterances
+      .map((line) => looseWords(line.text))
+      .join("\n");
+    const bases = this.chatKeyBases?.() || [this.currentChatId()];
+    let found = "";
+    for (const [key, message, texts] of state.analysedLines) {
+      if (message !== messageId || texts.length !== kinds.length) continue;
+      if (texts.map(looseWords).join("\n") !== words) continue;
+      const value = {
+        messageId,
+        lines: texts.map((text, index) => [kinds[index], text]),
+        tags: Boolean(this.config.analysis_enabled),
+        cast: Boolean(this.config.casting?.auto_enabled),
+      };
+      if (
+        bases.some((chatId) => `ma-${contentKey({ chatId, ...value })}` === key)
+      )
+        found = key;
+    }
+    state.looseAnalyses.set(own, found);
+    return found;
   },
   /** The key under this chat's own id first, then under each id it may have been kept with. */
   messageAnalysisKeys(button, batch) {

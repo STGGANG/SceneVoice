@@ -238,23 +238,6 @@ export const messages = {
     );
   },
 
-  /** A button that is pressed shows it is working, and can't be pressed twice meanwhile. */
-  async withBusyButton(button, work) {
-    if (!button || button.disabled) return work();
-    button.disabled = true;
-    const icon = button.querySelector("i");
-    const before = icon?.className;
-    if (icon) icon.className = "fa-solid fa-spinner fa-spin";
-    try {
-      return await work();
-    } finally {
-      if (button.isConnected) {
-        button.disabled = false;
-        if (icon) icon.className = before;
-      }
-    }
-  },
-
   /**
    * 미적용 기억 → 다시 적용: a conversation's texts go back to the chat message they were made at
    * (the same number, on the swipe showing now) and into the chat memory again. A message that

@@ -5,8 +5,10 @@ import {
   normalizeTags,
   LANGUAGE_CHOICES,
   dotReadings,
+  stOf,
 } from "./common.js";
 import { infoTip, fieldHtml, bindInfoTips } from "./ui.js";
+import { looseWords } from "../shared/loose.js";
 import {
   SOUND_TAGS,
   cleanScript,
@@ -14,6 +16,8 @@ import {
   tagSuggestions,
 } from "../shared/providers.js";
 const bracketed = (tags) => tags.map((tag) => `[${tag}]`).join("");
+const looseName = (message, kind, text) =>
+  `${message}\n${kind === "thought" ? "thought" : "dialogue"}\n${looseWords(text)}`;
 // The chips read in Korean; what goes into the line is the English tag the engines know.
 const TAG_LABELS = {
   calm: "차분하게",
@@ -168,6 +172,7 @@ export const lineEdits = {
       button.identityInput = input;
       button.identityValue = value;
       button.triedFor = null;
+      button.looseFor = null;
       // The words as shown first; then as they read with periods for an ellipsis or the other
       // way round (see dotReadings).
       const readings = [value.text, ...dotReadings(value.text)];
@@ -178,11 +183,146 @@ export const lineEdits = {
     }
     return button.identityKeys;
   },
-  /** The line's edit: its own, else the one it came with. */
+  /**
+   * The line's edit: its own, else the one it came with, else the one it had before the marks
+   * of its words changed (see looseLineOf).
+   */
   lineEditOf(button, state = this.lineState) {
-    for (const key of this.lineKeys(button))
+    const keys = this.lineKeys(button);
+    for (const key of keys)
       if (state?.edits?.[key]) return state.edits[key].value || {};
-    return {};
+    if (keys.some((key) => state?.audio?.[key])) return {};
+    return state?.edits?.[this.looseLineOf(button, state)]?.value || {};
+  },
+  /** Where a line stands: kept with its edit, as a voice's record keeps it. */
+  lineSpot(button) {
+    return {
+      message_id: button.dataset.messageId || "",
+      quote_index: Number(button.dataset.quoteIndex || 0),
+      utterance_kind: button.dataset.kind || "dialogue",
+      text: button.dataset.text || "",
+      anchor_tag:
+        this.anchorTag?.(button.dataset.messageId, { lazy: true }) || "",
+      anchor_swipe: this.messageSwipe?.(button.dataset.messageId) ?? null,
+    };
+  },
+  /** The chat's voices and edits by message, kind and words with their marks made one. */
+  looseLines(state) {
+    if (!state.loose) {
+      state.loose = new Map();
+      const add = (key, place, at) => {
+        if (!place?.text) return;
+        const name = looseName(
+          place.message_id,
+          place.utterance_kind,
+          place.text,
+        );
+        if (!state.loose.has(name)) state.loose.set(name, []);
+        state.loose.get(name).push({ key, place, at: String(at || "") });
+      };
+      for (const [key, audio] of Object.entries(state.audio || {}))
+        add(key, audio, audio.created_at);
+      for (const [key, edit] of Object.entries(state.edits || {}))
+        add(key, edit.place, edit.updated_at);
+    }
+    return state.loose;
+  },
+  /**
+   * The key the line was kept under before the marks of its words changed (… for ..., a curly
+   * quote for a straight one, a full-width mark for a plain one: see looseWords) or before
+   * another part of its message was edited: the newest voice or edit of this very message, for
+   * a line of the same kind with the same words. "" when there is none.
+   * It must be of this message as it is shown: a record carries the mark of its message (see
+   * anchorTag) and the swipe it was made on; another swipe, a message made anew or another
+   * message doesn't have them. One kept before marks were left counts unless its key says where
+   * else it was made.
+   * And it must not be another line's: when the message says the same words twice (two people
+   * may), a record goes to the line nearest to where it was made.
+   */
+  looseLineOf(button, state = this.lineState) {
+    if (!state) return "";
+    const own = this.lineKeys(button);
+    const value = button.identityValue;
+    const tag = this.messageTag?.(value.message) || "";
+    const kept = this.looseLines(state);
+    if (button.looseFor?.kept === kept && button.looseFor.tag === tag)
+      return button.looseFor.key;
+    button.looseFor = { kept, tag, key: "" };
+    const index = Number(value.index) || 0;
+    const far = (item) =>
+      Math.abs((Number(item.place.quote_index) || 0) - index);
+    const name = looseName(value.message, value.kind, value.text);
+    const here = (kept.get(name) || [])
+      .filter((item) => !own.includes(item.key))
+      // The same line said twice in a message: the nearer one, then the newer.
+      .sort((a, b) => far(a) - far(b) || (a.at < b.at ? 1 : -1));
+    if (!here.length) return "";
+    const swipe = this.messageSwipe?.(value.message) ?? 0;
+    const twins = [
+      ...(button
+        .closest?.(".mes_text, .markdown-content, .message-body")
+        ?.querySelectorAll(".sv-play-btn") || []),
+    ]
+      .filter(
+        (other) =>
+          other !== button &&
+          looseName(
+            other.dataset.messageId,
+            other.dataset.kind,
+            other.dataset.text,
+          ) === name,
+      )
+      .map((other) => Number(other.dataset.quoteIndex) || 0);
+    const nearest = (item) => {
+      const made = Number(item.place.quote_index) || 0;
+      const mine = Math.abs(index - made);
+      return twins.every((other) => {
+        const theirs = Math.abs(other - made);
+        return theirs > mine || (theirs === mine && other > index);
+      });
+    };
+    const found = here.find(
+      (item) =>
+        nearest(item) &&
+        (item.place.anchor_tag
+          ? item.place.anchor_tag === tag &&
+            (!Number.isInteger(item.place.anchor_swipe) ||
+              item.place.anchor_swipe === swipe)
+          : !this.madeElsewhere(item, value.message)),
+    );
+    button.looseFor.key = found?.key || "";
+    return button.looseFor.key;
+  },
+  /**
+   * Whether a voice kept without a mark of its message is known to be of another swipe of the
+   * message, or of a message near it (the chat moved up or down since): its key is then the
+   * one it would have there.
+   */
+  madeElsewhere(item, index) {
+    const chat = stOf(this)?.chat || [];
+    const at = Number(index);
+    const prints = [...(this.otherSwipePrints?.(at) || [])];
+    for (let near = at - 3; near <= at + 3; near++)
+      if (near !== at && chat[near]) prints.push(this.anchorFingerprint(near));
+    if (!prints.length) return false;
+    const bases = [
+      ...(this.chatKeyBases?.() || [this.currentChatId()]),
+      ...(this.chatTriedBases?.() || []),
+    ];
+    const { place } = item;
+    return prints.some((source) =>
+      bases.some(
+        (base) =>
+          contentKey({
+            chat: base,
+            message: String(place.message_id),
+            source,
+            index: String(Number(place.quote_index) || 0),
+            kind: place.utterance_kind,
+            text: place.text,
+          }) === item.key,
+      ),
+    );
   },
   /** The line's voice: its own, else the one it came with (made with the edit it has now). */
   lineAudioOf(button, state = this.lineState) {
@@ -193,8 +333,16 @@ export const lineEdits = {
       audio && (audio.edit_key || contentKey({})) === edit ? audio : undefined;
     for (const key of others)
       if (fits(state?.audio?.[key])) return state.audio[key];
-    // A voice kept at this very place that nothing claimed: its key may have been made with an
-    // id the chat is not known to have had (chatTriedBases). Worked out for such lines only.
+    return (
+      this.triedAudioOf(button, state, fits) ||
+      fits(state?.audio?.[this.looseLineOf(button, state)])
+    );
+  },
+  /**
+   * A voice kept at this very place that nothing claimed: its key may have been made with an id
+   * the chat is not known to have had (chatTriedBases). Worked out for such lines only.
+   */
+  triedAudioOf(button, state, fits) {
     const tried = this.chatTriedBases?.() || [];
     if (!tried.length || !state?.audio) return undefined;
     state.audioPlaces ||= new Set(
@@ -300,6 +448,41 @@ export const lineEdits = {
       }
     }
   },
+  /** Whether the line would have an edit it came with if it had none under its own key. */
+  lineBorrowsEdit(button, state = this.lineState) {
+    const [, ...others] = this.lineKeys(button);
+    return [...others, this.looseLineOf(button, state)].some(
+      (key) => Object.keys(state?.edits?.[key]?.value || {}).length > 0,
+    );
+  },
+  /**
+   * An edit the line came with is kept under the line's own key when a voice is made with it:
+   * a voice counts by the edit kept under its key.
+   */
+  async keepLineEdit(button, key, edit) {
+    if (!Object.keys(edit).length || this.lineState?.edits?.[key]) return edit;
+    const place = this.lineSpot(button);
+    const response = await this.request("/api/plugins/scenevoice/line-edits", {
+      method: "POST",
+      body: JSON.stringify({
+        line_key: key,
+        chat_id: this.currentChatId(),
+        value: edit,
+        place,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "대사 설정 저장 실패");
+    if (this.lineState) {
+      this.lineState.edits[key] = {
+        value: result.value,
+        place,
+        updated_at: new Date().toISOString(),
+      };
+      this.lineState.loose = null;
+    }
+    return result.value;
+  },
   async saveLineEdit(button, value) {
     const operation = this.captureChat();
     const key = this.lineIdentity(button);
@@ -308,6 +491,7 @@ export const lineEdits = {
       await previous;
       await this.loadLineState();
       this.assertChat(operation);
+      const place = this.lineSpot(button);
       const response = await this.request(
         "/api/plugins/scenevoice/line-edits",
         {
@@ -316,6 +500,8 @@ export const lineEdits = {
             line_key: key,
             chat_id: this.currentChatId(),
             value,
+            place,
+            keep: this.lineBorrowsEdit(button),
           }),
         },
       );
@@ -324,7 +510,12 @@ export const lineEdits = {
       this.assertChat(operation);
       if (key !== this.lineIdentity(button))
         throw new DOMException("메시지가 변경되었습니다.", "AbortError");
-      this.lineState.edits[key] = { value: result.value };
+      this.lineState.edits[key] = {
+        value: result.value,
+        place,
+        updated_at: new Date().toISOString(),
+      };
+      this.lineState.loose = null;
       delete this.lineState.audio[key];
       button.lineEdit = result.value;
       button.lineKey = key;

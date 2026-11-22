@@ -690,10 +690,20 @@ export class SceneService {
       }
       // The analyses kept for this chat, by their keys (a key names a message as it is written,
       // so another swipe of the same message is not among them).
-      const analysed = Object.entries(data.analyses || {})
-        .filter(([, item]) => item.chat_id === query.chat_id)
-        .map(([key]) => key);
-      return { edits, audio, analysed };
+      const kept = Object.entries(data.analyses || {}).filter(
+        ([, item]) => item.chat_id === query.chat_id,
+      );
+      const analysed = kept.map(([key]) => key);
+      // Each with its message and the words of its lines: an analysis is found again when only
+      // marks of the words changed since.
+      const analysedLines = kept.map(([key, item]) => [
+        key,
+        String(item.message_id ?? ""),
+        [...(item.analyses || [])]
+          .sort((a, b) => a.index - b.index)
+          .map((line) => line.text || ""),
+      ]);
+      return { edits, audio, analysed, analysedLines };
     }
     if (path === "/message-analysis") {
       const item = Object.hasOwn(data.analyses, query.analysis_key)
@@ -1076,8 +1086,30 @@ export class SceneService {
           );
           value.performance = performance;
         }
-        if (Object.keys(value).length)
-          data.lineEdits[body.line_key] = { chat_id, value, updated_at: stamp };
+        // Where the line stands, to find the edit again when the marks of its words change.
+        const place = body.place?.text
+          ? {
+              message_id: text(body.place.message_id, 100),
+              quote_index: Number(body.place.quote_index) || 0,
+              utterance_kind:
+                body.place.utterance_kind === "thought"
+                  ? "thought"
+                  : "dialogue",
+              text: text(body.place.text, 10000),
+              anchor_tag: text(body.place.anchor_tag, 100),
+              anchor_swipe: Number.isInteger(body.place.anchor_swipe)
+                ? body.place.anchor_swipe
+                : null,
+            }
+          : null;
+        // `keep`: an emptied edit stays, over one the line came with.
+        if (Object.keys(value).length || body.keep)
+          data.lineEdits[body.line_key] = {
+            chat_id,
+            value,
+            updated_at: stamp,
+            ...(place ? { place } : {}),
+          };
         else delete data.lineEdits[body.line_key];
       }
       return { value: data.lineEdits[body.line_key]?.value || {} };
@@ -2404,6 +2436,11 @@ export class SceneService {
           message_id: text(raw.message_id, 100),
           quote_index: Number(raw.quote_index) || 0,
           line_key: text(raw.line_key, 64),
+          // The mark its chat message carries (see anchorTag in the client).
+          anchor_tag: text(raw.anchor_tag, 100),
+          anchor_swipe: Number.isInteger(raw.anchor_swipe)
+            ? raw.anchor_swipe
+            : null,
           config_key: text(raw.config_key, 64),
           edit_key: text(raw.edit_key, 64),
           // 공간감: where the line is heard from (a playback effect; the file is plain).

@@ -62,7 +62,7 @@ export const runtime = {
    * or text of a later part of the chat that was taken back doesn't come back with whatever
    * message takes that place.
    */
-  anchorTag(index) {
+  anchorTag(index, { lazy = false } = {}) {
     const context = stOf(this) || {};
     const message = context.chat?.[Number(index)];
     if (!message) return "";
@@ -75,9 +75,41 @@ export const runtime = {
       const info = message.swipe_info?.[message.swipe_id];
       if (info && typeof info === "object")
         (info.extra ||= {}).scenevoice_anchor = tag;
-      Promise.resolve(context.saveChat?.()).catch(() => undefined);
+      // `lazy` (a line's voice or edit): the lines of a message, or messages read one after
+      // another, are saved together a moment later.
+      if (lazy) this.saveChatSoon();
+      else Promise.resolve(context.saveChat?.()).catch(() => undefined);
     }
     return String(tag);
+  },
+  saveChatSoon() {
+    clearTimeout(this.chatSaveTimer);
+    const chat = this.currentChatId();
+    this.chatSaveTimer = setTimeout(() => {
+      if (this.currentChatId() !== chat) return;
+      Promise.resolve((stOf(this) || {}).saveChat?.()).catch(() => undefined);
+    }, 1200);
+  },
+  /** The swipe a chat message shows (0 for one that was never swiped). */
+  messageSwipe(index) {
+    const swipe = stOf(this)?.chat?.[Number(index)]?.swipe_id;
+    return Number.isInteger(swipe) ? swipe : 0;
+  },
+  /** The mark a chat message carries, "" without one (nothing is left on it). */
+  messageTag(index) {
+    return String(
+      stOf(this)?.chat?.[Number(index)]?.extra?.scenevoice_anchor || "",
+    );
+  },
+  /** The fingerprints the message would have on each of its other swipes. */
+  otherSwipePrints(index) {
+    const message = stOf(this)?.chat?.[Number(index)];
+    if (!Array.isArray(message?.swipes)) return [];
+    return message.swipes.flatMap((text, swipe) =>
+      swipe === message.swipe_id || typeof text !== "string"
+        ? []
+        : [contentKey({ text: withoutVoiceTags(text), swipe })],
+    );
   },
   /**
    * A new mark for a chat message, on the swipe showing now: what was made at its old mark stops
