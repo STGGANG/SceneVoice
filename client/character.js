@@ -373,6 +373,25 @@ export const character = {
     return Boolean(writing) || this.latestReplyIndex() !== latestIndex;
   },
 
+  /**
+   * Nothing has happened in the chat yet: no message of the user's, and no reply beyond the
+   * greeting (one per member in a group chat). Automatic work waits until something has, so
+   * opening a new chat asks for nothing. A chat the AI writes alone (no user message ever) counts
+   * from its second reply on.
+   */
+  onlyGreeting() {
+    const context = stOf(this) || {};
+    const chat = context.chat || [];
+    if (chat.some((message) => message?.is_user && !message.is_system))
+      return false;
+    const group =
+      context.groupId !== undefined && context.groupId !== null
+        ? (context.groups || []).find((item) => item.id === context.groupId)
+        : null;
+    const greetings = Math.max(1, group?.members?.length || 1);
+    return chat.filter((message) => this.isReply(message)).length <= greetings;
+  },
+
   latestReplyIndex() {
     const chat = stOf(this)?.chat || [];
     for (let index = chat.length - 1; index >= 0; index -= 1)
@@ -707,11 +726,8 @@ export const character = {
    */
   async stateTrackingDue() {
     if (!this.hasCharacterChat()) return false;
-    // Only the first message (the greeting, before the user says anything): left to 지금 분석, so
-    // opening a new chat doesn't start an update (and a call) at once.
-    const chat = stOf(this)?.chat || [];
-    if (!chat.some((message) => message?.is_user && !message.is_system))
-      return false;
+    // The greeting alone is left to 지금 분석: opening a new chat starts no update (and no call).
+    if (this.onlyGreeting()) return false;
     const every = Math.max(
       1,
       Number(this.config.state_tracking?.every_messages) || 1,

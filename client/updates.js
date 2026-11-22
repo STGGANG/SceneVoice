@@ -9,6 +9,17 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.4.1",
+    sections: [
+      [
+        "고친 것",
+        [
+          "사용자 메시지 없이 진행하는 채팅(AI가 양쪽을 모두 쓰는 경우)에서 상태 추적과 선연락이 자동으로 돌지 않던 것. 이제 AI 답변 2개째부터 돕니다.",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.4.0",
     sections: [
       [

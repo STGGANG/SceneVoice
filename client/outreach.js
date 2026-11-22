@@ -257,8 +257,8 @@ export const outreach = {
       this.quietHours()
     )
       return;
+    if (this.onlyGreeting()) return;
     const chat = stOf(this)?.chat || [];
-    if (!chat.some((message) => message?.is_user && !message.is_system)) return;
     const people = this.statePeople().filter((person) => !person.hidden);
     if (!people.length) return;
     const settings = this.config.outreach || {};
