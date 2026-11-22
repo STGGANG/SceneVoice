@@ -9,6 +9,17 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
+    version: "1.4.2",
+    sections: [
+      [
+        "고친 것",
+        [
+          "재생 중으로 표시되는데 소리가 나지 않던 것 (주로 사파리에서 다른 탭·창에 다녀온 뒤). 이럴 때는 그 대사만 공간감 같은 효과 없이 재생합니다.",
+        ],
+      ],
+    ],
+  },
+  {
     version: "1.4.1",
     sections: [
       [

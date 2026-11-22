@@ -465,11 +465,13 @@ export const playback = {
       Boolean(place) ||
       leveled;
     if (effect) this.ensureAudioContext();
-    const audio = this.audioPlayer(effect);
+    let audio = this.audioPlayer(effect);
     const token = (this.playToken = (this.playToken || 0) + 1);
     const live = () => this.playToken === token;
     this.currentAudioStop = onStop;
     audio.muted = false;
+    // (The clean player's own volume is used only when it stands in for the effect player.)
+    if (!effect) audio.volume = 1;
     audio.src = url;
     this.currentAudio = audio;
     this.currentPlayButton = button;
@@ -573,24 +575,76 @@ export const playback = {
       cleanup();
       onEnded?.();
     };
-    audio.onended = finished;
-    audio.onerror = () => {
+    const failed = () => {
       if (!live()) return;
       this.notify("오디오를 재생할 수 없습니다.", "error");
       finished();
     };
+    audio.onended = finished;
+    audio.onerror = failed;
+    // The effect player sounds only through Web Audio: with a context that is not running (the
+    // browser suspended or interrupted it and it didn't wake outside a tap), or one whose clock
+    // stands still, it would play in silence with everything showing as playing. Then the clean
+    // player takes over where the voice is: no effect for this one, its level by the player's
+    // own volume (where the browser lets a page set it).
+    const playClean = () => {
+      const from = audio;
+      const at = from.currentTime || 0;
+      from.onended = null;
+      from.onerror = null;
+      from.pause();
+      this.currentAudioNodes.forEach((node) => {
+        try {
+          node.disconnect();
+        } catch (_) {
+          /* already disconnected */
+        }
+      });
+      this.currentAudioNodes = [];
+      audio = this.audioPlayer(false);
+      audio.muted = false;
+      audio.volume = this.playLevel;
+      audio.src = url;
+      audio.onended = finished;
+      audio.onerror = failed;
+      if (at > 0.05)
+        audio.addEventListener(
+          "loadedmetadata",
+          () => {
+            if (live()) audio.currentTime = at;
+          },
+          { once: true },
+        );
+      this.currentAudio = audio;
+      return audio.play();
+    };
+    const sounding = () => !audioContext || audioContext.state === "running";
     // A phone may leave the context "interrupted" (another app, a tab switch), not just suspended,
     // and its resume() may never settle outside a tap: playing is tried after a moment anyway.
-    const resume =
-      audioContext && audioContext.state !== "running"
-        ? Promise.race([
-            audioContext.resume(),
-            new Promise((resolve) => setTimeout(resolve, 1500)),
-          ])
-        : Promise.resolve();
+    const resume = sounding()
+      ? Promise.resolve()
+      : Promise.race([
+          audioContext.resume(),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
     Promise.resolve(resume)
       .then(() => {
-        if (live() && !this.playbackPaused) return audio.play();
+        if (!live() || this.playbackPaused) return;
+        if (!sounding()) return playClean();
+        const effectPlayer = audio;
+        const clock = audioContext?.currentTime;
+        // Running by its state, but its clock doesn't move: a context the browser left stuck.
+        // The next tap makes a new one (see unlockAudioForMobile).
+        if (audioContext)
+          setTimeout(() => {
+            if (!live() || this.playbackPaused || audio !== effectPlayer)
+              return;
+            const stuck = sounding() && audioContext.currentTime === clock;
+            if (!stuck && sounding()) return;
+            if (stuck) this.audioContextStuck = audioContext;
+            playClean().catch(() => undefined);
+          }, 700);
+        return audio.play();
       })
       .catch((error) => {
         if (!live() || error.name === "AbortError") return;
@@ -1130,6 +1184,13 @@ export const playback = {
    * tap, e.g. a call reply voiced several seconds after the user sent their line.
    */
   unlockAudioForMobile() {
+    // A context found stuck (see playAudio) is given up for a new one, made here in a tap.
+    const stuck = this.audioContextStuck;
+    this.audioContextStuck = null;
+    if (stuck && stuck === this.communicationAudioContext) {
+      this.communicationAudioContext = null;
+      Promise.resolve(stuck.close?.()).catch(() => undefined);
+    }
     const context = this.ensureAudioContext();
     if (context && context.state !== "running")
       context.resume().catch(() => undefined);
