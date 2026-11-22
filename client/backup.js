@@ -197,6 +197,10 @@ export const backup = {
           this.settingsDirty = false;
           await this.transport.local.store.restoreCatalog(preview, choice);
           this.resetChat();
+          // What this page noted of the chat's line belongs to the records as they were.
+          this.lineSaid = null;
+          this.keptBases = null;
+          void this.settleChatLine?.();
           document.getElementById("sv-overlay")?.remove();
           this.voiceDraft = null;
           await this.loadConfig();

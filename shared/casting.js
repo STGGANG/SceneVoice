@@ -236,7 +236,7 @@ export const personNames = (entry = {}) =>
 
 /**
  * The global person a bot card stands for: one in use there whose name or alias is the card's
- * name (a card "나나미 켄토" and a global 나나미 켄토 used across cards). Such a card reads in that
+ * name (a card "서하루" and a global 서하루 used across cards). Such a card reads in that
  * person's voice and is not a person of its own. Returns [key, entry] or null.
  */
 export function cardStandIn(voices = {}, cardKey = "", names = []) {

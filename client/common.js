@@ -124,6 +124,17 @@ export {
  * browser work out the styles of the whole chat again (실리태번's and themes' :has() rules reach
  * from the top of the page), which is felt as lag on every key while typing.
  */
+/**
+ * A line as it may also have been read: 실리태번 draws three periods as one ellipsis character,
+ * other things that draw a message (a translation shown in its place) leave the periods. The
+ * same line made under one reading is looked for under the other too.
+ */
+export function dotReadings(text) {
+  const value = String(text ?? "");
+  return [
+    ...new Set([value.replaceAll("…", "..."), value.replaceAll("...", "…")]),
+  ].filter((reading) => reading !== value);
+}
 export const setText = (node, text) => {
   if (node && node.textContent !== text) node.textContent = text;
 };

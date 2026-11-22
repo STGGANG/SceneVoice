@@ -4,6 +4,11 @@ import { EMOTIONS, mergeConfig } from "./common.js";
 export const lifecycle = {
   async init({ transport, connectionService = null }) {
     this.transport = transport;
+    // Requests are answered as the open chat sees the records (see shared/lineage.js).
+    transport.scope = () =>
+      this.hasCharacterChat?.() !== false ? this.currentChatId() : "";
+    transport.wrote = () => void this.ensureChatStamp();
+    transport.lineHidden = (chat, ids) => this.keepLineHidden(chat, ids);
     this.connectionService = connectionService;
     this.lifetimeController = new AbortController();
     this.captureChat();

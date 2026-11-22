@@ -277,9 +277,12 @@ export const messageGeneration = {
             buttons
               .slice(index, index + ahead)
               .some((line) => line.dataset.status !== "ready")
-          )
+          ) {
             onLine?.(index, true);
+            this.showNowWaiting?.(button);
+          }
           await orJump(Promise.all(made.slice(index, index + ahead)));
+          this.endNowWaiting?.();
           if (state.stopped) return false;
           if (run.jump !== null) continue;
           // The making stopped at this line or before it: 이어 듣기 starts again from here.
@@ -314,6 +317,7 @@ export const messageGeneration = {
       return true;
     } finally {
       if (this.messageRun === run) this.messageRun = null;
+      this.endNowWaiting?.(true);
       this.syncLineSteps();
     }
   },

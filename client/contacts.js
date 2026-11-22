@@ -294,6 +294,7 @@ export const contacts = {
             : key.startsWith("speaker:")
               ? ""
               : self.name) ||
+          this.lockedPeople?.get(key) ||
           "이름 없음",
       ),
       note: String(notes[key] || "").trim(),
@@ -405,13 +406,18 @@ export const contacts = {
    * The line would be read with a voice registered for this person (or their card), not the
    * engine's default. When nobody has a voice of their own, everyone counts as voiced.
    */
-  speakerHasVoice(key, kind = "dialogue") {
+  speakerHasVoice(key, kind = "dialogue", name = "") {
     const voices = this.config.character_voices || {};
     const anyone = Object.values(voices).some((entry) => entry?.voice_id);
     if (!anyone) return true;
+    // (`name`: a bot card that is no person of its own reads with the person named like it;
+    // without the name that person is not found and the line would count as unvoiced.)
     return (
-      resolveVoice(this.config, { speaker_key: key, utterance_kind: kind })
-        .voice_from !== "default"
+      resolveVoice(this.config, {
+        speaker_key: key,
+        speaker_name: name,
+        utterance_kind: kind,
+      }).voice_from !== "default"
     );
   },
 

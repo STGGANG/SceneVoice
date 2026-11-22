@@ -226,6 +226,7 @@ export const dialogue = {
             if (eventName === events.CHAT_CHANGED && !reloaded) {
               this.dropCardViews();
               this.run(async () => {
+                await this.settleChatLine();
                 await this.adoptRenamedChat();
                 await this.settleAwayTexts();
                 await this.refreshOtherUnread();
@@ -888,7 +889,7 @@ export const dialogue = {
       await button.lineSaving;
       await this.loadLineState();
       const lineKey = this.lineIdentity(button);
-      const edit = this.lineState.edits[lineKey]?.value || {};
+      const edit = this.lineEditOf(button);
       button.lineEdit = edit;
       button.dataset.speakerOverride = edit.speaker_key || "";
       const analysis = edit.performance
@@ -929,7 +930,7 @@ export const dialogue = {
         !asDefault &&
         skipUnvoiced &&
         (this.speakerSkipped(speaker.key) ||
-          !this.speakerHasVoice(speaker.key, button.dataset.kind))
+          !this.speakerHasVoice(speaker.key, button.dataset.kind, speaker.name))
       ) {
         button.dataset.status = "waiting";
         button.classList.remove("sv-loading", "sv-queued");

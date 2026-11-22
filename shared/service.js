@@ -16,6 +16,7 @@ import {
   withAlwaysTags,
 } from "./providers.js";
 import { newId, contentKey, sha256 } from "./hash.js";
+import { openView, LINE_LISTS } from "./lineage.js";
 import { WorkQueue, throwIfAborted } from "./queue.js";
 import { validAudioName, audioType, validReaction } from "./store.js";
 export const API = "/api/plugins/scenevoice";
@@ -382,14 +383,84 @@ const checkChat = (item, body) => {
     throw new UserError("다른 채팅의 기록은 변경할 수 없습니다.", 409);
 };
 
+// Requests about several chats at once (or about which chat is which): the records as they are.
+const ACROSS_CHATS = new Set([
+  "/chats/move",
+  "/chats/others",
+  "/chats/line",
+  "/chats/line/key",
+  "/cards/relink",
+  "/cards/keys",
+  "/voice-messages/threads",
+]);
+/** A chat id (or a bot card key) changed: the lines that name it follow. */
+function rekeyLines(data, ids, cards = new Map()) {
+  const lines = {};
+  for (const [id, entry] of Object.entries(data.lines || {})) {
+    const next = structuredClone(entry);
+    if (cards.has(next.card)) next.card = cards.get(next.card);
+    for (const step of next.line || []) {
+      if (ids.has(step.id)) {
+        // The id the chat's own file still names, until it is opened again.
+        (next.was ||= {})[step.id] = ids.get(step.id);
+        step.id = ids.get(step.id);
+      }
+      if (cards.has(step.card)) step.card = cards.get(step.card);
+    }
+    lines[ids.get(id) ?? id] = next;
+  }
+  if (cards.size)
+    lines[CARDS_MOVED] = {
+      ...lines[CARDS_MOVED],
+      ...Object.fromEntries(cards),
+    };
+  data.lines = lines;
+}
+// Bot cards whose key changed (old → new), kept beside the lines.
+const CARDS_MOVED = "~cards";
+const lineSteps = (value) =>
+  (Array.isArray(value) ? value : [])
+    .slice(0, 60)
+    .map((step) => ({
+      id: text(step?.id, 100),
+      card: text(step?.card, 500),
+      name: text(step?.name, 500),
+      since: text(step?.since, 40),
+      ...(Number.isInteger(step?.at) && step.at >= 0 ? { at: step.at } : {}),
+      ...(Array.isArray(step?.keys) && step.keys.length
+        ? {
+            keys: step.keys
+              .map((key) => text(key, 100))
+              .filter(Boolean)
+              .slice(0, 20),
+          }
+        : {}),
+    }))
+    .filter((step) => step.id);
+const plainMap = (value, limit, each) =>
+  Object.fromEntries(
+    Object.entries(value && typeof value === "object" ? value : {})
+      .filter(
+        ([key]) => !["__proto__", "constructor", "prototype"].includes(key),
+      )
+      .slice(0, limit)
+      .map(([key, item]) => [text(key, 500), each(item)]),
+  );
 export class SceneService {
   queue = new WorkQueue();
   constructor(store, environment) {
     this.store = store;
     this.env = environment;
   }
-  async handle(method, path, query = {}, body = {}, signal) {
+  /**
+   * `scope`: the chat the app has open. A request sees the records as its chat does (its own
+   * and those of the chats it came from); one that names no chat is taken as the open chat's.
+   */
+  async handle(method, path, query = {}, body = {}, signal, scope = "") {
     throwIfAborted(signal);
+    const chat = ACROSS_CHATS.has(path)
+      ? ""
+      : String(query.chat_id || body.chat_id || scope || "");
     if (method === "POST" && path === "/generate")
       return this.generate(body, signal);
     if (method === "POST" && path === "/audio/mix")
@@ -528,20 +599,41 @@ export class SceneService {
       };
     }
     if (method === "GET")
-      return { json: this.readRoute(path, query, await this.store.read()) };
+      return {
+        json: this.readRoute(
+          path,
+          query,
+          openView(await this.store.read(), chat).view,
+        ),
+      };
     if (path.startsWith("/favorites/") || path.startsWith("/history/")) {
       return {
         json: await this.queue.run(
-          () => this.mediaMutation(method, path, body),
+          () => this.mediaMutation(method, path, body, chat),
           signal,
         ),
       };
     }
     return {
-      json: await this.store.transaction((data) =>
+      json: await this.inLine(chat, (data) =>
         this.writeRoute(method, path, body, data),
       ),
     };
+  }
+  /**
+   * A change to the records as `chat` sees them (see shared/lineage.js). What it took away of
+   * the records it inherits is told to the app, which keeps that in the chat's own file.
+   */
+  async inLine(chat, change) {
+    let gone = [];
+    const result = await this.store.transaction((data) => {
+      const scope = openView(data, chat, { write: true });
+      const made = change(scope.view);
+      gone = scope.commit();
+      return made;
+    });
+    if (gone.length) this.env.lineHidden?.(chat, gone);
+    return result;
   }
   readRoute(path, query, data) {
     // Bot card keys the records name (a card renamed in 실리태번 leaves its old one behind).
@@ -656,6 +748,167 @@ export class SceneService {
           query,
         ).map((item) => audioItem(item)),
       };
+    // What the records know of some chats: whether each has a line here, how much is kept under
+    // it, the id it has now (after its bot card was renamed), and who the records of the chats
+    // in `people` are about.
+    if (path === "/chats/line") {
+      // Chats kept under another id than their name gives, by the id the name gives.
+      if (query.index === "1") {
+        const index = {};
+        for (const [id, entry] of Object.entries(data.lines || {})) {
+          if (!Array.isArray(entry?.line) || !entry.name || !entry.card)
+            continue;
+          const named = contentKey({
+            chatId: entry.name,
+            character: entry.card,
+          });
+          if (named !== id) index[named] = id;
+        }
+        return { index };
+      }
+      const ids = String(query.ids || "")
+        .split(",")
+        .filter(Boolean)
+        .slice(0, 80);
+      const lines = data.lines || {};
+      const counts = Object.fromEntries(ids.map((id) => [id, 0]));
+      for (const list of LINE_LISTS)
+        for (const row of data[list] || [])
+          if (Object.hasOwn(counts, row?.chat_id)) counts[row.chat_id]++;
+      const alias = {};
+      for (const [chat, entry] of Object.entries(lines)) {
+        for (const [old, next] of Object.entries(entry?.was || {}))
+          if (ids.includes(old)) alias[old] = next;
+        // An id a chat with a line had before: that chat.
+        if (Array.isArray(entry?.line))
+          for (const key of [
+            ...(entry.keys || []),
+            ...(entry.line.at(-1)?.keys || []),
+          ])
+            if (ids.includes(key) && key !== chat) alias[key] ??= chat;
+      }
+      // An id nothing stands under any more but kept analyses: a chat renamed by an older
+      // version, whose records moved to the id of its new name. The voices of the lines those
+      // analyses are about (same message, same place, same words) tell which chat that is.
+      for (const id of ids) {
+        if (alias[id] || counts[id] || Array.isArray(lines[id]?.line)) continue;
+        const votes = new Map();
+        for (const item of Object.values(data.analyses || {})) {
+          if (item?.chat_id !== id) continue;
+          for (const [at, line] of (item.analyses || []).entries()) {
+            const place = Number.isInteger(line?.index) ? line.index : at;
+            for (const row of data.generations)
+              if (
+                row.chat_id !== id &&
+                row.text &&
+                row.text === line?.text &&
+                String(row.message_id) === String(item.message_id) &&
+                Number(row.quote_index) === place
+              )
+                votes.set(row.chat_id, (votes.get(row.chat_id) || 0) + 1);
+          }
+        }
+        const [best] = [...votes].sort((a, b) => b[1] - a[1]);
+        if (best && best[1] >= 2) alias[id] = best[0];
+      }
+      const from = new Set(
+        String(query.people || "")
+          .split(",")
+          .filter(Boolean),
+      );
+      const people = new Map();
+      const meet = (chat, key, name) => {
+        if (!key || !from.has(chat)) return;
+        const mark = `${chat}\n${key}`;
+        const entry = people.get(mark) || { from: chat, key, names: [] };
+        if (name && !entry.names.includes(name) && entry.names.length < 8)
+          entry.names.push(name);
+        people.set(mark, entry);
+      };
+      if (from.size) {
+        for (const row of [...data.messages, ...(data.memos || [])])
+          meet(row.chat_id, row.character_key, row.character_name);
+        for (const row of data.sessions) {
+          meet(row.chat_id, row.character_key, row.character_name);
+          meet(row.chat_id, row.callee_key, row.callee_name);
+          for (const other of row.others || [])
+            meet(row.chat_id, other?.key, other?.name);
+        }
+        for (const row of data.groups || [])
+          for (const member of row.members || [])
+            meet(row.chat_id, member?.key, member?.name);
+      }
+      // Chats named by kept analyses only: one renamed by an older version left its id there.
+      const orphans = [];
+      if (query.orphans === "1") {
+        // First the ids whose kept analyses are about the very lines `self` has voices of (same
+        // message, place and words): the id that chat had when they were made, whatever else
+        // came to stand under it since.
+        const self = String(query.self || "");
+        if (self) {
+          const mine = new Set();
+          for (const row of data.generations)
+            if (row.chat_id === self && row.text)
+              mine.add(
+                `${row.message_id}\n${Number(row.quote_index) || 0}\n${row.text}`,
+              );
+          const votes = new Map();
+          for (const item of Object.values(data.analyses || {})) {
+            if (!item?.chat_id || item.chat_id === self) continue;
+            for (const [at, line] of (item.analyses || []).entries()) {
+              const place = Number.isInteger(line?.index) ? line.index : at;
+              if (
+                line?.text &&
+                mine.has(`${item.message_id}\n${place}\n${line.text}`)
+              )
+                votes.set(item.chat_id, (votes.get(item.chat_id) || 0) + 1);
+            }
+          }
+          for (const [id, count] of [...votes].sort((a, b) => b[1] - a[1]))
+            if (count >= 2 && !Array.isArray(lines[id]?.line)) orphans.push(id);
+        }
+        const used = new Set(Object.keys(lines));
+        for (const list of LINE_LISTS)
+          for (const row of data[list] || []) used.add(row?.chat_id);
+        for (const item of Object.values(data.analyses || {}))
+          if (
+            item?.chat_id &&
+            !used.has(item.chat_id) &&
+            !orphans.includes(item.chat_id) &&
+            orphans.length < 40
+          )
+            orphans.push(item.chat_id);
+      }
+      return {
+        counts,
+        alias,
+        cards: lines[CARDS_MOVED] || {},
+        known: Object.fromEntries(
+          ids.map((id) => [id, Array.isArray(lines[id]?.line)]),
+        ),
+        // Anything at all kept under the id (records, analyses, a line, another line's key).
+        held: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            counts[id] > 0 ||
+              Boolean(lines[id]) ||
+              Object.values(data.analyses || {}).some(
+                (item) => item?.chat_id === id,
+              ) ||
+              Object.values(lines).some(
+                (entry) =>
+                  (entry?.keys || []).includes(id) ||
+                  (entry?.line || []).some((step) =>
+                    (step.keys || []).includes(id),
+                  ),
+              ),
+          ]),
+        ),
+        entry: lines[ids[0]] || null,
+        people: [...people.values()].slice(0, 400),
+        orphans,
+      };
+    }
     // The phone records of a bot card's people kept under other chats than this one: by chat,
     // with the marks and a few words that tell which chat they were made in.
     if (path === "/chats/others") {
@@ -935,16 +1188,119 @@ export class SceneService {
         (entry) => entry?.card === from,
       ).length;
       data.settings = rekey(data.settings, swap);
+      for (const item of Object.values(data.analyses || {}))
+        if (chatSwap.has(item?.chat_id))
+          item.chat_id = chatSwap.get(item.chat_id);
+      rekeyLines(data, chatSwap, new Map([[from, to]]));
       return {
         status: "success",
         moved: { records, states: stateMoves.size, people },
       };
     }
+    // The line of a chat as its own file keeps it: the chats it came from, then itself. What
+    // it put out of sight of theirs comes along; the records keep both together.
+    if (path === "/chats/line" && method === "POST") {
+      const id = required(body.id, "채팅");
+      if (id.startsWith("~")) throw new UserError("채팅이 올바르지 않습니다.");
+      const line = lineSteps(body.line);
+      if (line.at(-1)?.id !== id)
+        throw new UserError("채팅의 계보가 올바르지 않습니다.");
+      data.lines ||= {};
+      const had = data.lines[id] || {};
+      const hidden = {
+        ...plainMap(had.hidden, 5000, (when) => text(when, 40)),
+        ...plainMap(body.hidden, 5000, (when) => text(when, 40)),
+      };
+      const next = {
+        card: text(body.card, 500),
+        name: text(body.name, 500),
+        line,
+        ...(Object.keys(hidden).length ? { hidden } : {}),
+        ...(body.swap
+          ? {
+              swap: plainMap(body.swap, 60, (pairs) =>
+                plainMap(pairs, 400, (key) => text(key, 500)),
+              ),
+            }
+          : {}),
+        ...(body.locked
+          ? {
+              locked: plainMap(body.locked, 60, (keys) =>
+                (Array.isArray(keys) ? keys : [])
+                  .map((key) => text(key, 500))
+                  .filter(Boolean)
+                  .slice(0, 400),
+              ),
+            }
+          : {}),
+        ...(had.was ? { was: had.was } : {}),
+        ...(Array.isArray(had.keys) ? { keys: had.keys } : {}),
+      };
+      const changed = JSON.stringify(next) !== JSON.stringify(had);
+      data.lines[id] = next;
+      // Rows this chat already made its own of another bot card's records: its people too
+      // take the keys of those named the same here.
+      const pairs = new Map(
+        Object.values(next.swap || {}).flatMap((map) => Object.entries(map)),
+      );
+      if (pairs.size)
+        for (const list of LINE_LISTS)
+          data[list] = (data[list] || []).map((row) =>
+            row?.chat_id === id && row.line_from ? rekey(row, pairs) : row,
+          );
+      return { status: "success", hidden, keys: had.keys || [], changed };
+    }
+    // An id the chat had before lines were kept, proven by a voice found under it: kept as a
+    // key of the chat, and the analyses still naming that id (nothing else does) become its own.
+    if (path === "/chats/line/key" && method === "POST") {
+      const id = required(body.id, "채팅");
+      const key = required(body.key, "채팅");
+      const entry = data.lines?.[id];
+      if (!Array.isArray(entry?.line) || id === key)
+        throw new UserError("채팅이 올바르지 않습니다.");
+      // An id another chat still stands under is that chat's: nothing of it is taken. (`sure`:
+      // the page saw that no chat of the card has that id now; a chat with a line always keeps
+      // its own.)
+      if (
+        Array.isArray(data.lines[key]?.line) ||
+        (body.sure !== true &&
+          LINE_LISTS.some((list) =>
+            (data[list] || []).some((row) => row?.chat_id === key),
+          ))
+      )
+        return { status: "success", taken: true, analyses: 0 };
+      entry.keys = [...new Set([...(entry.keys || []), key])].slice(0, 20);
+      let analyses = 0;
+      for (const item of Object.values(data.analyses || {}))
+        if (item?.chat_id === key) {
+          item.chat_id = id;
+          analyses++;
+        }
+      return { status: "success", analyses };
+    }
     // A chat renamed in 실리태번 gets another id here: what was kept under the old one moves.
+    // (Chats with a line keep their id whatever their name becomes: nothing of theirs moves.)
     if (path === "/chats/move" && method === "POST") {
       const from = required(body.from, "이전 채팅");
       const to = required(body.to, "채팅");
       if (from === to) throw new UserError("옮길 채팅이 올바르지 않습니다.");
+      // (`name`, `card`: what the chat was called. One the lines know by that name has an id
+      // of its own, whatever the old name's id is.)
+      if (
+        Array.isArray(data.lines?.[from]?.line) ||
+        (body.name &&
+          Object.values(data.lines || {}).some(
+            (entry) =>
+              Array.isArray(entry?.line) &&
+              entry.name === body.name &&
+              entry.card === body.card,
+          ))
+      )
+        return {
+          status: "success",
+          kept: true,
+          moved: { records: 0, states: 0 },
+        };
       const swap = new Map([[from, to]]);
       let records = 0;
       for (const list of CARD_LISTS) {
@@ -977,6 +1333,21 @@ export class SceneService {
         if (stateMoves.has(item.state_key))
           item.state_key = stateMoves.get(item.state_key);
       data.lineEdits = rekey(data.lineEdits || {}, swap);
+      for (const item of Object.values(data.analyses || {}))
+        if (item?.chat_id === from) item.chat_id = to;
+      // Lines and analyses made under the old id keep keys built from it.
+      if (records || stateMoves.size) {
+        data.lines ||= {};
+        const entry = (data.lines[to] ||= {});
+        entry.keys = [
+          ...new Set([
+            ...(entry.keys || []),
+            from,
+            ...(data.lines[from]?.keys || []),
+          ]),
+        ].slice(0, 20);
+        delete data.lines[from];
+      }
       return { status: "success", moved: { records, states: stateMoves.size } };
     }
     // A person made again (a new key): the state and its history saved under the old key move to
@@ -2146,9 +2517,10 @@ export class SceneService {
       ...(await this.stats(files.filter((file) => !remove.has(file.name)))),
     };
   }
-  async mediaMutation(method, path, body = {}) {
+  async mediaMutation(method, path, body = {}, chat = "") {
     const id = path.split("/")[2],
-      data = await this.store.read();
+      raw = await this.store.read(),
+      data = openView(raw, chat).view;
     if (path.startsWith("/favorites/") && method === "POST") {
       const existing = data.favorites.find((x) => x.generation_id === id);
       if (existing) return { status: "exists", id: existing.id };
@@ -2163,6 +2535,7 @@ export class SceneService {
         created_at: now(),
       };
       favorite.audio_filename = `fav_${favorite.id}.${generation.audio_filename.endsWith(".wav") ? "wav" : "mp3"}`;
+      delete favorite.line_from;
       await this.store.writeAudio(favorite.audio_filename, bytes);
       await this.store.transaction((db) => db.favorites.push(favorite));
       return { status: "success", id: favorite.id };
@@ -2204,14 +2577,21 @@ export class SceneService {
     }
     if (path.startsWith("/history/") && method === "DELETE") {
       const item = find(data.generations, id);
+      // The file goes only when no other record holds it: another chat's record of the same
+      // voice (the one this chat inherited it from, or a chat that inherited it) keeps it.
+      const held = raw.generations.filter(
+        (x) => x.audio_filename && x.audio_filename === item.audio_filename,
+      );
       if (
         !item.audio_filename ||
-        data.generations.some(
-          (x) => x.id !== id && x.audio_filename === item.audio_filename,
-        )
+        item.line_from ||
+        held.length > 1 ||
+        held[0]?.chat_id !== item.chat_id
       ) {
-        await this.store.transaction((db) => {
-          db.generations = db.generations.filter((x) => x.id !== id);
+        await this.inLine(chat, (db) => {
+          db.generations = db.generations.filter(
+            (x) => x.id !== id || x.chat_id !== item.chat_id,
+          );
         });
       } else await this.removeFiles(new Set([item.audio_filename]));
       return { status: "success" };

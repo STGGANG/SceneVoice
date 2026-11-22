@@ -1,6 +1,11 @@
 // 대사별 수정: a line's saved speaker/performance edit and saved voice, and the 화자·연기 editor.
 import { contentKey } from "../shared/hash.js";
-import { escapeHtml, normalizeTags, LANGUAGE_CHOICES } from "./common.js";
+import {
+  escapeHtml,
+  normalizeTags,
+  LANGUAGE_CHOICES,
+  dotReadings,
+} from "./common.js";
 import { infoTip, fieldHtml, bindInfoTips } from "./ui.js";
 import {
   SOUND_TAGS,
@@ -141,20 +146,80 @@ export const lineEdits = {
   },
   /** A line's key: its chat, message (as written now), place, kind and words. Kept per button. */
   lineIdentity(button) {
+    return this.lineKeys(button)[0];
+  },
+  /**
+   * The line's key under each id its chat's lines may have been made with: this chat's own id
+   * first (what is written is written under that one), then the ids it had before and those of
+   * the chats it came from (their voices and edits are this line's until it gets its own).
+   */
+  lineKeys(button) {
+    const bases = this.chatKeyBases?.() || [this.currentChatId()];
     const value = {
-      chat: this.currentChatId(),
+      chat: bases[0],
       message: button.dataset.messageId,
       source: this.anchorFingerprint(button.dataset.messageId),
       index: button.dataset.quoteIndex,
       kind: button.dataset.kind,
       text: button.dataset.text,
     };
-    const input = Object.values(value).join("\u0000");
+    const input = `${Object.values(value).join("\u0000")}\u0000${bases.slice(1).join()}`;
     if (button.identityInput !== input) {
       button.identityInput = input;
-      button.identityKey = contentKey(value);
+      button.identityValue = value;
+      button.triedFor = null;
+      // The words as shown first; then as they read with periods for an ellipsis or the other
+      // way round (see dotReadings).
+      const readings = [value.text, ...dotReadings(value.text)];
+      button.identityKeys = [];
+      for (const text of readings)
+        for (const chat of bases)
+          button.identityKeys.push(contentKey({ ...value, chat, text }));
     }
-    return button.identityKey;
+    return button.identityKeys;
+  },
+  /** The line's edit: its own, else the one it came with. */
+  lineEditOf(button, state = this.lineState) {
+    for (const key of this.lineKeys(button))
+      if (state?.edits?.[key]) return state.edits[key].value || {};
+    return {};
+  },
+  /** The line's voice: its own, else the one it came with (made with the edit it has now). */
+  lineAudioOf(button, state = this.lineState) {
+    const [own, ...others] = this.lineKeys(button);
+    if (state?.audio?.[own]) return state.audio[own];
+    const edit = contentKey(this.lineEditOf(button, state));
+    const fits = (audio) =>
+      audio && (audio.edit_key || contentKey({})) === edit ? audio : undefined;
+    for (const key of others)
+      if (fits(state?.audio?.[key])) return state.audio[key];
+    // A voice kept at this very place that nothing claimed: its key may have been made with an
+    // id the chat is not known to have had (chatTriedBases). Worked out for such lines only.
+    const tried = this.chatTriedBases?.() || [];
+    if (!tried.length || !state?.audio) return undefined;
+    state.audioPlaces ||= new Set(
+      Object.values(state.audio).map(
+        (audio) => `${audio.message_id}\n${Number(audio.quote_index) || 0}`,
+      ),
+    );
+    const value = button.identityValue;
+    if (!state.audioPlaces.has(`${value.message}\n${Number(value.index) || 0}`))
+      return undefined;
+    const mark = tried.join();
+    if (button.triedFor?.mark !== mark || button.triedFor.state !== state) {
+      button.triedFor = { mark, state, base: "", key: "" };
+      search: for (const text of [value.text, ...dotReadings(value.text)])
+        for (const chat of tried) {
+          const key = contentKey({ ...value, chat, text });
+          if (fits(state.audio[key])) {
+            Object.assign(button.triedFor, { base: chat, key });
+            break search;
+          }
+        }
+    }
+    if (!button.triedFor.key) return undefined;
+    this.keepKeyBase?.(button.triedFor.base);
+    return fits(state.audio[button.triedFor.key]);
   },
   async loadLineState() {
     if (!this.lineStatePromise) {
@@ -193,10 +258,12 @@ export const lineEdits = {
       )
         continue;
       const key = this.lineIdentity(button);
-      const edit = state.edits[key]?.value || {};
+      const edit = this.lineEditOf(button, state);
       // A line whose message was analysed again is made again (the same acting comes back
       // from the saved voices without a new request).
-      const audio = this.staleLines?.has(key) ? null : state.audio[key];
+      const audio = this.staleLines?.has(key)
+        ? null
+        : this.lineAudioOf(button, state);
       const signature = contentKey({ key, edit, audio: audio?.id });
       if (button.lineSignature === signature) continue;
       if (button.lineSignature && !audio && button.dataset.status === "ready")

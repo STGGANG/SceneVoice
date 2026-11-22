@@ -27,10 +27,10 @@ export const messageAnalysis = {
       ? (await this.keptMessageAnalyses(buttons[0])).analyses || []
       : [];
     return buttons.map((button, index) => {
-      const edit = this.lineState.edits[this.lineIdentity(button)]?.value || {};
+      const edit = this.lineEditOf(button);
       // A line with a voice but no analysis kept (an old message, or one analysed before an
       // update) shows how that voice was made: its record has the tagged line and the speaker.
-      const made = this.lineState.audio?.[this.lineIdentity(button)];
+      const made = this.lineAudioOf(button);
       const fromVoice = made
         ? {
             script: made.script || "",

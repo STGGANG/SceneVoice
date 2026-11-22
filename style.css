@@ -8141,6 +8141,9 @@ body.sv-hide-line-buttons .sv-inline-actions {
   font-size: 10px;
   opacity: 0.55;
 }
+#sv-now-reading.sv-waiting .sv-now-reading-text {
+  opacity: 0.55;
+}
 #sv-now-reading.sv-paused .sv-now-reading-icon {
   opacity: 0.9;
 }

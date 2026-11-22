@@ -9,7 +9,6 @@
 // the chat memory of texts made this way is written when that chat is next opened
 // (settleAwayTexts).
 
-import { contentKey } from "../shared/hash.js";
 import { escapeHtml } from "./common.js";
 import { playback } from "./playback.js";
 import { loudness } from "./loudness.js";
@@ -427,10 +426,7 @@ export const visit = {
         signature,
         ids: new Map(
           cards.map((card) => [
-            contentKey({
-              chatId: String(card.chat || ""),
-              character: `${AVATAR}${card.avatar}`,
-            }),
+            this.chatIdOf(String(card.chat || ""), `${AVATAR}${card.avatar}`),
             `${AVATAR}${card.avatar}`,
           ]),
         ),

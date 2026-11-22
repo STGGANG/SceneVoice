@@ -739,7 +739,7 @@ export const playback = {
    * another without the strip blinking; a line wider than the strip glides sideways once, over
    * about as long as it is spoken.
    */
-  showNowReading(button, audio = null) {
+  showNowReading(button, audio = null, waiting = false) {
     const mode = this.config.playback?.caption || "always";
     const text = String(button.dataset.text || "").trim();
     // "auto": a line read off screen, or one whose play buttons are hidden.
@@ -769,6 +769,13 @@ export const playback = {
       document.body.appendChild(bar);
     }
     this.syncLineSteps();
+    // `waiting`: 이어 듣기 has come to a line still being made; the strip shows it as coming.
+    bar.classList.toggle("sv-waiting", waiting);
+    const icon = bar.querySelector(".sv-now-reading-icon");
+    icon?.classList.toggle("fa-spinner", waiting);
+    icon?.classList.toggle("fa-spin", waiting);
+    icon?.classList.toggle("fa-pause", !waiting && !this.playbackPaused);
+    icon?.classList.toggle("fa-play", !waiting && Boolean(this.playbackPaused));
     const bottom = this.config.playback?.caption_at === "bottom";
     bar.classList.toggle("sv-at-bottom", bottom);
     if (bottom) this.placeNowReading(bar);
@@ -789,7 +796,9 @@ export const playback = {
       if (token !== this.nowReadingToken) return;
       label.textContent = text;
       if (who) {
-        who.textContent = button.dataset.speakerName || "";
+        who.textContent = waiting
+          ? "생성 중"
+          : button.dataset.speakerName || "";
         who.hidden = !who.textContent;
       }
       label.classList.toggle("sv-thought", button.dataset.kind === "thought");
@@ -826,6 +835,28 @@ export const playback = {
       swap();
       requestAnimationFrame(() => bar.classList.add("sv-shown"));
     }
+  },
+
+  /**
+   * 이어 듣기 waits for a line that is still being made: after a moment (so lines already made
+   * don't flash it) the strip shows that line with "생성 중".
+   */
+  showNowWaiting(button) {
+    clearTimeout(this.nowWaitingTimer);
+    this.nowWaitingTimer = setTimeout(() => {
+      if (this.messageRun) this.showNowReading(button, null, true);
+    }, 350);
+  },
+  /** The wait is over; a strip still saying "생성 중" with nothing to play goes away. */
+  endNowWaiting(hide = false) {
+    clearTimeout(this.nowWaitingTimer);
+    if (
+      hide &&
+      document
+        .getElementById("sv-now-reading")
+        ?.classList.contains("sv-waiting")
+    )
+      this.hideNowReading(true);
   },
 
   /** The strip's ‹ ›: there while a message's lines play in a row; › is off at the last line. */

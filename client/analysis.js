@@ -33,15 +33,44 @@ export const analysis = {
    * voice does.
    */
   messageAnalysisKey(button, batch) {
-    return `ma-${contentKey({
-      chatId: this.currentChatId(),
+    const keys = this.messageAnalysisKeys(button, batch);
+    // The chat's own analysis; else the one the message came with (from an id the chat had
+    // before, or the chat it came from), until it is analysed again here.
+    const kept = this.lineState?.analysed;
+    return (
+      keys.find((key) => kept?.has(key) || this.analysisCache?.has(key)) ||
+      keys[0]
+    );
+  },
+  /** The key under this chat's own id first, then under each id it may have been kept with. */
+  messageAnalysisKeys(button, batch) {
+    const value = {
       messageId: button.dataset.messageId || "",
       lines: batch.utterances.map((line) => [line.kind || "", line.text]),
       // The two switches that decide what an analysis holds at all (tags, who speaks): one made
       // with a switch off is not what the user gets with it on.
       tags: Boolean(this.config.analysis_enabled),
       cast: Boolean(this.config.casting?.auto_enabled),
-    })}`;
+    };
+    const bases = this.chatKeyBases?.() || [this.currentChatId()];
+    // The lines as shown first; then all of them as they read with periods for an ellipsis, or
+    // the other way round (see dotReadings in common.js).
+    const readings = [value.lines];
+    for (const turn of [0, 1]) {
+      const lines = value.lines.map(([kind, text]) => [
+        kind,
+        turn
+          ? String(text).replaceAll("...", "…")
+          : String(text).replaceAll("…", "..."),
+      ]);
+      if (
+        !readings.some((kept) => JSON.stringify(kept) === JSON.stringify(lines))
+      )
+        readings.push(lines);
+    }
+    return readings.flatMap((lines) =>
+      bases.map((chatId) => `ma-${contentKey({ chatId, ...value, lines })}`),
+    );
   },
 
   async reanalyzeButton(button) {
@@ -230,6 +259,13 @@ export const analysis = {
   },
 
   async saveStoredMessageAnalysis(analysisKey, button, analyses) {
+    // Always under this chat's own id: one that came from another chat stays that chat's.
+    const own = this.messageAnalysisKeys(
+      button,
+      this.collectMessageBatch(button),
+    )[0];
+    if (own !== analysisKey) this.analysisCache?.set(own, analyses);
+    analysisKey = own;
     try {
       const response = await this.fetch(
         this.apiUrl("/api/plugins/scenevoice/message-analysis"),
@@ -258,6 +294,9 @@ export const analysis = {
    * they are kept under; `analyses` is null when the message was never analysed.
    */
   async keptMessageAnalyses(button) {
+    // Which key the message's analysis is under is read from the chat's list.
+    if ((this.chatKeyBases?.() || []).length > 1)
+      await this.loadLineState?.().catch(() => null);
     const batch = this.collectMessageBatch(button);
     const key = this.messageAnalysisKey(button, batch);
     const analyses =
@@ -336,6 +375,10 @@ export const analysis = {
     const previousContext = this.buildPreviousContext(button);
     const states = await this.loadStatesForMessage(button, batch);
     this.assertChat(operation);
+    if ((this.chatKeyBases?.() || []).length > 1) {
+      await this.loadLineState?.().catch(() => null);
+      this.assertChat(operation);
+    }
     const analysisKey = this.messageAnalysisKey(button, batch);
     const selectedIndex = Number(button.dataset.quoteIndex || 0);
     const fallbackBatch = this.normalizeMessageAnalyses([], batch.utterances);

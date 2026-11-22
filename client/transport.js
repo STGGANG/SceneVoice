@@ -149,6 +149,7 @@ export class Transport {
           );
         return patch;
       },
+      lineHidden: (chat, ids) => this.lineHidden?.(chat, ids),
       synthesize: async (request, settings, signal) => {
         let response;
         if (request.engine === "fish") {
@@ -351,7 +352,10 @@ export class Transport {
         Object.fromEntries(parsed.searchParams),
         body,
         options.signal,
+        this.scope?.() || "",
       );
+      if ((options.method || "GET") !== "GET" && route !== "/chats/line")
+        this.wrote?.();
       if (result.bytes)
         return new Response(result.bytes, { headers: result.headers });
       return jsonResponse(this.audioURLs(result.json));

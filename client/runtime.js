@@ -14,11 +14,14 @@ export const runtime = {
   currentChatId() {
     const context = stOf(this) || {};
     const character = this.getCurrentCharacterProfile().key;
-    const input = `${context.chatId || ""}\u0000${character}`;
+    const name = context.chatId || "";
+    // The id the chat's own file names for it, whatever the file is called now (chat-line.js).
+    const stamped = this.stampedChatId?.(context, name, character) || "";
+    const input = `${name}\u0000${character}\u0000${stamped}`;
     if (this.chatIdCache?.input !== input)
       this.chatIdCache = {
         input,
-        value: contentKey({ chatId: context.chatId || "", character }),
+        value: stamped || contentKey({ chatId: name, character }),
       };
     return this.chatIdCache.value;
   },
@@ -125,6 +128,17 @@ export const runtime = {
     if (
       record.anchor_tag &&
       message.extra?.scenevoice_anchor !== record.anchor_tag
+    )
+      return "gone";
+    // From the chat this one came from, made before marks were left: only where the message
+    // is still as it was then (a branch may have another message at that number).
+    if (
+      record.line_from &&
+      !record.anchor_tag &&
+      record.anchor_fingerprint &&
+      record.anchor_fingerprint !== this.anchorFingerprint(match[0]) &&
+      record.anchor_fingerprint !==
+        contentKey({ text: message.mes, swipe: message.swipe_id })
     )
       return "gone";
     return "here";

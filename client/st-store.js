@@ -45,7 +45,7 @@ const sortedKeys = (object) =>
  * Each part is its own file in 실리태번's user files, with its own revision and backup.
  */
 export const PARTS = {
-  core: ["version", "settings"],
+  core: ["version", "settings", "lines"],
   analyses: ["analyses"],
   states: ["states", "stateHistory"],
   phone: ["sessions", "messages", "groups", "memos", "radio"],

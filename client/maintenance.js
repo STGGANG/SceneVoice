@@ -106,14 +106,14 @@ export const maintenance = {
   },
 
   /** What a chat kept (calls, texts, states, voices) goes to the id it has now. */
-  async moveChatRecords(from, to) {
+  async moveChatRecords(from, to, known = {}) {
     // Not tied to the open chat: 실리태번 reloads it right after a rename, which would cancel it.
     const response = await this.transport.request(
       "/api/plugins/scenevoice/chats/move",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to }),
+        body: JSON.stringify({ from, to, ...known }),
       },
       30000,
     );
@@ -133,7 +133,18 @@ export const maintenance = {
     const from = contentKey({ chatId: name(oldFileName), character });
     const to = contentKey({ chatId: name(newFileName), character });
     if (from === to) return;
-    if (await this.moveChatRecords(from, to)) await this.chatRecordsMoved();
+    // A chat whose file names its id keeps it whatever it is called: nothing moves for it.
+    const context = stOf(this) || {};
+    if (context.chatId === name(newFileName) && this.liveLine?.()) return;
+    if (
+      await this.moveChatRecords(from, to, {
+        name: name(oldFileName),
+        card: character,
+      })
+    ) {
+      await this.chatRecordsMoved();
+      await this.settleChatLine();
+    }
   },
 
   /**
@@ -189,25 +200,28 @@ export const maintenance = {
     if (!Array.isArray(list)) return;
     const live = new Set(
       list.map((item) =>
-        contentKey({
-          chatId: String(item.file_id || item.file_name || "").replace(
-            /\.jsonl$/,
-            "",
-          ),
-          character: card,
-        }),
+        this.chatIdOf(
+          String(item.file_id || item.file_name || "").replace(/\.jsonl$/, ""),
+          card,
+        ),
       ),
     );
+    // The chats this one came from keep their records: it sees them through its line.
+    for (const id of this.chatKeyBases()) live.add(id);
     let moved = 0;
     for (const group of mine)
       if (!live.has(group.chat_id) && this.currentChatId() === chatId)
         moved += await this.moveChatRecords(group.chat_id, chatId);
-    if (moved) await this.chatRecordsMoved();
+    if (moved) {
+      await this.chatRecordsMoved();
+      await this.settleChatLine();
+    }
   },
 
   /** After records came to this chat: everything that shows them is looked at again. */
-  async chatRecordsMoved() {
-    this.lineStatePromise = null;
+  async chatRecordsMoved({ quiet = false } = {}) {
+    this.redrawnChat();
+    this.scheduleScan?.(null);
     this.otherThreadsKept = null;
     await this.restorePhoneSession?.();
     this.scheduleChatMemoryRefresh?.();
@@ -215,6 +229,7 @@ export const maintenance = {
     const shell = document.getElementById("sv-smartphone");
     if (shell && !shell.classList.contains("hidden"))
       await this.renderSmartphone();
+    if (quiet) return;
     this.notify(
       "채팅 이름이 바뀌어, 씬보이스 기록을 이 채팅으로 옮겼습니다.",
       "success",

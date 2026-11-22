@@ -18,6 +18,8 @@ export function emptyDatabase() {
     radio: [],
     generations: [],
     favorites: [],
+    // Where each chat came from (see shared/lineage.js); the chat file keeps the original.
+    lines: {},
   };
 }
 export function checkDatabase(data) {
@@ -48,6 +50,12 @@ export function checkDatabase(data) {
     );
   }
   data.lineEdits ||= {};
+  if (
+    !data.lines ||
+    typeof data.lines !== "object" ||
+    Array.isArray(data.lines)
+  )
+    data.lines = {};
   // Files written before group conversations (or voice memos) have none.
   data.groups ||= [];
   data.memos ||= [];

@@ -32,7 +32,12 @@ export const messages = {
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     // Every name a sender's key was saved with: a key whose person is gone finds them by any.
     this.senderNames ||= new Map();
+    // People of another bot card's chat with nobody here named like them: shown by the name
+    // their records carry, to read and hear only (see chat-line.js).
+    this.lockedPeople = new Map();
     for (const item of data.items || []) {
+      if (this.lineLocked?.includes(item.character_key))
+        this.lockedPeople.set(item.character_key, item.character_name || "");
       if (!item.character_key || !item.character_name || item.role === "user")
         continue;
       const names = this.senderNames.get(item.character_key) || new Set();
@@ -793,7 +798,8 @@ export const messages = {
     // Cards answered (mine by them in a reply, theirs by me with a button): message id → the answer.
     const answers = this.cardAnswers(thread);
     const claims = this.cardClaims(thread);
-    const observing = Boolean(this.messageGroup(key)?.without_user);
+    const locked = this.lockedPeople?.has(key);
+    const observing = locked || Boolean(this.messageGroup(key)?.without_user);
     const replying = this.replyTarget?.key === key ? this.replyTarget : null;
     // The latest round's versions (답변 재생성 in a group): which one is shown, of how many.
     const lastItem = thread.at(-1);
@@ -855,6 +861,7 @@ export const messages = {
                         this.formatPhoneDate(item.created_at);
                     return this.messageBubbleHtml(item, {
                       latest: index === thread.length - 1 && !typing,
+                      frozen: locked,
                       rounds,
                       head,
                       // Mine is read once they answer (or are typing); theirs once it is opened.
@@ -894,6 +901,7 @@ export const messages = {
         </div>`
             : ""
         }
+        ${locked ? '<p class="sv-msg-frozen"><i class="fa-solid fa-lock" aria-hidden="true"></i>다른 봇카드에서 가져온 대화입니다. 보기만 할 수 있습니다</p>' : ""}
         ${observing ? "" : this.cardTrayHtml(key)}
         ${replying ? `<div class="sv-msg-replying"><i class="fa-solid fa-reply" aria-hidden="true"></i><span><b>${escapeHtml(replying.from || "")}</b>${escapeHtml(replying.text)}</span><button type="button" data-quote-clear aria-label="인용 취소" title="인용 취소"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>` : ""}
         ${this.cardWaiting === key && thread.at(-1)?.role === "user" && !typing ? '<p class="sv-msg-waiting"><i class="fa-regular fa-clock" aria-hidden="true"></i><span>AI 응답 요청을 아직 보내지 않았습니다. 더 보낼 것이 있으면 보낸 뒤, 보내기 버튼을 누르면 답장이 옵니다.</span></p>' : ""}
