@@ -158,10 +158,84 @@ export const chatLine = {
       cards: data.cards || {},
       known: data.known || {},
       held: data.held || {},
+      names: data.names || {},
       entry: data.entry || null,
       people: data.people || [],
       orphans: data.orphans || [],
     };
+  },
+
+  /** Another chat of the card as its file has it: `{ metadata, chat }`, or null when unread. */
+  async readCardChat(card, name) {
+    const avatar = card.slice("character:".length);
+    const character = ((stOf(this) || {}).characters || []).find(
+      (item) => item.avatar === avatar,
+    );
+    const rows = await this.transport
+      .network?.("/api/chats/get", {
+        method: "POST",
+        body: JSON.stringify({
+          ch_name: character?.name || "",
+          file_name: name,
+          avatar_url: avatar,
+        }),
+      })
+      .then((result) => (result?.ok ? result.json() : null))
+      .catch(() => null);
+    if (!Array.isArray(rows) || !rows.length) return null;
+    // The first line of a chat file is about the chat itself.
+    const head = rows[0] && typeof rows[0].mes !== "string" ? rows[0] : null;
+    return {
+      metadata: head?.chat_metadata || {},
+      chat: rows.filter((row) => typeof row?.mes === "string"),
+    };
+  },
+
+  /** A message's time as the records write theirs ("" when it can't be read). */
+  messageTime(value) {
+    const moment = (stOf(this) || {}).timestampToMoment?.(value);
+    const time = moment?.isValid?.() ? moment.valueOf() : Date.parse(value);
+    return Number.isFinite(time) ? new Date(time).toISOString() : "";
+  },
+
+  /**
+   * Where a branch made before lines were kept left its parent, found by reading the parent's
+   * file once and comparing the two. `at`: one past the last message both have (a message is
+   * the same when its words, or one of its swipes, are the other's: a message the parent edited
+   * since doesn't cut the branch short); -1 when it can't be told. `since`: when the branch
+   * wrote its first message of its own (a minute later, to be on the keeping side), "" if none.
+   */
+  async branchPoint(card, parentId, names, chat) {
+    const same = (a, b) =>
+      Boolean(a?.is_user) === Boolean(b?.is_user) &&
+      (a.mes === b.mes ||
+        (a.swipes || []).includes(b.mes) ||
+        (b.swipes || []).includes(a.mes));
+    for (const name of [...new Set(names.filter(Boolean))]) {
+      const parent = await this.readCardChat(card, name);
+      if (!parent) continue;
+      // The file by that name must be the parent itself: the name may be another chat's now.
+      const step = lineIn(parent.metadata)?.at(-1);
+      const id =
+        step?.name === name && step.card === card
+          ? step.id
+          : nameId(name, card);
+      if (id !== parentId) continue;
+      let last = -1;
+      for (
+        let index = Math.min(chat.length, parent.chat.length) - 1;
+        index >= 0 && last < 0;
+        index--
+      )
+        if (same(chat[index], parent.chat[index])) last = index;
+      if (last < 0) return { at: -1, since: "" };
+      const own = this.messageTime(chat[last + 1]?.send_date);
+      return {
+        at: last + 1,
+        since: own ? new Date(Date.parse(own) + 60000).toISOString() : "",
+      };
+    }
+    return { at: -1, since: "" };
   },
 
   /** Chats whose records are under another id than their name gives (for chats that aren't open). */
@@ -351,13 +425,15 @@ export const chatLine = {
     // The id its name gives, unless anything is kept under that already (a chat that had this
     // name before): then one of its own.
     const fresh = () => (look.held[hashed] ? newId() : hashed);
+    let parentFound = false;
     const self = line.at(-1);
     if (self && self.card === card && self.name === name) {
       // Itself. A branch whose parent wasn't found before gets it now.
       if (line.length === 1 && hasParent && parent !== self.id) {
         line.unshift(parentStep());
         self.since ||= now;
-        if (!Number.isInteger(self.at)) self.at = length;
+        delete self.at;
+        parentFound = true;
         changed = true;
       }
     } else if (self && self.card === card) {
@@ -398,9 +474,28 @@ export const chatLine = {
       if (hasParent) {
         line.unshift(parentStep());
         line[1].since = now;
-        line[1].at = length;
+        parentFound = true;
         changed = true;
       } else changed = look.counts[hashed] > 0 || Boolean(line[0].keys);
+    }
+    // A branch made before lines were kept doesn't say where it left its parent: found once by
+    // comparing it with the parent's file (see branchPoint), and kept with it from then on.
+    const mine = line.at(-1);
+    if (line.length > 1 && !Number.isInteger(mine.at)) {
+      const before = line.at(-2);
+      const point = await this.branchPoint(
+        card,
+        before.id,
+        [look.names[before.id], before.name, mainChat],
+        Array.isArray(loaded) ? loaded : [],
+      );
+      still();
+      // Not to be told (the parent is gone): the length it has now is still a safe bound the
+      // first time; -1 says it was looked for.
+      mine.at = point.at >= 0 ? point.at : parentFound ? (length ?? -1) : -1;
+      if (point.since && (!mine.since || point.since < mine.since))
+        mine.since = point.since;
+      changed = true;
     }
     // Ids kept analyses name and nothing else does: tried as keys once lines are drawn.
     this.lineOrphans = look.orphans;

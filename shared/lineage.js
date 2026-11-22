@@ -75,10 +75,19 @@ export function childrenOf(lines, chat) {
     const at = line.findIndex((entry) => entry.id === chat);
     if (at < 0 || at >= line.length - 1) continue;
     const child = line[at + 1];
-    if (!out.has(child.id)) out.set(child.id, String(child.since || ""));
+    if (!out.has(child.id))
+      out.set(child.id, {
+        since: String(child.since || ""),
+        upTo: Number.isInteger(child.at) && child.at >= 0 ? child.at : Infinity,
+      });
   }
   return out;
 }
+/** `row` of `chat` is among what a chat that came from it inherits (see childrenOf). */
+export const inheritedByChild = (lines, chat, row) =>
+  [...childrenOf(lines, chat).values()].some(
+    (left) => before(row, left.since) && !beyond(row, left.upTo),
+  );
 
 /**
  * Ids this chat put out of sight, and those a chat between it and their owner put out of sight
@@ -323,9 +332,10 @@ export function openView(data, chat, { write = false } = {}) {
           // Put out of sight here only: the children still see it where it came from.
           if (!now.has(id) && copies.has(id)) continue;
           const old = JSON.parse(was);
-          for (const [kid, since] of kids) {
+          for (const [kid, left] of kids) {
             if (
-              !before(old, since) ||
+              !before(old, left.since) ||
+              beyond(old, left.upTo) ||
               Object.hasOwn(lines?.[kid]?.hidden || {}, id) ||
               out.some((item) => item?.id === id && item.chat_id === kid)
             )

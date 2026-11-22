@@ -16,7 +16,7 @@ import {
   withAlwaysTags,
 } from "./providers.js";
 import { newId, contentKey, sha256 } from "./hash.js";
-import { openView, LINE_LISTS } from "./lineage.js";
+import { openView, inheritedByChild, LINE_LISTS } from "./lineage.js";
 import { WorkQueue, throwIfAborted } from "./queue.js";
 import { validAudioName, audioType, validReaction } from "./store.js";
 export const API = "/api/plugins/scenevoice";
@@ -885,6 +885,10 @@ export class SceneService {
         cards: lines[CARDS_MOVED] || {},
         known: Object.fromEntries(
           ids.map((id) => [id, Array.isArray(lines[id]?.line)]),
+        ),
+        // What a chat with a line is called now (a chat named by its id alone can't be opened).
+        names: Object.fromEntries(
+          ids.map((id) => [id, text(lines[id]?.name, 500)]),
         ),
         // Anything at all kept under the id (records, analyses, a line, another line's key).
         held: Object.fromEntries(
@@ -2582,13 +2586,16 @@ export class SceneService {
       const held = raw.generations.filter(
         (x) => x.audio_filename && x.audio_filename === item.audio_filename,
       );
+      // A chat that came from this one and left after the voice was made still has it: the
+      // record goes from this chat only (that chat is handed its own), and the file stays.
       if (
         !item.audio_filename ||
         item.line_from ||
+        inheritedByChild(raw.lines, item.chat_id, item) ||
         held.length > 1 ||
         held[0]?.chat_id !== item.chat_id
       ) {
-        await this.inLine(chat, (db) => {
+        await this.inLine(item.chat_id, (db) => {
           db.generations = db.generations.filter(
             (x) => x.id !== id || x.chat_id !== item.chat_id,
           );
