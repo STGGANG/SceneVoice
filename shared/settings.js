@@ -113,6 +113,12 @@ export const DEFAULT_SETTINGS = {
   // line_buttons: the play buttons beside the lines (off: hidden, 음성 준비 still reads them).
   // prepare: the message's 음성 준비 / 이어 듣기 button.
   // spatial: where a line is heard from (side, distance), as a playback effect only.
+  // translated_lines: what a line's button reads while a translation is on screen: "source" (the
+  // line as written, when the two match line for line) or "shown" (the words on screen).
+  // translated_prepare: the same choice for 이어 듣기 (read off screen when it differs from what
+  // the buttons on screen read).
+  // caption_translation: the caption while such a line is read: "source" (the line read),
+  // "shown" (the words on screen in its place) or "both" (those words under it).
   playback: {
     auto_new: false,
     caption: "always",
@@ -121,6 +127,9 @@ export const DEFAULT_SETTINGS = {
     prepare: true,
     spatial: true,
     level: true,
+    translated_lines: "source",
+    translated_prepare: "source",
+    caption_translation: "both",
   },
   // uncertain: what 음성 준비 does with a line whose speaker is unclear: "skip" it, or read it
   // with the default voice (the male or female one when the analysis tells).
@@ -338,6 +347,11 @@ export function settingsWithDefaults(source = {}) {
         Object.assign(result[key], source[key]);
     } else result[key] = source[key];
   }
+  // 번역 화면의 자막 was a switch (on: the words on screen under the line read).
+  if (typeof result.playback.caption_translation === "boolean")
+    result.playback.caption_translation = result.playback.caption_translation
+      ? "both"
+      : "source";
   // Settings saved before 선연락 had a switch of its own (or memos one of theirs) go on as
   // they did: reaching out stays on where a call, a text or an overheard call was, and memos
   // keep coming where they came.
@@ -463,6 +477,17 @@ export function validateSettings(current, patch) {
   if (!["top", "bottom"].includes(next.playback.caption_at))
     next.playback.caption_at = DEFAULT_SETTINGS.playback.caption_at;
   next.playback.spatial = next.playback.spatial !== false;
+  // (It was a switch before: off is the line read alone.)
+  if (next.playback.caption_translation === false)
+    next.playback.caption_translation = "source";
+  if (!["source", "shown", "both"].includes(next.playback.caption_translation))
+    next.playback.caption_translation =
+      DEFAULT_SETTINGS.playback.caption_translation;
+  if (!["source", "shown"].includes(next.playback.translated_prepare))
+    next.playback.translated_prepare =
+      DEFAULT_SETTINGS.playback.translated_prepare;
+  if (!["source", "shown"].includes(next.playback.translated_lines))
+    next.playback.translated_lines = DEFAULT_SETTINGS.playback.translated_lines;
   next.playback.level = next.playback.level !== false;
   if (!["skip", "default"].includes(next.casting.uncertain))
     next.casting.uncertain = DEFAULT_SETTINGS.casting.uncertain;

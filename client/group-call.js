@@ -350,6 +350,7 @@ export const groupCall = {
           // A remark from behind the phone (a 1:1 call's background) sounds fainter.
           aside: Boolean(turn?.aside),
           place: this.turnPlace(turn),
+          speaker: this.turnSpeaker(this.phoneSession, turn),
           onEnded: resolve,
           onStop: resolve,
         }),

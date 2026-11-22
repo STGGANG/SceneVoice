@@ -17,6 +17,7 @@ import {
 } from "./providers.js";
 import { newId, contentKey, sha256 } from "./hash.js";
 import { openView, inheritedByChild, LINE_LISTS } from "./lineage.js";
+import { SIDES, SPACES } from "./place.js";
 import { WorkQueue, throwIfAborted } from "./queue.js";
 import { validAudioName, audioType, validReaction } from "./store.js";
 export const API = "/api/plugins/scenevoice";
@@ -1102,17 +1103,37 @@ export class SceneService {
                 : null,
             }
           : null;
+        // 읽지 않음: "skip" takes the line out of what is read, "read" keeps it in whatever an
+        // analysis says; `skip_auto` marks a skip the analysis set (the user's own word wins
+        // over it). A request that doesn't speak of it leaves it as it was.
+        const before = data.lineEdits[body.line_key];
+        const told = Object.hasOwn(body, "skip");
+        const skip = told
+          ? ["skip", "read"].includes(body.skip)
+            ? body.skip
+            : ""
+          : before?.skip || "";
+        const skipAuto =
+          skip === "skip" &&
+          (told ? body.skip_auto === true : before?.skip_auto === true);
         // `keep`: an emptied edit stays, over one the line came with.
-        if (Object.keys(value).length || body.keep)
+        if (Object.keys(value).length || body.keep || skip)
           data.lineEdits[body.line_key] = {
             chat_id,
             value,
             updated_at: stamp,
             ...(place ? { place } : {}),
+            ...(skip ? { skip } : {}),
+            ...(skipAuto ? { skip_auto: true } : {}),
           };
         else delete data.lineEdits[body.line_key];
       }
-      return { value: data.lineEdits[body.line_key]?.value || {} };
+      const kept = data.lineEdits[body.line_key];
+      return {
+        value: kept?.value || {},
+        skip: kept?.skip || "",
+        skip_auto: kept?.skip_auto === true,
+      };
     }
     if (path === "/message-analysis" && method === "POST") {
       const key = required(body.analysis_key, "분석 ID", 160);
@@ -1131,10 +1152,9 @@ export class SceneService {
           ...(["male", "female"].includes(item.gender)
             ? { gender: item.gender }
             : {}),
-          ...(["left", "right"].includes(item.side) ? { side: item.side } : {}),
-          ...(["close", "far", "muffled"].includes(item.space)
-            ? { space: item.space }
-            : {}),
+          ...(SIDES.includes(item.side) ? { side: item.side } : {}),
+          ...(SPACES.includes(item.space) ? { space: item.space } : {}),
+          ...(item.skip === true ? { skip: true } : {}),
         })),
         updated_at: stamp,
         profile_id: text(body.profile_id),
@@ -1980,6 +2000,7 @@ export class SceneService {
             speaker_key: text(line.speaker_key),
             speaker_name: text(line.speaker_name, 300),
             ...(line.caller === true ? { caller: true } : {}),
+            ...(SIDES.includes(line.side) ? { side: line.side } : {}),
             text: speech.text,
             script: speech.script,
             translation: text(line.translation, 5000),
@@ -2444,10 +2465,8 @@ export class SceneService {
           config_key: text(raw.config_key, 64),
           edit_key: text(raw.edit_key, 64),
           // 공간감: where the line is heard from (a playback effect; the file is plain).
-          side: ["left", "right"].includes(raw.side) ? raw.side : "",
-          space: ["close", "far", "muffled"].includes(raw.space)
-            ? raw.space
-            : "",
+          side: SIDES.includes(raw.side) ? raw.side : "",
+          space: SPACES.includes(raw.space) ? raw.space : "",
           audio_filename: filename,
           mime_type: "audio/mpeg",
           // Made again: plain voice until its sounds are mixed in once more.

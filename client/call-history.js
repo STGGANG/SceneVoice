@@ -1004,6 +1004,7 @@ export const callHistory = {
                 ),
                 aside: Boolean(turn.aside),
                 place: this.turnPlace(turn),
+                speaker: this.turnSpeaker(session, turn),
                 onEnded: resolve,
                 onStop: () => {
                   // ‹ › stop it to go to another line; anything else stops the listening.
@@ -1173,6 +1174,7 @@ export const callHistory = {
         }</div>
       </div>`;
     this.applyPhoneWallpaper?.(body);
+    this.markSpeaking();
     const shell = document.getElementById("sv-smartphone");
     if (shell) shell.dataset.screen = "call";
     body.scrollTop = 0;

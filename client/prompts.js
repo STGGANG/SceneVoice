@@ -191,8 +191,9 @@ ${ADULT_FICTION} Scenes may include intimacy, violence, harsh language, moral am
 
 // 공간감: where a line is heard from. The words are fixed (the player knows only these).
 const PLACEMENT_RULES = [
-  "- Each line also gets where it is heard from, as the user's character (the listener) would hear it: side (left, center or right) and space (normal, close, far or muffled).",
+  "- Each line also gets where it is heard from, as the user's character (the listener) would hear it: side (left, center, right, left_to_right, right_to_left or back_and_forth) and space (normal, close, far or muffled).",
   "- side: left or right when the story puts the speaker to one side of the listener, or the context lets you reasonably infer it (sitting on their left, calling from the doorway on the right); otherwise center.",
+  "- side, when the speaker moves during the line: left_to_right or right_to_left for crossing from one side of the listener to the other (walking past, or moving from one ear to the other on purpose, as in ASMR); back_and_forth for going from side to side (pacing, whispering into each ear by turns). Only when the text clearly shows it during this line; otherwise the side they are on.",
   "- space: close when the voice is right at the listener's ear or face (a whisper in the ear, lips against the neck); far when it comes from a distance (across the room or the street, from another floor, calling from afar); muffled when something is between them (through a door or a wall, from under a blanket, a hand over the mouth); otherwise normal.",
   "- Use them when the text says so, when the context makes it reasonably clear, or when a line is plainly written to be heard that way. When it isn't clear, use center and normal. A speaker who moves can change from one line to the next.",
   "- A thought, and a line spoken by the listener themself, is always center and normal.",
@@ -217,6 +218,7 @@ export function analysisSystem({
       "- Direct every line in <dialogues> together in one pass, reading <current_message> (the full message the lines come from) and <recent_chat> (the messages before it).",
       "- For each line, first identify who speaks it, then direct it using only that speaker's <speaker_background> (description and performance_note).",
       "- Each line has a kind: dialogue, or thought (a region the user chose to have read aloud). A thought is inner voice or narration, not words said aloud to anyone: direct it as such, usually quieter and more inward unless the text clearly shows otherwise, and don't skip or rewrite stage directions inside it.",
+      '- A dialogue line that is plainly not speech (a word quoted for emphasis, a title, a name, a sign) gets "skip": true and is not voiced. Actual speech or thought is never skipped.',
       "- Return every supplied index exactly once. Never rewrite, translate or add words to a line: audio tags are the only thing you add.",
     ]),
     section("speaker_rules", [
@@ -240,7 +242,7 @@ export function analysisSystem({
       "- Let each speaker's personality and the relationship shape the delivery, and keep hesitation, awkwardness or breathlessness when the text shows it.",
     ]),
     section("output_format", [
-      '- Return one JSON object only, with no markdown or text around it: {"utterances":[{"index":0,"script":"[calm][reflective] the line exactly as given, with any inline [tags]","intensity":0.5,"language":"language code of the line","speaker_key":"registered key or empty","speaker_confidence":0.9,"gender":"female"' +
+      '- Return one JSON object only, with no markdown or text around it: {"utterances":[{"index":0,"script":"[calm][reflective] the line exactly as given, with any inline [tags]","intensity":0.5,"language":"language code of the line","speaker_key":"registered key or empty","speaker_confidence":0.9,"gender":"female","skip":false' +
         (spatial ? ',"side":"center","space":"normal"' : "") +
         "}]" +
         (readings
@@ -518,7 +520,7 @@ const CALL_STYLE = [
 ];
 const TEXT_STYLE = [
   "## How to write",
-  "- Text the way this character would: short messages, their own spelling and punctuation habits, emoji, emoticons or ㅋㅋ when that is like them. Put separate texts on separate lines, at most three.",
+  "- Text the way this character would: short messages, their own spelling and punctuation habits, emoji, emoticons or ㅋㅋ when that is like them. Put separate texts on separate lines, usually around three.",
   TEXT_NATIVE("this character and to how close the two of them are"),
   TALK_FLOW[0],
   TALK_FLOW[1],
@@ -545,7 +547,7 @@ const GROUP_CALL_STYLE = [
 // `alone`: a room the user's character isn't in has nobody to follow or to ask.
 const groupTextStyle = (alone = false) => [
   "## How to write",
-  "- Each member texts in their own way: short messages, their own spelling and punctuation habits, emoji, emoticons or ㅋㅋ when that is like them. Keep members distinct; don't let them sound alike or all agree. A member's separate texts go on separate lines, at most three per message. Don't repeat earlier messages.",
+  "- Each member texts in their own way: short messages, their own spelling and punctuation habits, emoji, emoticons or ㅋㅋ when that is like them. Keep members distinct; don't let them sound alike or all agree. A member's separate texts go on separate lines, usually around three per message. Don't repeat earlier messages.",
   TEXT_NATIVE("each member and to how close they are with one another"),
   ...(alone
     ? []
@@ -676,6 +678,9 @@ const PHOTOS_SEEN_FIELD =
 const READ_RULE =
   "- The character's own texts in <text_thread> carry read: true when the user's character has seen them, false when not yet. A text seen and left unanswered may be noticed only when it really called for an answer (a question, a plan, something left hanging) and noticing fits the character and the moment: lightly, without blame unless that is like them. When the conversation had simply come to a natural close, or the text is still unread, it is not brought up.";
 
+// 공간감 on the radio: every voice in the middle unless the show itself is played to one side.
+const RADIO_SIDE_RULE =
+  "- side: center, left, right, left_to_right, right_to_left or back_and_forth. Nearly always center. Another only when the show is plainly played that way: speaking into one of the listener's ears or moving between them (an ASMR segment, a whispered secret), or someone clearly off to one side or walking across the studio. A caller is always center.";
 // 공간감 on a call: only how the voice reaches the phone (a phone line has no left or right).
 const PHONE_SPACE_RULE =
   "- space: how the voice reaches the phone. close: right at the phone (lips against it, a whisper into it). far: away from it (the phone put down or held away, calling from across the room). muffled: something over it (a hand over the phone, the phone in a pocket or under a blanket). Otherwise normal. Set it as you write the line, when the moment calls for it or the situation makes it natural; most lines are normal.";
@@ -1102,7 +1107,7 @@ export function ghostwriteSystem({
       `- Write the persona's next ${call ? "line on the call" : mode === "group" ? "text in the group chat" : "text"}, answering the latest messages in ${thread} and continuing naturally from them.`,
       call
         ? "- Write what they would actually say into the phone: brief, spoken, like real speech on a call, usually one to three sentences."
-        : "- Write what they would actually type on their phone: short texts in their own style; separate texts go on separate lines, at most three.",
+        : "- Write what they would actually type on their phone: short texts in their own style; separate texts go on separate lines, usually around three.",
       "- Use the persona's own personality, attitude and way of talking from <persona> and the story so far, in the first person. No narration, actions, stage directions, quotation marks or speaker names.",
       "- If <user_draft> is present, it is either the user's rough draft or a note on what to write (such as 'say I'll be late and apologize' or '대충 보고 싶다는 내용으로'). A draft: keep its meaning and intent and only shape it into the persona's words, adding no new content. A note: write the message it asks for in the persona's own words, fitting the conversation, and never repeat the note itself.",
       "- Without <user_draft>, decide freely what the persona would most naturally say next.",
@@ -1336,6 +1341,7 @@ export function radioSystem({
   withUser = false,
   callers = "",
   pastShows = false,
+  spatial = false,
 } = {}) {
   const lines = RADIO_LINES[length] || RADIO_LINES.normal;
   const talk = mode === "talk";
@@ -1383,7 +1389,7 @@ ${ADULT_FICTION} Mature and complex elements (intimacy, conflict, harsh language
     deliveryRules({ soundEffects }),
     radioMatureContent(),
     section("output_format", [
-      `- Return one JSON object only, with no markdown or text around it: {"title":"a short title for the show","lines":[{"from":"a key from <hosts>","text":"[cheerful] the spoken line, with [tags] where they belong","intensity":0.5,"language":"ko"${translationField(translation)}}]}`,
+      `- Return one JSON object only, with no markdown or text around it: {"title":"a short title for the show","lines":[{"from":"a key from <hosts>","text":"[cheerful] the spoken line, with [tags] where they belong","intensity":0.5,"language":"ko"${translationField(translation)}${spatial ? ',"side":"center"' : ""}}]}`,
       "- title: the episode's title as a Korean radio program would print it: short (2 to 6 words), in natural everyday Korean a native speaker would write, about what the episode is mostly about. Never a word-for-word translation from another language; names and places as they are usually written in Korean.",
       `- lines: the show in order. from: the key of whoever says that line${callers ? " (a host, or a caller from <callers>)" : ""}.`,
       "- text: only the spoken words, in that person's language from <hosts>, with audio tags in square brackets where they belong (see <delivery_rules>). No quotation marks, speaker names or narration.",
@@ -1391,6 +1397,7 @@ ${ADULT_FICTION} Mature and complex elements (intimacy, conflict, harsh language
       "- intensity: a number from 0 to 1. language: the code of the language text is written in (ko, ja, en, zh, fr, es, de, it, pt or ru).",
       translation &&
         "- translation: for a line not in Korean, a natural Korean translation of text without the tags, for the user to read on screen while listening; leave it empty for Korean lines.",
+      spatial && RADIO_SIDE_RULE,
     ]),
   );
 }

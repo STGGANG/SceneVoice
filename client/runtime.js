@@ -401,6 +401,7 @@ export const runtime = {
     // Callbacks of the audio being stopped are ignored from here on.
     this.playToken = (this.playToken || 0) + 1;
     this.markPaused?.(false);
+    this.markSpeaking?.("");
     this.stopSideSounds?.();
     this.hideNowReading?.(true);
     this.syncPublicState?.({ playing: false });

@@ -149,6 +149,7 @@ export const calls = {
                 ${this.draftTranslationHtml?.("call", this.callReplyDraft) || ""}
                 <div class="sv-call-controls"><button type="button" class="sv-call-end" aria-label="통화 종료" title="통화 종료"><i class="fa-solid fa-phone-slash" aria-hidden="true"></i></button></div>
             </div>`;
+    this.markSpeaking();
     body
       .querySelector(".sv-call-compose")
       ?.addEventListener("submit", (event) => {
@@ -1063,6 +1064,7 @@ export const calls = {
           ),
           aside: Boolean(turn.aside),
           place: this.turnPlace(turn),
+          speaker: this.turnSpeaker(this.phoneSession, turn),
         },
       );
       return;
@@ -1129,6 +1131,7 @@ export const calls = {
         communicationFilter: this.shouldApplyCommunicationFilter("phone"),
         aside: Boolean(turn.aside),
         place: this.turnPlace(turn),
+        speaker: this.turnSpeaker(this.phoneSession, turn),
       });
     else URL.revokeObjectURL(made.audioUrl);
     await this.renderSmartphone();

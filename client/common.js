@@ -5,6 +5,7 @@ import {
 } from "../shared/settings.js";
 import { sha256, contentKey } from "../shared/hash.js";
 import { normalizeTags, tagEmotion } from "../shared/providers.js";
+import { SIDES, SPACES } from "../shared/place.js";
 /** "[frustrated][emphatic]" for display, or the plain-delivery label. */
 const tagsText = (tags) =>
   tags?.length ? tags.map((tag) => `[${tag}]`).join("") : "기본 연기";
@@ -76,8 +77,8 @@ function clamp(value, min, max) {
 }
 
 /**
- * 공간감: where a line is heard from. side: "left" | "right" | "" (centre); space: "close" |
- * "far" | "muffled" | "" (as it is). Anything else a model returns counts as the plain value.
+ * 공간감: where a line is heard from. side: one of SIDES or "" (centre); space: one of SPACES
+ * or "" (as it is). Anything else a model returns counts as the plain value.
  */
 function normalizePlace(item) {
   const pick = (value, choices) => {
@@ -87,8 +88,8 @@ function normalizePlace(item) {
     return choices.includes(word) ? word : "";
   };
   return {
-    side: pick(item?.side, ["left", "right"]),
-    space: pick(item?.space, ["close", "far", "muffled"]),
+    side: pick(item?.side, SIDES),
+    space: pick(item?.space, SPACES),
   };
 }
 

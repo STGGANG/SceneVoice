@@ -514,8 +514,8 @@ export const contacts = {
 
   contactAvatarMarkup(contact) {
     if (contact?.avatarUrl)
-      return `<div class="sv-phone-avatar"><img src="${escapeHtml(contact.avatarUrl)}" alt="${escapeHtml(contact.name)}"></div>`;
+      return `<div class="sv-phone-avatar" data-key="${escapeHtml(contact.key || "")}"><img src="${escapeHtml(contact.avatarUrl)}" alt="${escapeHtml(contact.name)}"></div>`;
     const initial = Array.from(String(contact?.name || "?").trim())[0] || "?";
-    return `<div class="sv-phone-avatar sv-avatar-initial" aria-hidden="true">${escapeHtml(initial)}</div>`;
+    return `<div class="sv-phone-avatar sv-avatar-initial" data-key="${escapeHtml(contact?.key || "")}" aria-hidden="true">${escapeHtml(initial)}</div>`;
   },
 };

@@ -17,6 +17,9 @@ import {
 const OWN =
   ".sv-inline-actions, .sv-utterance, .sv-chat-memory, .sv-message-generate, .sv-message-tool";
 
+const UNPAIRED_NOTICE =
+  "번역문과 원문의 대사가 짝이 맞지 않아 이 메시지는 대사별로 읽지 않습니다. 이어 듣기 버튼으로 원문을 들을 수 있습니다.";
+
 export const dialogue = {
   bindEvents() {
     document.addEventListener(
@@ -47,7 +50,9 @@ export const dialogue = {
         if (playButton) {
           event.preventDefault();
           event.stopPropagation();
-          if (event.shiftKey)
+          if (this.lineUnpaired(playButton))
+            this.notify(UNPAIRED_NOTICE, "info");
+          else if (event.shiftKey)
             this.run(() =>
               this.withBusyButton(playButton, () =>
                 this.reanalyzeButton(playButton),
@@ -467,14 +472,23 @@ export const dialogue = {
     return String(messageId) === String(chat.length - 1);
   },
 
-  decorateContainer(container) {
+  /**
+   * `source`: the message drawn off screen for its lines (see sourceHost): `id` is its message,
+   * `shown` says it is drawn in the words on screen (a translation); nothing is added to the
+   * message's button row.
+   */
+  decorateContainer(container, source = null) {
     if (!(container instanceof HTMLElement)) return;
     const messageElement = container.closest(".mes, .message-body");
     const messageId =
-      messageElement?.getAttribute("mesid") ||
-      messageElement?.dataset?.messageId ||
-      simpleHash(container.textContent || "");
+      source?.id ??
+      (messageElement?.getAttribute("mesid") ||
+        messageElement?.dataset?.messageId ||
+        simpleHash(container.textContent || ""));
     if (this.isStreamingMessage(messageId)) return;
+    // A translation being drawn bit by bit (its extension marks the message while it does):
+    // what is on screen is neither the message nor its translation yet.
+    if (this.messageBusy(container)) return;
     let quoteIndex = container.querySelectorAll(".sv-play-btn").length;
 
     // Lines drawn by a custom chat renderer (.custom-lines, quotes already taken out) count too.
@@ -491,7 +505,13 @@ export const dialogue = {
     }
 
     const context = stOf(this) || {};
-    const raw = withoutVoiceTags(context.chat?.[Number(messageId)]?.mes || "");
+    const written = context.chat?.[Number(messageId)];
+    // (Under a translation the marks are those of the translation, which is what is drawn.)
+    const raw = withoutVoiceTags(
+      ((source ? source.shown : this.translationShown(container, written))
+        ? written?.extra?.display_text
+        : written?.mes) || "",
+    );
     // Markdown turns *…* and _…_ into emphasis and removes the marks. Only decorate emphasis
     // whose text matches a region marked that way in the message source.
     const emphasized = extractSegments(raw, this.config.reading)
@@ -583,7 +603,159 @@ export const dialogue = {
     container.querySelectorAll(".sv-play-btn").forEach((button, index) => {
       button.dataset.quoteIndex = String(index);
     });
+    if (source) return;
+    this.pairSourceLines(container, messageId);
     this.decorateMessageGeneration(container);
+  },
+
+  /** A translation extension is still drawing this message (its preview). */
+  messageBusy(container) {
+    const message = container.closest?.(".mes, .message-body") || container;
+    return Boolean(
+      message.matches?.("[data-llm-preview-active]") ||
+      message.querySelector?.("[data-llm-preview-active]"),
+    );
+  },
+
+  /**
+   * A translation shown in place of the message's own words (message.extra.display_text, as
+   * 실리태번's own translation and the translation extensions keep it). Not when the original
+   * is shown beside it: that one has its own buttons.
+   */
+  translationShown(container, message) {
+    const shown = message?.extra?.display_text;
+    return Boolean(
+      shown &&
+      shown !== message.mes &&
+      !container.querySelector(".original_text"),
+    );
+  },
+
+  /**
+   * The message as written, drawn off screen the way 실리태번 draws it (so its lines read as
+   * they do when the original is on screen) with a button per line; from the plain text when
+   * that can't be done. Media is left out: nothing is loaded for it. `shown`: the words on
+   * screen (the translation) instead, for 이어 듣기 set to read those while the buttons on
+   * screen stand for the lines as written.
+   */
+  sourceHost(messageId, message, shown = false) {
+    const context = stOf(this) || {};
+    const written = withoutVoiceTags(
+      shown ? message.extra.display_text : message.mes,
+    );
+    const text =
+      typeof context.substituteParams === "function"
+        ? context.substituteParams(written, context.name1, message.name)
+        : written;
+    const host = document.createElement("div");
+    host.className = "mes_text";
+    if (shown) host.dataset.svShown = "1";
+    if (typeof context.messageFormatting === "function")
+      try {
+        const drawn = new DOMParser().parseFromString(
+          String(
+            context.messageFormatting(
+              text,
+              message.name,
+              Boolean(message.is_system),
+              Boolean(message.is_user),
+              Number(messageId),
+            ) || "",
+          ),
+          "text/html",
+        );
+        drawn
+          .querySelectorAll(
+            "script,style,link,img,picture,video,audio,source,iframe,object,embed",
+          )
+          .forEach((node) => node.remove());
+        host.append(
+          ...[...drawn.body.childNodes].map((node) =>
+            document.importNode(node, true),
+          ),
+        );
+        this.decorateContainer(host, { id: String(messageId), shown });
+      } catch (error) {
+        console.warn(
+          "[SceneVoice] 원문을 그리지 못해 글 그대로 읽습니다.",
+          error,
+        );
+      }
+    if (!host.querySelector(".sv-play-btn")) {
+      host.textContent = text;
+      extractSegments(text, this.config.reading).forEach((segment, index) =>
+        host.append(
+          this.createButtonGroup(segment.text, messageId, index, segment.kind),
+        ),
+      );
+    }
+    return {
+      host,
+      source: text,
+      buttons: [...host.querySelectorAll(".sv-play-btn")],
+    };
+  },
+
+  /**
+   * A translation on screen whose lines match the message's own, line for line (as many, of the
+   * same kinds, in order): each button then stands for the line as written. Its voice, analysis
+   * and edits are that line's (the same key as when the original is on screen), and the words
+   * shown stay with it for the caption. With 화면 글자 읽기 chosen the buttons read the words on
+   * screen. A translation that doesn't match is marked instead (`svUnpaired`): its buttons are
+   * dimmed and make nothing, as the user asked for the original and would get, and pay for, the
+   * translation read aloud; 이어 듣기 still reads the message's own lines off screen.
+   */
+  pairSourceLines(container, messageId) {
+    const message = stOf(this)?.chat?.[Number(messageId)];
+    const buttons = [...container.querySelectorAll(".sv-play-btn")];
+    const wanted =
+      buttons.length > 0 &&
+      this.config.playback?.translated_lines !== "shown" &&
+      this.translationShown(container, message);
+    const lines = wanted
+      ? this.sourceLinesOf(container, messageId, message)
+      : null;
+    const paired =
+      Boolean(lines) &&
+      lines.length === buttons.length &&
+      lines.every(
+        (line, index) =>
+          line.kind === (buttons[index].dataset.kind || "dialogue"),
+      );
+    buttons.forEach((button, index) => {
+      if (paired) {
+        button.dataset.shownText ??= button.dataset.text;
+        button.dataset.text = lines[index].text;
+      } else if (button.dataset.shownText !== undefined) {
+        button.dataset.text = button.dataset.shownText;
+        delete button.dataset.shownText;
+      }
+    });
+    if (paired) container.dataset.svPaired = "1";
+    else delete container.dataset.svPaired;
+    if (wanted && !paired) {
+      container.dataset.svUnpaired = "1";
+      for (const button of buttons) button.title = UNPAIRED_NOTICE;
+    } else delete container.dataset.svUnpaired;
+  },
+
+  /** A line on screen of a translation that doesn't match the message's own lines. */
+  lineUnpaired(button) {
+    return Boolean(button.closest?.('[data-sv-unpaired="1"]'));
+  },
+
+  /** The words and kinds of the message's own lines, kept with the drawing they were read for. */
+  sourceLinesOf(container, messageId, message) {
+    const mark = `${message.mes}\u0000${message.extra?.display_text}\u0000${JSON.stringify(this.config.reading || null)}`;
+    if (container.svSourceLines?.mark !== mark)
+      container.svSourceLines = {
+        mark,
+        lines: this.sourceHost(messageId, message).buttons.map((button) => ({
+          text: button.dataset.text,
+          kind: button.dataset.kind || "dialogue",
+        })),
+      };
+    return container.svSourceLines.lines;
   },
 
   /**
@@ -866,7 +1038,11 @@ export const dialogue = {
     return this.queue;
   },
 
-  /** Returns true when audio is ready, "skipped" for a line left for the user to assign (skipUncertain). */
+  /**
+   * Returns true when audio is ready, "skipped" for a line left for the user to assign
+   * (skipUncertain), "unvoiced" for a person without a voice (skipUnvoiced), "unread" for a line
+   * taken out of what is read.
+   */
   async generateForButton(
     button,
     {
@@ -886,6 +1062,7 @@ export const dialogue = {
     try {
       if (!this.chatVoiceOn())
         throw new Error("채팅 대사 읽기가 꺼져 있습니다(설정 → 채팅 대사).");
+      if (this.lineUnpaired(button)) throw new Error(UNPAIRED_NOTICE);
       const text = button.dataset.text || "";
       await button.lineSaving;
       await this.loadLineState();
@@ -898,6 +1075,16 @@ export const dialogue = {
       this.assertChat(operation);
       button.lineEdit = edit;
       button.dataset.speakerOverride = edit.speaker_key || "";
+      // 읽지 않음: taken out by the user, or (below) plainly no speech to the analysis.
+      const unread = () => {
+        button.dataset.status = "waiting";
+        button.classList.remove("sv-loading", "sv-queued");
+        this.setPlayButtonIcon(button, "waiting");
+        this.markLineSkip(button, true);
+        return "unread";
+      };
+      const kept = this.lineEditRecord(button)?.skip;
+      if (kept === "skip") return unread();
       const analysis = edit.performance
         ? {
             ...edit.performance,
@@ -906,6 +1093,7 @@ export const dialogue = {
           }
         : await this.analyzeUtterance(button, { signal });
       this.assertChat(operation);
+      if (analysis.skip && kept !== "read") return unread();
       // In 음성 준비, a line of unclear speaker may be read with the default voice instead.
       const asDefault =
         skipUncertain &&
@@ -1098,11 +1286,15 @@ export const dialogue = {
     // lines 음성 준비 reads under a translation) go with the message as written. Then an analysis
     // made before a translation arrives still serves 음성 준비 after it. Translated lines on
     // screen go with the translated text.
-    if (
+    if (message && container?.dataset.svShown === "1") {
+      // The words on screen, read off screen (see sourceHost).
+      currentMessage = stripMarkup(shown || "");
+    } else if (
       message &&
       (!container?.isConnected ||
         !shown ||
         shown === message.mes ||
+        container.dataset.svPaired === "1" ||
         container.querySelector(".original_text"))
     ) {
       currentMessage = stripMarkup(

@@ -1,6 +1,7 @@
 // 분석 보기: a message's lines with who says each and how (the analysis the voices are made
 // from), in one window. From there chosen lines are analysed again, a line is put right by hand
-// (the line editor) or its voice is made again.
+// (the line editor), its voice is made again, or it is taken out of what is read (읽지 않음: a
+// piece in quotation marks that is no speech) and put back.
 
 import { escapeHtml, normalizeTags, tagsText } from "./common.js";
 
@@ -27,7 +28,8 @@ export const messageAnalysis = {
       ? (await this.keptMessageAnalyses(buttons[0])).analyses || []
       : [];
     return buttons.map((button, index) => {
-      const edit = this.lineEditOf(button);
+      const record = this.lineEditRecord(button);
+      const edit = record?.value || {};
       // A line with a voice but no analysis kept (an old message, or one analysed before an
       // update) shows how that voice was made: its record has the tagged line and the speaker.
       const made = this.lineAudioOf(button);
@@ -59,6 +61,8 @@ export const messageAnalysis = {
         edited: Boolean(edit.performance || edit.speaker_key),
         voiced: button.dataset.status === "ready",
         busy: ["queued", "generating"].includes(button.dataset.status),
+        skipped: record?.skip === "skip",
+        skippedAuto: record?.skip === "skip" && record.skip_auto === true,
       };
     });
   },
@@ -79,7 +83,7 @@ export const messageAnalysis = {
     dialog.innerHTML = `<form method="dialog">
       <header class="sv-dialog-head">
         <span class="sv-dialog-icon" aria-hidden="true"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
-        <div><h3>이 메시지의 대사 분석</h3><small>화자와 연기를 확인하고, 골라서 다시 분석하거나 고칩니다</small></div>
+        <div><h3>이 메시지의 대사 분석</h3><small>화자와 연기를 확인하고, 골라서 다시 분석하거나 고칩니다. 대사가 아닌 구간은 뺄 수 있습니다</small></div>
       </header>
       <label class="sv-ma-all"><input type="checkbox" data-ma-all><span>전체 선택</span><small data-ma-count></small></label>
       <ul class="sv-ma-list" data-ma-list></ul>
@@ -98,33 +102,49 @@ export const messageAnalysis = {
     const status = dialog.querySelector("[data-ma-status]");
     const chosen = new Set();
     let watch = null;
+    // Lines taken out of what is read can't be chosen.
+    const open = () => buttons.filter((button) => button.dataset.skip !== "1");
     const note = () => {
       dialog.querySelector("[data-ma-count]").textContent = chosen.size
         ? `${chosen.size}개 고름`
         : "";
-      all.checked = chosen.size === buttons.length;
-      all.indeterminate = chosen.size > 0 && chosen.size < buttons.length;
+      const count = open().length;
+      all.checked = count > 0 && chosen.size === count;
+      all.indeterminate = chosen.size > 0 && chosen.size < count;
+      all.disabled = !count;
       again.disabled = !chosen.size || again.dataset.busy === "1";
     };
     const draw = async () => {
       const rows = await this.messageAnalysisRows(buttons);
       if (!dialog.isConnected) return;
+      for (const [index, row] of rows.entries())
+        if (row.skipped) chosen.delete(index);
       list.innerHTML = rows
-        .map(
-          (row, index) => `<li class="sv-ma-line" data-index="${index}">
-            <input type="checkbox" data-ma-pick aria-label="${index + 1}번 대사를 다시 분석에 넣기" ${chosen.has(index) ? "checked" : ""}>
+        .map((row, index) => {
+          const off = row.skipped ? "disabled" : "";
+          return `<li class="sv-ma-line${row.skipped ? " sv-ma-skipped" : ""}" data-index="${index}">
+            <input type="checkbox" data-ma-pick aria-label="${index + 1}번 대사를 다시 분석에 넣기" ${chosen.has(index) ? "checked" : ""} ${off}>
             <div class="sv-ma-main">
-              <div class="sv-ma-meta"><strong>${escapeHtml(row.speaker)}</strong>${row.thought ? '<span class="sv-badge">생각</span>' : ""}${row.unsure ? '<span class="sv-badge sv-badge-warn">화자 확인 필요</span>' : ""}${row.edited ? '<span class="sv-badge">직접 고침</span>' : ""}${row.analysed ? "" : '<span class="sv-badge">분석 전</span>'}${row.voiced ? '<span class="sv-badge sv-badge-on">음성 있음</span>' : ""}</div>
-              <p class="sv-ma-script">${taggedHtml(row.script)}</p>
+              <div class="sv-ma-meta">${
+                row.skipped
+                  ? `<span class="sv-badge">${row.skippedAuto ? "읽지 않음 · 자동" : "읽지 않음"}</span>`
+                  : `<strong>${escapeHtml(row.speaker)}</strong>${row.thought ? '<span class="sv-badge">생각</span>' : ""}${row.unsure ? '<span class="sv-badge sv-badge-warn">화자 확인 필요</span>' : ""}${row.edited ? '<span class="sv-badge">직접 고침</span>' : ""}${row.analysed ? "" : '<span class="sv-badge">분석 전</span>'}${row.voiced ? '<span class="sv-badge sv-badge-on">음성 있음</span>' : ""}`
+              }</div>
+              <p class="sv-ma-script">${row.skipped ? escapeHtml(row.button.dataset.text || "") : taggedHtml(row.script)}</p>
             </div>
             <div class="sv-ma-tools">
-              <button type="button" class="sv-icon-btn" data-ma-play aria-label="${index + 1}번 대사 듣기" title="${row.voiced ? "듣기" : "음성을 만들어 듣기"}"><i class="fa-solid ${row.busy ? "fa-spinner fa-spin" : "fa-play"}" aria-hidden="true"></i></button>
-              <button type="button" class="sv-icon-btn" data-ma-reroll aria-label="${index + 1}번 대사 음성 재생성" title="음성 재생성: 같은 분석으로 목소리만 새로 만듭니다" ${row.busy ? "disabled" : ""}><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
-              <button type="button" class="sv-icon-btn" data-ma-edit aria-label="${index + 1}번 대사 고치기" title="고치기: 화자와 태그를 직접 바꿉니다"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
-              <button type="button" class="sv-icon-btn" data-ma-save aria-label="${index + 1}번 대사 음성 내려받기" title="${row.voiced ? "내려받기: 이 대사의 음성만 파일로(WAV)" : "음성을 만든 뒤에 내려받을 수 있습니다"}" ${row.voiced ? "" : "disabled"}><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+              <button type="button" class="sv-icon-btn" data-ma-play aria-label="${index + 1}번 대사 듣기" title="${row.voiced ? "듣기" : "음성을 만들어 듣기"}" ${off}><i class="fa-solid ${row.busy ? "fa-spinner fa-spin" : "fa-play"}" aria-hidden="true"></i></button>
+              <button type="button" class="sv-icon-btn" data-ma-reroll aria-label="${index + 1}번 대사 음성 재생성" title="음성 재생성: 같은 분석으로 목소리만 새로 만듭니다" ${row.busy || row.skipped ? "disabled" : ""}><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
+              <button type="button" class="sv-icon-btn" data-ma-edit aria-label="${index + 1}번 대사 고치기" title="고치기: 화자와 태그를 직접 바꿉니다" ${off}><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+              <button type="button" class="sv-icon-btn" data-ma-save aria-label="${index + 1}번 대사 음성 내려받기" title="${row.voiced ? "내려받기: 이 대사의 음성만 파일로(WAV)" : "음성을 만든 뒤에 내려받을 수 있습니다"}" ${row.voiced && !row.skipped ? "" : "disabled"}><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+              ${
+                row.skipped
+                  ? `<button type="button" class="sv-icon-btn" data-ma-skip="read" aria-label="${index + 1}번 구간 다시 읽기" title="다시 읽기: 이 구간을 대사로 되돌립니다"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>`
+                  : `<button type="button" class="sv-icon-btn" data-ma-skip="skip" aria-label="${index + 1}번 구간 읽지 않기" title="읽지 않음: 대사가 아닌 구간(강조, 제목 등)을 뺍니다. 재생 버튼이 사라지고 이어 듣기에서 건너뜁니다" ${row.busy ? "disabled" : ""}><i class="fa-solid fa-eye-slash" aria-hidden="true"></i></button>`
+              }
             </div>
-          </li>`,
-        )
+          </li>`;
+        })
         .join("");
       note();
       // A voice being made shows as done once it is.
@@ -138,9 +158,12 @@ export const messageAnalysis = {
     };
     all.addEventListener("change", () => {
       chosen.clear();
-      if (all.checked) buttons.forEach((_, index) => chosen.add(index));
+      if (all.checked)
+        buttons.forEach((button, index) => {
+          if (button.dataset.skip !== "1") chosen.add(index);
+        });
       list
-        .querySelectorAll("[data-ma-pick]")
+        .querySelectorAll("[data-ma-pick]:not(:disabled)")
         .forEach((box) => (box.checked = all.checked));
       note();
     });
@@ -160,7 +183,15 @@ export const messageAnalysis = {
       this.run(async () => {
         stale();
         if (tool.matches("[data-ma-play]")) this.handlePlayClick(button);
-        else if (tool.matches("[data-ma-save]"))
+        else if (tool.matches("[data-ma-skip]")) {
+          // Taken out while it sounds: it stops.
+          if (
+            tool.dataset.maSkip === "skip" &&
+            this.currentPlayButton === button
+          )
+            this.stopPlayback();
+          await this.saveLineSkip(button, tool.dataset.maSkip);
+        } else if (tool.matches("[data-ma-save]"))
           await this.downloadLineAudio(button);
         else if (tool.matches("[data-ma-reroll]"))
           this.handleRerollClick(button);

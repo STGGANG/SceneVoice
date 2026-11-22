@@ -140,6 +140,7 @@ export const lineEdits = {
         ]),
       ),
       reading: this.config.reading,
+      translated: this.config.playback?.translated_lines,
       language: this.config.default_language,
       analysis: this.config.analysis_enabled,
       casting: {
@@ -188,11 +189,70 @@ export const lineEdits = {
    * of its words changed (see looseLineOf).
    */
   lineEditOf(button, state = this.lineState) {
+    return this.lineEditRecord(button, state)?.value || {};
+  },
+  /** The record that edit is kept in (with 읽지 않음 beside it), or null. */
+  lineEditRecord(button, state = this.lineState) {
     const keys = this.lineKeys(button);
-    for (const key of keys)
-      if (state?.edits?.[key]) return state.edits[key].value || {};
-    if (keys.some((key) => state?.audio?.[key])) return {};
-    return state?.edits?.[this.looseLineOf(button, state)]?.value || {};
+    for (const key of keys) if (state?.edits?.[key]) return state.edits[key];
+    if (keys.some((key) => state?.audio?.[key])) return null;
+    return state?.edits?.[this.looseLineOf(button, state)] || null;
+  },
+  /** 읽지 않음: a line taken out of what is read has no button and is passed over. */
+  markLineSkip(button, skip) {
+    button.dataset.skip = skip ? "1" : "";
+    button
+      .closest(".sv-inline-actions")
+      ?.classList.toggle("sv-line-skipped", Boolean(skip));
+  },
+  /**
+   * Keeps a line as not read ("skip") or as read whatever an analysis says ("read"), beside the
+   * edit it has (kept under the line's own key, as keepLineEdit does). `auto`: what an analysis
+   * found (`skip` "skip" or ""), which never replaces what the user set themself.
+   */
+  async saveLineSkip(button, skip, auto = false) {
+    const operation = this.captureChat();
+    await button.lineSaving;
+    await this.loadLineState();
+    this.assertChat(operation);
+    const record = this.lineEditRecord(button);
+    if (
+      auto &&
+      ((record?.skip && !record.skip_auto) ||
+        (record?.skip === "skip") === (skip === "skip"))
+    )
+      return;
+    const key = this.lineIdentity(button);
+    const place = this.lineSpot(button);
+    const response = await this.request("/api/plugins/scenevoice/line-edits", {
+      method: "POST",
+      body: JSON.stringify({
+        line_key: key,
+        chat_id: this.currentChatId(),
+        value: record?.value || {},
+        place,
+        skip,
+        skip_auto: auto,
+        keep: this.lineBorrowsEdit(button),
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "대사 설정 저장 실패");
+    this.assertChat(operation);
+    if (key !== this.lineIdentity(button)) return;
+    this.lineState.edits[key] = this.editEntry(result, place);
+    this.lineState.loose = null;
+    this.markLineSkip(button, result.skip === "skip");
+  },
+  /** An edit as the chat's list holds it, from what the service answered. */
+  editEntry(result, place) {
+    return {
+      value: result.value,
+      place,
+      updated_at: new Date().toISOString(),
+      ...(result.skip ? { skip: result.skip } : {}),
+      ...(result.skip_auto ? { skip_auto: true } : {}),
+    };
   },
   /** Where a line stands: kept with its edit, as a voice's record keeps it. */
   lineSpot(button) {
@@ -406,7 +466,9 @@ export const lineEdits = {
       )
         continue;
       const key = this.lineIdentity(button);
-      const edit = this.lineEditOf(button, state);
+      const record = this.lineEditRecord(button, state);
+      const edit = record?.value || {};
+      this.markLineSkip(button, record?.skip === "skip");
       // A line whose message was analysed again is made again (the same acting comes back
       // from the saved voices without a new request).
       const audio = this.staleLines?.has(key)
@@ -474,11 +536,7 @@ export const lineEdits = {
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || "대사 설정 저장 실패");
     if (this.lineState) {
-      this.lineState.edits[key] = {
-        value: result.value,
-        place,
-        updated_at: new Date().toISOString(),
-      };
+      this.lineState.edits[key] = this.editEntry(result, place);
       this.lineState.loose = null;
     }
     return result.value;
@@ -510,11 +568,7 @@ export const lineEdits = {
       this.assertChat(operation);
       if (key !== this.lineIdentity(button))
         throw new DOMException("메시지가 변경되었습니다.", "AbortError");
-      this.lineState.edits[key] = {
-        value: result.value,
-        place,
-        updated_at: new Date().toISOString(),
-      };
+      this.lineState.edits[key] = this.editEntry(result, place);
       this.lineState.loose = null;
       delete this.lineState.audio[key];
       button.lineEdit = result.value;

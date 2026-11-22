@@ -3,7 +3,11 @@
 // the story's world reads my listener's story on air; "시나리오": a show in the flow of an
 // outline I wrote. Never part of the chat memory or any other prompt; each show only says where
 // in the chat it was made.
-import { escapeHtml, OVERHEARD_LENGTH_CHOICES } from "./common.js";
+import {
+  escapeHtml,
+  normalizePlace,
+  OVERHEARD_LENGTH_CHOICES,
+} from "./common.js";
 import {
   dataBlock,
   languageName,
@@ -165,6 +169,7 @@ export const radio = {
         withUser: people.some((person) => person.me),
         callers: callers.length ? (caller === "auto" ? "auto" : "chosen") : "",
         pastShows: pastShows.length > 0,
+        spatial: this.config.playback?.spatial !== false,
       }),
       [
         dataBlock("user_character", this.userCharacterName()),
@@ -240,13 +245,14 @@ export const radio = {
       .map((line) => ({
         speaker: speakerOf(line?.from),
         draft: this.normalizePhoneDraft(line),
+        side: normalizePlace(line).side,
       }))
       .filter(({ speaker, draft }) => speaker && draft.text)
       .slice(0, 40)
-      .map(({ speaker, draft }) => ({
+      .map(({ speaker, draft, side }) => ({
         speaker_key: speaker.key,
         speaker_name: speaker.name,
-        ...(speaker.caller ? { caller: true } : {}),
+        ...(speaker.caller ? { caller: true } : side ? { side } : {}),
         text: draft.text,
         script: draft.script,
         translation: draft.translation,
@@ -335,14 +341,9 @@ export const radio = {
     };
   },
 
-  /** 공간감: the hosts sit across the studio, each in a seat of their own; a caller has none. */
-  radioSeat(show, line) {
-    const seats = show.hosts?.length || 0;
-    const at = (show.hosts || []).findIndex(
-      (host) => host.key === line.speaker_key,
-    );
-    if (line.caller || seats < 2 || at < 0) return null;
-    return { pan: (at / (seats - 1)) * 0.7 - 0.35 };
+  /** 공간감: a line is in the middle unless the show's writer gave it a side; a caller has none. */
+  radioLineSide(line) {
+    return line.side && !line.caller ? { side: line.side } : null;
   },
 
   /** A line said by my character, voiced only when my persona has a voice. */
@@ -827,6 +828,7 @@ export const radio = {
         }</div>
       </div>`;
     this.applyPhoneWallpaper?.(body);
+    this.markSpeaking();
     const shell = document.getElementById("sv-smartphone");
     if (shell) shell.dataset.screen = "call";
     const leave = () => {
@@ -972,7 +974,8 @@ export const radio = {
       communicationFilter: this.shouldApplyCommunicationFilter("radio"),
       // A caller comes down the phone line; the hosts sound like the radio.
       radio: !line.caller,
-      place: this.radioSeat(show, line),
+      place: this.radioLineSide(line),
+      speaker: line.caller ? "" : line.speaker_key,
       onEnded: done,
       onStop: done,
     });
@@ -1174,7 +1177,8 @@ export const radio = {
               mixed: ready.mixed,
               communicationFilter: this.shouldApplyCommunicationFilter("radio"),
               radio: !line.caller,
-              place: this.radioSeat(show, line),
+              place: this.radioLineSide(line),
+              speaker: line.caller ? "" : line.speaker_key,
               onEnded: resolve,
               onStop: () => {
                 if (run.next === null) run.stopped = true;

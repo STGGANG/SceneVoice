@@ -276,7 +276,37 @@ export const panel = {
           ${multicastReads ? '<div class="sv-notice sv-notice-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>MultiCast 확장도 채팅 대사를 읽고 있습니다. 한 확장만 읽게 하십시오. 이쪽 ‘채팅 대사 읽기’를 끄면 씬보이스는 스마트폰만 씁니다.</span></div>' : ""}
           <div class="sv-row">
             ${switchHtml({ id: "sv-line-buttons", label: "대사별 재생 버튼", hint: '대사 옆의 스피커(<i class="fa-solid fa-volume-low sv-inline-icon" aria-hidden="true"></i>) 모양 버튼입니다. 누르면 그 대사만 만들어 들려줍니다. 끄면 이어 듣기 버튼으로만 듣습니다.', checked: config.playback?.line_buttons !== false })}
+            <div class="sv-field sv-basic-lines">
+              <div class="sv-label-line"><span id="sv-translated-label">대사별 재생 버튼: 번역 화면에서</span>${infoTip("번역 확장으로 번역문이 화면에 보일 때, 대사 옆 재생 버튼이 무엇을 읽을지 정합니다. (이어 듣기 버튼은 그 아래 설정을 따릅니다.)\n‘원문 읽기’는 번역문의 대사를 원문 대사와 순서대로 짝지어 원문을 읽습니다. 이어 듣기로 만든 원문 음성이 그대로 붙고, 번역을 다시 해서 번역문이 조금 달라져도 유지됩니다.\n‘화면 글자 읽기 (번역문)’는 보이는 번역문을 그대로 읽습니다.\n번역문과 원문의 대사 수나 순서가 다르면 짝을 맞추지 못할 수 있습니다. 그런 메시지는 대사 버튼이 흐려지고 누르면 알려 주며, 이어 듣기 버튼으로 들을 수 있습니다.", "번역 화면에서 대사별 재생 버튼 설명")}</div>
+              <div class="sv-seg" role="radiogroup" aria-labelledby="sv-translated-label">
+                ${[
+                  ["source", "원문 읽기"],
+                  ["shown", "화면 글자 읽기 (번역문)"],
+                ]
+                  .map(
+                    ([value, label]) =>
+                      `<label><input type="radio" name="sv-translated" value="${value}" ${(config.playback?.translated_lines || "source") === value ? "checked" : ""}><span>${label}</span></label>`,
+                  )
+                  .join("")}
+              </div>
+              <small class="sv-hint">원문과 짝이 안 맞는 메시지는 버튼이 흐려짐</small>
+            </div>
             ${switchHtml({ id: "sv-prepare", label: "전체 이어 듣기 버튼", hint: '메시지 버튼 줄의 파형(<i class="fa-solid fa-wave-square sv-inline-icon" aria-hidden="true"></i>) 모양 버튼입니다. 누르면 대사를 차례로 만들며 이어서 들려줍니다. 분석 보기(<i class="fa-solid fa-wand-magic-sparkles sv-inline-icon" aria-hidden="true"></i> 다시 분석·내려받기)는 ⋯ 안에 있습니다.', checked: config.playback?.prepare !== false })}
+            <div class="sv-field sv-basic-prepare">
+              <div class="sv-label-line"><span id="sv-translated-prepare-label">이어 듣기 버튼: 번역 화면에서</span>${infoTip("번역 확장으로 번역문이 화면에 보일 때, 메시지의 이어 듣기 버튼이 무엇을 읽을지 정합니다.\n‘원문 읽기’는 화면이 번역문이어도 원문 대사를 읽습니다.\n‘화면 글자 읽기 (번역문)’는 보이는 번역문을 읽습니다.\n원문과 번역문의 음성·분석은 따로 만들어집니다.", "번역 화면에서 이어 듣기 버튼 설명")}</div>
+              <div class="sv-seg" role="radiogroup" aria-labelledby="sv-translated-prepare-label">
+                ${[
+                  ["source", "원문 읽기"],
+                  ["shown", "화면 글자 읽기 (번역문)"],
+                ]
+                  .map(
+                    ([value, label]) =>
+                      `<label><input type="radio" name="sv-translated-prepare" value="${value}" ${(config.playback?.translated_prepare || "source") === value ? "checked" : ""}><span>${label}</span></label>`,
+                  )
+                  .join("")}
+              </div>
+              <small class="sv-hint">분석 보기와 전체 내려받기도 여기서 고른 글을 따름</small>
+            </div>
           </div>
           <div class="sv-row">
             ${switchHtml({ id: "sv-auto-play", cls: "sv-basic-prepare", label: "새 답변 자동 음성 생성", hint: "새 AI 답변이 오면 분석과 음성 생성까지 미리 해 둡니다. 재생은 버튼을 누를 때 합니다.", tip: "지난 메시지와 통화 중에는 만들지 않습니다.\n음성을 만드는 만큼 비용이 듭니다.", checked: config.playback?.auto_new === true })}
@@ -284,7 +314,7 @@ export const panel = {
           </div>
           <div class="sv-row">
             <div class="sv-field">
-              <div class="sv-label-line"><span id="sv-caption-label">읽고 있는 대사 자막</span>${infoTip("지금 읽는 대사를 한 줄로 띄웁니다.\n‘필요할 때만’은 화면의 대사와 짝이 맞지 않을 때(번역문만 보일 때)나 재생 버튼을 숨겼을 때 띄웁니다.\n자막을 누르면 멈추고, 한 번 더 누르면 멈춘 곳부터 이어 듣습니다.", "읽고 있는 대사 자막 설명")}</div>
+              <div class="sv-label-line"><span id="sv-caption-label">읽고 있는 대사 자막</span>${infoTip("지금 읽는 대사를 한 줄로 띄웁니다.\n‘필요할 때만’은 화면의 대사와 짝이 맞지 않을 때(번역문만 보일 때)나 재생 버튼을 숨겼을 때 띄웁니다.\n자막을 누르면 멈추고, 한 번 더 누르면 멈춘 곳부터 이어 듣습니다.\n자막 끝의 ×를 누르면 재생을 멈추고 자막을 닫습니다. (이어 듣기는 멈춘 곳부터 다시 들을 수 있음)", "읽고 있는 대사 자막 설명")}</div>
               <div class="sv-seg" role="radiogroup" aria-labelledby="sv-caption-label">
                 ${[
                   ["off", "끔"],
@@ -313,6 +343,24 @@ export const panel = {
                   .join("")}
               </div>
               <small class="sv-hint">위: 상단바 밑 · 아래: 입력창 위</small>
+            </div>
+          </div>
+          <div class="sv-row">
+            <div class="sv-field">
+              <div class="sv-label-line"><span id="sv-caption-translation-label">번역 화면의 자막</span></div>
+              <div class="sv-seg" role="radiogroup" aria-labelledby="sv-caption-translation-label">
+                ${[
+                  ["source", "원문만"],
+                  ["shown", "번역문만"],
+                  ["both", "둘 다"],
+                ]
+                  .map(
+                    ([value, label]) =>
+                      `<label><input type="radio" name="sv-caption-translation" value="${value}" ${(config.playback?.caption_translation || "both") === value ? "checked" : ""}><span>${label}</span></label>`,
+                  )
+                  .join("")}
+              </div>
+              <small class="sv-hint">원문을 읽는 동안 자막에 보일 글 · 둘 다: 원문 아래에 번역문</small>
             </div>
           </div>
           <div class="sv-pause-command">
@@ -421,7 +469,7 @@ export const panel = {
         })}
         ${this.soundNames?.().length ? switchHtml({ id: "sv-sfx-in-file", cls: "sv-sfx-only", label: "효과음도 음성 파일에 저장", hint: "전화·음성 메시지에 넣은 MultiCast 확장 효과음을 목소리와 섞어 저장해 기록·보관함·내려받기에서도 함께 들립니다.", tip: "끄면 실리태번에서 들을 때만 효과음이 섞여 나오고, 기록·보관함·내려받기에서는 목소리만 들립니다.", checked: config.phone?.sfx_in_file !== false }) : ""}
         </div>
-        ${switchHtml({ id: "sv-spatial", label: "공간감 및 좌우 효과", hint: "대사가 들리는 방향과 거리를 소리에 입힙니다. 이어폰에서 잘 느껴집니다.", tip: "대사를 분석할 때 좌·우와 가깝게·멀게·먹먹하게를 함께 정하고, 들을 때만 효과를 줍니다(만든 음성은 그대로).\n이미 분석한 메시지는 ‘분석 다시’ 뒤부터 적용됩니다.\n전화는 거리와 먹먹함만, 라디오는 진행자마다 자리를 나눕니다.", checked: config.playback?.spatial !== false })}
+        ${switchHtml({ id: "sv-spatial", label: "공간감 및 좌우 효과", hint: "대사가 들리는 방향과 거리를 소리에 입힙니다. 이어폰에서 잘 느껴집니다.", tip: "대사를 분석할 때 좌·우(말하면서 움직이면 그 움직임도)와 가깝게·멀게·먹먹하게를 함께 정하고, 들을 때만 효과를 줍니다(만든 음성은 그대로).\n이미 분석한 메시지는 ‘분석 다시’ 뒤부터 적용됩니다.\n전화는 거리와 먹먹함만 정합니다. 라디오는 가운데가 기본이고, 방송 내용상 필요할 때만 좌·우를 정합니다.", checked: config.playback?.spatial !== false })}
       </div>
       ${this.pronunciationSectionHtml(config)}
       ${subTitle("sv-sub-analysis-refs", "book-open", "분석에 참고할 자료", { cls: "sv-chat-only" })}
@@ -814,7 +862,7 @@ export const panel = {
     const overlay = document.createElement("div");
     overlay.id = "sv-overlay";
     overlay.innerHTML = `
-            <section id="sv-panel" class="${[config.phone?.app_enabled === false && "sv-phone-off", config.active === false && "sv-inactive", config.enabled === false && "sv-chat-off", config.playback?.prepare === false && "sv-prepare-off", config.elevenlabs?.sound_effects !== true && "sv-sfx-off", !config.casting?.auto_enabled && "sv-casting-off", !config.phone?.auto_enabled && "sv-auto-call-off", config.phone?.call_me === false && "sv-call-me-off", !config.voice_message?.enabled && "sv-auto-text-off", config.voice_message?.overheard_texts !== true && "sv-overheard-text-off", config.voice_message?.other_chats === false && "sv-other-chats-off", config.outreach?.enabled !== true && "sv-outreach-off", config.phone?.overheard_calls !== true && "sv-overheard-off", config.phone?.memo_app === false && "sv-memo-app-off", config.outreach?.mode === "random" && "sv-mode-random", config.outreach?.mode === "time" && "sv-mode-time", this.multicastVoiceSettings?.() && "sv-mc-engine"].filter(Boolean).join(" ")}" data-tab="settings" role="dialog" aria-modal="true" aria-labelledby="sv-panel-title">
+            <section id="sv-panel" class="${[config.phone?.app_enabled === false && "sv-phone-off", config.active === false && "sv-inactive", config.enabled === false && "sv-chat-off", config.playback?.prepare === false && "sv-prepare-off", config.playback?.line_buttons === false && "sv-lines-off", config.elevenlabs?.sound_effects !== true && "sv-sfx-off", !config.casting?.auto_enabled && "sv-casting-off", !config.phone?.auto_enabled && "sv-auto-call-off", config.phone?.call_me === false && "sv-call-me-off", !config.voice_message?.enabled && "sv-auto-text-off", config.voice_message?.overheard_texts !== true && "sv-overheard-text-off", config.voice_message?.other_chats === false && "sv-other-chats-off", config.outreach?.enabled !== true && "sv-outreach-off", config.phone?.overheard_calls !== true && "sv-overheard-off", config.phone?.memo_app === false && "sv-memo-app-off", config.outreach?.mode === "random" && "sv-mode-random", config.outreach?.mode === "time" && "sv-mode-time", this.multicastVoiceSettings?.() && "sv-mc-engine"].filter(Boolean).join(" ")}" data-tab="settings" role="dialog" aria-modal="true" aria-labelledby="sv-panel-title">
                 <header class="sv-header">
                     <span class="sv-logo" aria-hidden="true"><i class="fa-solid fa-microphone-lines"></i></span>
                     <div class="sv-title"><strong id="sv-panel-title">씬보이스</strong></div>
@@ -1202,6 +1250,7 @@ export const panel = {
       ["sv-active", "sv-inactive"],
       ["sv-enabled", "sv-chat-off"],
       ["sv-prepare", "sv-prepare-off"],
+      ["sv-line-buttons", "sv-lines-off"],
       ["sv-eleven-sfx", "sv-sfx-off"],
       ["sv-casting-auto", "sv-casting-off"],
       ["sv-phone-auto", "sv-auto-call-off"],
@@ -1639,6 +1688,21 @@ export const panel = {
         prepare: document.getElementById("sv-prepare").checked,
         spatial: document.getElementById("sv-spatial")?.checked !== false,
         level: document.getElementById("sv-level")?.checked !== false,
+        caption_translation:
+          document.querySelector('input[name="sv-caption-translation"]:checked')
+            ?.value ||
+          this.config.playback?.caption_translation ||
+          "both",
+        translated_prepare:
+          document.querySelector('input[name="sv-translated-prepare"]:checked')
+            ?.value ||
+          this.config.playback?.translated_prepare ||
+          "source",
+        translated_lines:
+          document.querySelector('input[name="sv-translated"]:checked')
+            ?.value ||
+          this.config.playback?.translated_lines ||
+          "source",
       },
       casting: {
         auto_enabled: document.getElementById("sv-casting-auto").checked,

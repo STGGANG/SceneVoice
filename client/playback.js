@@ -1,6 +1,7 @@
 // Playback: two reusable audio players (see audioPlayer), the call filter and the thought
 // effect, short message tones, and voices joined into files to save.
 import { stOf } from "./common.js";
+import { MOVING_SIDES, sideAt } from "../shared/place.js";
 import { pcm16, wavFromParts } from "./wav.js";
 
 // A saved file is cut every 30 minutes, so a long conversation stays within a phone's memory.
@@ -41,9 +42,42 @@ export const playback = {
       tail.connect(nodes[0]);
       tail = nodes.at(-1);
       wired.push(...nodes);
+      if (nodes.sway) this.swayWith(audio, context, nodes.sway);
     }
     this.currentAudioNodes = [...wired, ...this.toSpeakers(context, tail)];
     return context;
+  },
+
+  /**
+   * A voice that moves while its line is said (see sideAt): the lean follows the player's own
+   * time, so a pause or a jump in the line keeps them together. It aims a moment ahead and
+   * glides there, on every frame and on the player's own ticks (frames stop in a hidden tab).
+   * Ends by itself once its nodes are no longer the ones playing.
+   */
+  swayWith(audio, context, { panner, side, reach }) {
+    const AHEAD = 0.15;
+    const at = (ahead) =>
+      sideAt(side, (audio.currentTime || 0) + ahead, audio.duration) * reach;
+    let placed = false;
+    const follow = () => {
+      if (!this.currentAudioNodes.includes(panner)) {
+        audio.removeEventListener("timeupdate", follow);
+        return false;
+      }
+      // Where a crossing starts depends on the line's length, known only once it has loaded.
+      if (!placed && audio.duration > 0) {
+        placed = true;
+        panner.pan.setValueAtTime(at(0), context.currentTime);
+      }
+      if (!audio.paused)
+        panner.pan.setTargetAtTime(at(AHEAD), context.currentTime, AHEAD);
+      return true;
+    };
+    const frame = () => {
+      if (follow()) requestAnimationFrame(frame);
+    };
+    audio.addEventListener("timeupdate", follow);
+    requestAnimationFrame(frame);
   },
 
   /**
@@ -63,7 +97,7 @@ export const playback = {
 
   /**
    * `aside`: a remark in the background on a call (someone near the phone): fainter, duller.
-   * `place`: how the voice reaches the phone (before the line), or a seat on the radio (after it).
+   * `place`: how the voice reaches the phone (before the line), or a side on the radio (after it).
    */
   connectCommunicationAudioFilter(
     audio,
@@ -112,12 +146,13 @@ export const playback = {
   },
 
   /**
-   * 공간감: where a voice is heard from. `side` leans it a little to the left or right (never
-   * all the way: a wrong guess must not grate); `pan` sets the lean itself (a seat on the radio).
+   * 공간감: where a voice is heard from. `side` leans it to the left or right (never all the
+   * way: a wrong guess must not grate), or moves it between the two as the line is said (the
+   * nodes then carry `sway` for swayWith).
    * `space`: close (fuller, a touch louder), far (thin, quiet, in a room) or muffled (dull, as
    * through a door).
    */
-  placeNodes(context, { side = "", space = "", pan = null } = {}) {
+  placeNodes(context, { side = "", space = "" } = {}) {
     const input = context.createGain();
     const nodes = [input];
     let tail = input;
@@ -148,12 +183,15 @@ export const playback = {
       filter("lowpass", 3400);
       level(0.5);
     }
-    const lean =
-      pan ??
-      (side === "left" ? -1 : side === "right" ? 1 : 0) *
-        (space === "close" ? 0.5 : 0.35);
-    if (lean && context.createStereoPanner)
-      add(context.createStereoPanner()).pan.value = lean;
+    const reach = space === "close" ? 0.725 : 0.575;
+    const moves = MOVING_SIDES.includes(side);
+    const lean = sideAt(side) * reach;
+    let sway = null;
+    if ((lean || moves) && context.createStereoPanner) {
+      const panner = add(context.createStereoPanner());
+      panner.pan.value = lean;
+      if (moves) sway = { panner, side, reach };
+    }
     const output = context.createGain();
     tail.connect(output);
     if (space === "far") {
@@ -166,7 +204,34 @@ export const playback = {
       nodes.push(room, wet);
     }
     nodes.push(output);
+    if (sway) nodes.sway = sway;
     return nodes;
+  },
+
+  /**
+   * Whose picture on a call or radio screen pulses: the one whose voice sounds now. Called with
+   * no key after such a screen is drawn again, to mark it as it is.
+   */
+  markSpeaking(key = this.speakingKey || "") {
+    this.speakingKey = key;
+    document
+      .querySelectorAll(
+        "#sv-smartphone .sv-call-identity .sv-phone-avatar[data-key]",
+      )
+      .forEach((avatar) =>
+        avatar.classList.toggle(
+          "sv-speaking",
+          Boolean(key) && avatar.dataset.key === key,
+        ),
+      );
+  },
+
+  /** Who says a call's line, as their picture is keyed; nobody for a remark from behind. */
+  turnSpeaker(session, turn) {
+    if (!turn || turn.aside) return "";
+    return turn.role === "user"
+      ? this.personaKey()
+      : turn.speaker_key || session?.character_key || "";
   },
 
   /** A call line's place: how the voice reaches the phone. */
@@ -403,6 +468,7 @@ export const playback = {
       aside = false,
       radio = false,
       place = null,
+      speaker = "",
       level = 1,
       onEnded = null,
       onStop = null,
@@ -432,6 +498,7 @@ export const playback = {
       previous.onerror = null;
       previous.pause();
       this.currentAudio = null;
+      this.markSpeaking("");
       this.currentAudioNodes.forEach((node) => {
         try {
           node.disconnect();
@@ -477,6 +544,7 @@ export const playback = {
     this.currentPlayButton = button;
     this.currentAudioObjectUrl = revokeObjectUrl ? url : "";
     button?.classList.add("sv-playing");
+    this.markSpeaking(speaker);
     const chatLine = Boolean(button?.classList?.contains("sv-play-btn"));
     if (chatLine) this.showNowReading(button, audio);
     else this.hideNowReading(true);
@@ -551,6 +619,7 @@ export const playback = {
       audio.onerror = null;
       this.playToken += 1;
       this.markPaused(false);
+      this.markSpeaking("");
       button?.classList.remove("sv-playing");
       if (chatLine) this.hideNowReading();
       this.currentAudioNodes.forEach((node) => {
@@ -781,6 +850,8 @@ export const playback = {
       const part = parts[index++];
       this.playAudio(part, button, part === url && revoke, {
         ...options,
+        // A sound before or after the words isn't the person speaking.
+        speaker: part === url ? options.speaker : "",
         onEnded: next,
       });
     };
@@ -790,15 +861,19 @@ export const playback = {
   /**
    * 읽는 대사 자막: the line being read, in a strip under 실리태번's top bar. "auto" shows it only
    * for lines read off screen (the original behind a translation). Lines take over from one
-   * another without the strip blinking; a line wider than the strip glides sideways once, over
-   * about as long as it is spoken.
+   * another without the strip blinking; a line wraps onto a second line, and one longer than
+   * two moves up line by line as it is spoken.
    */
   showNowReading(button, audio = null, waiting = false) {
     const mode = this.config.playback?.caption || "always";
     const text = String(button.dataset.text || "").trim();
-    // "auto": a line read off screen, or one whose play buttons are hidden.
+    // The words on screen for it, when a translation is there and the line as written is read.
+    const shown = String(button.dataset.shownText || "").trim();
+    // "auto": a line read off screen or in other words than the screen shows, or one whose
+    // play buttons are hidden.
     const unseen =
       !button.isConnected ||
+      Boolean(shown) ||
       document.body.classList.contains("sv-hide-line-buttons");
     if (mode === "off" || (mode === "auto" && !unseen) || !text) {
       this.hideNowReading(true);
@@ -813,11 +888,13 @@ export const playback = {
       bar.setAttribute("aria-live", "polite");
       bar.title = "누르면 멈춤 · 이어 듣기";
       bar.innerHTML =
-        '<i class="sv-now-reading-icon fa-solid fa-pause" aria-hidden="true"></i><span class="sv-now-reading-who" hidden></span><div class="sv-now-reading-window"><span class="sv-now-reading-text"></span></div>' +
-        '<span class="sv-now-steps" hidden><button type="button" data-step="-1" aria-label="앞 대사" title="앞 대사"><i class="fa-solid fa-backward-step" aria-hidden="true"></i></button><button type="button" data-step="1" aria-label="다음 대사" title="다음 대사"><i class="fa-solid fa-forward-step" aria-hidden="true"></i></button></span>';
+        '<span class="sv-now-reading-who" hidden><i class="sv-now-reading-icon fa-solid fa-pause" aria-hidden="true"></i><span class="sv-now-reading-name"></span></span><div class="sv-now-reading-window"><span class="sv-now-reading-lines"><span class="sv-now-reading-text"></span></span><span class="sv-now-reading-sub" hidden></span></div>' +
+        '<i class="sv-now-sep" aria-hidden="true"></i><span class="sv-now-steps" hidden><button type="button" data-step="-1" aria-label="앞 대사" title="앞 대사"><i class="fa-solid fa-backward-step" aria-hidden="true"></i></button><button type="button" data-step="1" aria-label="다음 대사" title="다음 대사"><i class="fa-solid fa-forward-step" aria-hidden="true"></i></button></span>' +
+        '<button type="button" class="sv-now-close" aria-label="멈추고 닫기" title="멈추고 닫기"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
       bar.addEventListener("click", (event) => {
         const step = event.target.closest("[data-step]");
-        if (step) this.stepMessageLine(Number(step.dataset.step));
+        if (event.target.closest(".sv-now-close")) this.closeNowReading();
+        else if (step) this.stepMessageLine(Number(step.dataset.step));
         else this.togglePause();
       });
       document.body.appendChild(bar);
@@ -835,50 +912,58 @@ export const playback = {
     if (bottom) this.placeNowReading(bar);
     const label = bar.querySelector(".sv-now-reading-text");
     const token = (this.nowReadingToken = (this.nowReadingToken || 0) + 1);
-    const glide = (overflow) => {
-      const spoken = audio?.duration;
-      const seconds =
-        Number.isFinite(spoken) && spoken > 2 ? spoken - 1 : overflow / 30 + 3;
-      label.style.setProperty(
-        "--sv-scroll-time",
-        `${Math.max(4, seconds).toFixed(1)}s`,
-      );
-    };
     // Who is speaking, in a small tag on the strip's top edge (no room taken from the line).
     const who = bar.querySelector(".sv-now-reading-who");
+    // 번역 화면의 자막: the line read, the words on screen in its place, or under it.
+    const words = this.config.playback?.caption_translation;
+    const other = shown && shown !== text ? shown : "";
     const swap = () => {
       if (token !== this.nowReadingToken) return;
-      label.textContent = text;
+      label.textContent = other && words === "shown" ? other : text;
+      const sub = bar.querySelector(".sv-now-reading-sub");
+      if (sub) {
+        sub.textContent = words === "source" || words === "shown" ? "" : other;
+        sub.hidden = !sub.textContent;
+        bar.classList.toggle("sv-with-sub", !sub.hidden);
+      }
       if (who) {
-        who.textContent = waiting
+        who.querySelector(".sv-now-reading-name").textContent = waiting
           ? "생성 중"
           : button.dataset.speakerName || "";
-        who.hidden = !who.textContent;
+        this.syncNowTag(bar);
       }
       label.classList.toggle("sv-thought", button.dataset.kind === "thought");
       label.classList.remove("sv-scroll");
+      label.style.removeProperty("--sv-shift");
       requestAnimationFrame(() => {
         if (token !== this.nowReadingToken) return;
         const room = label.parentElement;
-        // A long line gets soft edges and more room; measured again with them.
-        bar.classList.toggle(
-          "sv-long",
-          label.scrollWidth - room.clientWidth > 4,
-        );
-        const overflow = label.scrollWidth - room.clientWidth;
-        if (overflow > 4) {
-          label.style.setProperty("--sv-shift", `${-overflow}px`);
-          glide(overflow);
-          // The length is known a moment later; the glide waits a second before it moves.
-          audio?.addEventListener(
-            "loadedmetadata",
-            () => {
-              if (token === this.nowReadingToken) glide(overflow);
-            },
-            { once: true },
-          );
-          label.classList.add("sv-scroll");
+        // (The line height the stylesheet gives the words.)
+        const LINE = 22;
+        // Measured as a one-line strip (a wide screen has a rule on either side of that one).
+        bar.classList.remove("sv-tall");
+        bar.classList.toggle("sv-tall", label.offsetHeight > LINE * 1.5);
+        // Past two lines: soft edges, and the rest comes up as it is spoken.
+        const overflow = label.offsetHeight - room.clientHeight;
+        bar.classList.toggle("sv-long", overflow > 4);
+        if (overflow > 4 && audio) {
+          // The words move up a whole line at a time, so that the line being spoken (by how far
+          // the sound is) stays among the two in view.
+          const rows = Math.round(overflow / LINE);
+          const follow = () => {
+            if (token !== this.nowReadingToken) {
+              audio.removeEventListener("timeupdate", follow);
+              return;
+            }
+            const length = audio.duration;
+            if (!Number.isFinite(length) || length <= 0) return;
+            const spoken = (audio.currentTime / length) * (rows + 2);
+            const top = Math.min(rows, Math.max(0, Math.floor(spoken - 0.5)));
+            label.style.setProperty("--sv-shift", `${-top * LINE}px`);
+          };
+          audio.addEventListener("timeupdate", follow);
         }
+        label.classList.toggle("sv-scroll", overflow > 4);
         label.classList.remove("sv-swap");
       });
     };
@@ -922,6 +1007,24 @@ export const playback = {
     if (run)
       steps.lastElementChild.disabled =
         run.state.position >= run.buttons.length - 1;
+  },
+
+  /**
+   * The strip's ×: the sound stops and the strip goes. For 이어 듣기 it is the message's own stop
+   * (the making stops with it, and it goes on from this line when pressed again).
+   */
+  closeNowReading() {
+    clearTimeout(this.nowWaitingTimer);
+    const run = this.messageRun;
+    const job =
+      run &&
+      [...this.messageJobs].find(([, held]) => held.playback === run.state);
+    if (job) this.queueMessageGeneration(null, job[0]);
+    else {
+      if (run) run.state.stopped = true;
+      this.stopPlayback();
+    }
+    this.hideNowReading(true);
   },
 
   /** Hides the strip; by default after a moment, so the next line in a row can take over. */
@@ -1052,6 +1155,19 @@ export const playback = {
     const icon = bar.querySelector(".sv-now-reading-icon");
     icon?.classList.toggle("fa-pause", !paused);
     icon?.classList.toggle("fa-play", paused);
+    this.syncNowTag(bar);
+  },
+
+  /**
+   * The tag on the strip's top edge: the speaker's name, with ▶ before it while paused (the tag
+   * alone carries it when there is no name) and a spinner while the line is being made.
+   */
+  syncNowTag(bar) {
+    const who = bar.querySelector(".sv-now-reading-who");
+    if (!who) return;
+    who.hidden =
+      !who.querySelector(".sv-now-reading-name")?.textContent &&
+      !bar.classList.contains("sv-paused");
   },
 
   /** /sv-pause: the same 멈춤 / 이어 듣기, for a QR button (or typed). */

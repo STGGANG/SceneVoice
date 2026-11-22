@@ -2441,6 +2441,17 @@
 .sv-utterance {
   display: inline;
 }
+/* A translation whose lines don't match the message's own: its buttons make nothing. */
+[data-sv-unpaired="1"] .sv-inline-actions {
+  opacity: 0.4;
+}
+[data-sv-unpaired="1"] .sv-inline-actions .sv-more-btn {
+  display: none;
+}
+/* 읽지 않음: a piece taken out of what is read has no buttons. */
+.sv-inline-actions.sv-line-skipped {
+  display: none !important;
+}
 .sv-inline-actions {
   display: inline-flex;
   align-items: center;
@@ -7947,6 +7958,7 @@ i.sv-reach-all::after {
 #sv-panel:not(.sv-mode-time) .sv-mode-time-only,
 #sv-panel.sv-inactive #sv-group-chat,
 #sv-panel.sv-chat-off .sv-basic-chat,
+#sv-panel.sv-lines-off .sv-basic-lines,
 #sv-panel.sv-prepare-off .sv-basic-prepare {
   /* Over the settings rows' own display (a row laid out as a grid would show again). */
   display: none !important;
@@ -7964,6 +7976,16 @@ i.sv-reach-all::after {
 }
 /* 대사 옆 재생 버튼 off: the buttons stay in place (음성 준비 reads them) but out of sight. */
 body.sv-hide-line-buttons .sv-inline-actions {
+  display: none !important;
+}
+/* 대사별 재생 버튼 off: the line being read still shows its speaker icon while it sounds. */
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing):not(.sv-line-skipped) {
+  display: inline-flex !important;
+}
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing)
+  > :not(.sv-play-btn) {
   display: none !important;
 }
 #sv-panel.sv-phone-off
@@ -8076,11 +8098,11 @@ body.sv-hide-line-buttons .sv-inline-actions {
   z-index: 2147483540;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   box-sizing: border-box;
   width: max-content;
   max-width: min(720px, calc(100vw - 32px));
-  padding: 6px 16px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--sv-now-ink) 16%, transparent);
   /* Opaque: the theme tint is often see-through, and the words must read over any chat. */
@@ -8102,15 +8124,6 @@ body.sv-hide-line-buttons .sv-inline-actions {
   transition:
     opacity 0.25s ease,
     transform 0.25s ease;
-}
-#sv-now-reading::before,
-#sv-now-reading::after {
-  content: "";
-  flex: 0 1 auto;
-  width: 40px;
-  min-width: 14px;
-  height: 1px;
-  background: color-mix(in srgb, var(--sv-now-ink) 38%, transparent);
 }
 #sv-now-reading.sv-shown {
   opacity: 1;
@@ -8134,41 +8147,68 @@ body.sv-hide-line-buttons .sv-inline-actions {
   /* The chat is at 30; paused captions yield to drawers and overlay windows. */
   z-index: 31;
 }
+/* In the name tag: ▶ while paused, a spinner while the line is being made; nothing while it
+   plays. */
 #sv-now-reading .sv-now-reading-icon {
-  order: -1;
-  flex: 0 0 auto;
-  margin-right: -4px;
-  font-size: 10px;
-  opacity: 0.55;
+  display: none;
+  margin-right: 4px;
+  font-size: 8px;
+}
+#sv-now-reading.sv-paused .sv-now-reading-icon,
+#sv-now-reading.sv-waiting .sv-now-reading-icon {
+  display: inline-block;
+}
+#sv-now-reading
+  .sv-now-reading-who:has(.sv-now-reading-name:empty)
+  .sv-now-reading-icon {
+  margin-right: 0;
 }
 #sv-now-reading.sv-waiting .sv-now-reading-text {
   opacity: 0.55;
 }
-#sv-now-reading.sv-paused .sv-now-reading-icon {
-  opacity: 0.9;
-}
 #sv-now-reading.sv-paused .sv-now-reading-window {
   opacity: 0.5;
-}
-#sv-now-reading.sv-paused .sv-now-reading-text.sv-scroll {
-  animation-play-state: paused;
 }
 @supports (color: rgb(from red r g b / 1)) {
   #sv-now-reading {
     background: rgb(from var(--SmartThemeBlurTintColor, #1d1f24) r g b / 1);
   }
 }
+/* A wide screen keeps a rule on either side of a one-line caption. (Not shrinkable: a line
+   too long for them wraps, and two lines have none.) */
+@media (min-width: 760px) {
+  #sv-now-reading:not(.sv-tall):not(.sv-with-sub)::before,
+  #sv-now-reading:not(.sv-tall):not(.sv-with-sub)::after {
+    content: "";
+    flex: none;
+    width: 40px;
+    height: 1px;
+    margin: 0 4px;
+    background: color-mix(in srgb, var(--sv-now-ink) 38%, transparent);
+  }
+}
+/* A hairline between the line and the buttons. */
+#sv-now-reading .sv-now-sep {
+  order: 1;
+  flex: none;
+  /* A width, not a flex basis: the strip is as wide as its parts (max-content), and Firefox
+     and WebKit count a basis-only part as nothing, which wraps the line a pixel early. */
+  width: 1px;
+  height: 14px;
+  background: color-mix(in srgb, var(--sv-now-ink) 24%, transparent);
+}
 /* ‹ › at the strip's right end, while a message's lines play in a row. */
 #sv-now-reading .sv-now-steps {
   order: 1;
   display: inline-flex;
   flex: 0 0 auto;
-  margin: -8px -10px -8px -6px;
+  margin: -8px -10px -8px -8px;
 }
 #sv-now-reading .sv-now-steps[hidden] {
   display: none;
 }
-#sv-now-reading .sv-now-steps > button {
+#sv-now-reading .sv-now-steps > button,
+#sv-now-reading .sv-now-close {
   appearance: none;
   margin: 0;
   padding: 8px 9px;
@@ -8182,10 +8222,21 @@ body.sv-hide-line-buttons .sv-inline-actions {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-#sv-now-reading .sv-now-steps > button:hover {
+/* ×, last: stops the sound and the strip goes. */
+#sv-now-reading .sv-now-close {
+  order: 2;
+  flex: 0 0 auto;
+  margin: -8px -10px -8px -8px;
+}
+#sv-now-reading .sv-now-steps:not([hidden]) ~ .sv-now-close {
+  margin-left: 0;
+}
+#sv-now-reading .sv-now-steps > button:hover,
+#sv-now-reading .sv-now-close:hover {
   opacity: 1;
 }
-#sv-now-reading .sv-now-steps > button:focus-visible {
+#sv-now-reading .sv-now-steps > button:focus-visible,
+#sv-now-reading .sv-now-close:focus-visible {
   outline: 2px solid var(--sv-now-ink);
   outline-offset: -4px;
   border-radius: 999px;
@@ -8224,34 +8275,61 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
-#sv-now-reading.sv-long .sv-now-reading-window {
-  flex: 1 1 auto;
+/* The line read: two lines at most are in view. */
+#sv-now-reading .sv-now-reading-lines {
+  display: block;
+  max-height: 44px;
+  overflow: hidden;
+}
+/* The words on screen (a translation) under the line as it is read. */
+#sv-now-reading .sv-now-reading-sub {
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.68;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+#sv-now-reading .sv-now-reading-sub[hidden] {
+  display: none;
+}
+/* More than one line of words: corners instead of round ends. */
+#sv-now-reading.sv-with-sub,
+#sv-now-reading.sv-tall {
+  border-radius: 18px;
+}
+/* Longer than two lines: soft edges above and below while it moves. */
+#sv-now-reading.sv-long .sv-now-reading-lines {
   -webkit-mask-image: linear-gradient(
-    90deg,
+    180deg,
     transparent,
-    #000 14px,
-    #000 calc(100% - 14px),
+    #000 4px,
+    #000 calc(100% - 4px),
     transparent
   );
   mask-image: linear-gradient(
-    90deg,
+    180deg,
     transparent,
-    #000 14px,
-    #000 calc(100% - 14px),
+    #000 4px,
+    #000 calc(100% - 4px),
     transparent
   );
 }
 #sv-now-reading .sv-now-reading-text {
-  display: inline-block;
+  display: block;
   padding: 0 2px;
+  line-height: 22px;
+  text-wrap: balance;
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
-}
-#sv-now-reading.sv-long .sv-now-reading-text {
-  padding: 0 14px;
 }
 #sv-now-reading .sv-now-reading-text.sv-swap {
   opacity: 0;
@@ -8261,18 +8339,12 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   font-style: italic;
   opacity: 0.88;
 }
+/* Longer than two lines: moved up a line at a time (the script sets how far). */
 #sv-now-reading .sv-now-reading-text.sv-scroll {
-  animation: sv-now-scroll var(--sv-scroll-time, 8s) linear 1s 1 both;
-}
-@keyframes sv-now-scroll {
-  0%,
-  6% {
-    transform: translateX(0);
-  }
-  94%,
-  100% {
-    transform: translateX(var(--sv-shift, 0));
-  }
+  transform: translateY(var(--sv-shift, 0));
+  transition:
+    opacity 0.16s ease,
+    transform 0.4s ease;
 }
 @media (prefers-reduced-motion: reduce) {
   #sv-now-reading,
@@ -8280,7 +8352,7 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
     transition: none;
   }
   #sv-now-reading .sv-now-reading-text.sv-scroll {
-    animation: none;
+    transition: none;
   }
 }
 
@@ -9371,6 +9443,31 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   height: 60px;
   font-size: 22px;
 }
+/* Whoever's voice sounds now on a call or radio screen: their picture breathes, faintly. */
+#sv-smartphone .sv-call-screen .sv-call-identity .sv-phone-avatar.sv-speaking {
+  animation: sv-speaking 1.5s ease-in-out infinite;
+}
+@keyframes sv-speaking {
+  from,
+  to {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.2);
+    transform: scale(1.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sv-smartphone
+    .sv-call-screen
+    .sv-call-identity
+    .sv-phone-avatar.sv-speaking {
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.28);
+    animation: none;
+  }
+}
+
 /* ‹ › beside 그만 듣기: the line before or after. */
 #sv-smartphone .sv-listen-controls {
   align-items: center;
@@ -11248,6 +11345,9 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   gap: 10px;
   padding: 10px 10px 10px 12px;
   border-top: 1px solid var(--sv-line);
+}
+.sv-ma-line.sv-ma-skipped .sv-ma-main {
+  opacity: 0.5;
 }
 .sv-ma-line:first-child {
   border-top: 0;

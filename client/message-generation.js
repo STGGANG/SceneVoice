@@ -1,6 +1,5 @@
 // 음성 준비: makes a message's lines one by one and plays them in order, starting as soon as
 // the first is ready (the next ones are made while one plays).
-import { extractSegments } from "../shared/segments.js";
 import { withoutVoiceTags, stOf } from "./common.js";
 
 // Lines made before 음성 준비 starts to play, and again when playing catches up with the making.
@@ -167,7 +166,10 @@ export const messageGeneration = {
       await this.hydrateLines(source ? source.host : container);
     }
     const ready = buttons.filter(
-      (line) => line.dataset.status === "ready" && line.dataset.audioUrl,
+      (line) =>
+        line.dataset.status === "ready" &&
+        line.dataset.audioUrl &&
+        line.dataset.skip !== "1",
     );
     if (!ready.length)
       throw new Error(
@@ -196,37 +198,26 @@ export const messageGeneration = {
 
   /**
    * With a translation on screen (a translation extension shows message.extra.display_text and keeps
-   * the source in message.mes), 음성 준비 reads the source text: its lines, off screen.
+   * the source in message.mes), 음성 준비 reads the source text, or the words shown when set to
+   * (playback.translated_prepare): its lines, off screen. None when the lines on screen are
+   * the ones it reads.
    */
   sourceLineButtons(container) {
     const messageId = container.closest(".mes")?.getAttribute("mesid");
-    const context = stOf(this) || {};
-    const message = context.chat?.[Number(messageId)];
-    const shown = message?.extra?.display_text;
-    if (!message || !shown || shown === message.mes) return null;
-    // The original shown beside its translation already has its own buttons.
-    if (container.querySelector(".original_text")) return null;
-    const written = withoutVoiceTags(message.mes);
-    const source =
-      typeof context.substituteParams === "function"
-        ? context.substituteParams(written, context.name1, message.name)
-        : written;
-    const segments = extractSegments(source, this.config.reading);
-    if (!segments.length) return null;
-    // A detached copy of the message: its text for the analysis, a button per source line.
-    const host = document.createElement("div");
-    host.className = "mes_text";
-    host.textContent = source;
-    segments.forEach((segment, index) =>
-      host.append(
-        this.createButtonGroup(segment.text, messageId, index, segment.kind),
-      ),
-    );
-    return {
-      host,
-      source,
-      buttons: [...host.querySelectorAll(".sv-play-btn")],
-    };
+    const message = stOf(this)?.chat?.[Number(messageId)];
+    if (!this.translationShown(container, message)) return null;
+    const playback = this.config.playback || {};
+    let source;
+    if (playback.translated_prepare === "shown") {
+      // The buttons on screen read those very words.
+      if (playback.translated_lines === "shown") return null;
+      source = this.sourceHost(messageId, message, true);
+    } else {
+      // The lines on screen already stand for the message's own (see pairSourceLines).
+      if (container.dataset.svPaired === "1") return null;
+      source = this.sourceHost(messageId, message);
+    }
+    return source.buttons.length ? source : null;
   },
 
   /**
@@ -254,7 +245,9 @@ export const messageGeneration = {
         }),
       ]);
     const playable = (button) =>
-      button.dataset.status === "ready" && button.dataset.audioUrl;
+      button.dataset.status === "ready" &&
+      button.dataset.audioUrl &&
+      button.dataset.skip !== "1";
     try {
       let index = first;
       while (index < buttons.length) {
@@ -334,7 +327,11 @@ export const messageGeneration = {
     // In the breath between two lines the next one is already the place: › just ends the breath.
     let target = step > 0 && run.between ? now : now + step;
     if (step < 0) {
-      while (target >= 0 && buttons[target].dataset.status !== "ready")
+      while (
+        target >= 0 &&
+        (buttons[target].dataset.status !== "ready" ||
+          buttons[target].dataset.skip === "1")
+      )
         target--;
       if (target < 0) target = now;
     } else if (target >= buttons.length) return false;
@@ -376,6 +373,24 @@ export const messageGeneration = {
       control.title = "멈추는 중입니다. 이미 만든 음성은 남습니다.";
       return;
     }
+    // Its translation is still being drawn (see messageBusy): started once that is done, for a
+    // few minutes at most.
+    clearTimeout(control.svHoldTimer);
+    if (this.messageBusy(container)) {
+      control.svHeld = (control.svHeld || 0) + 1;
+      if (control.svHeld < 450)
+        control.svHoldTimer = setTimeout(() => {
+          if (
+            control.isConnected &&
+            container.isConnected &&
+            !this.messageJobs.has(control)
+          )
+            this.queueMessageGeneration(container, control, { silent });
+        }, 400);
+      else control.svHeld = 0;
+      return;
+    }
+    control.svHeld = 0;
     const operation = this.captureChat();
     const source = this.sourceLineButtons(container);
     const buttons = source

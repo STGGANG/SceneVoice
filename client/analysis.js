@@ -230,6 +230,10 @@ export const analysis = {
           : 0.5,
         direction: tags.join(", "),
         ...normalizePlace(item),
+        // Plainly no speech (a word set off for emphasis, a title): not read. Never a thought.
+        ...(item.skip === true && utterance.kind !== "thought"
+          ? { skip: true }
+          : {}),
       };
     });
   },
@@ -241,6 +245,15 @@ export const analysis = {
       item.dataset.emotion = analysis.emotion;
       item.dataset.side = analysis.side || "";
       item.dataset.space = analysis.space || "";
+      this.saveLineSkip?.(item, analysis.skip ? "skip" : "", true).catch(
+        (error) => {
+          if (error.name !== "AbortError")
+            console.warn(
+              "[SceneVoice] 읽지 않음 표시를 저장하지 못했습니다.",
+              error,
+            );
+        },
+      );
       const speaker = this.resolvedSpeaker(item, analysis);
       this.applyLineVisibility?.(item, speaker.key);
       // The speaker menu's first choice names who the analysis heard (kept for a menu made later).

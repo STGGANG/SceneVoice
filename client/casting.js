@@ -494,7 +494,7 @@ export const casting = {
           <span class="sv-member-checks">
             ${entry.persona ? "" : this.castNoStateCheck(entry)}
             <label class="sv-check sv-chat-only"><input type="checkbox" data-field="skip_voice" ${entry.skip_voice ? "checked" : ""}><span>이어 듣기에서 건너뛰기</span>${infoTip("메시지의 이어 듣기 버튼으로 들을 때 이 인물의 대사를 빼고 만듭니다.\n대사 옆 재생 버튼을 직접 누르면 만들 수 있습니다.", "이어 듣기에서 건너뛰기 설명")}</label>
-            <label class="sv-check sv-chat-only"><input type="checkbox" data-field="hide_button" ${entry.hide_button ? "checked" : ""}><span>대사 옆 버튼 숨기기</span>${infoTip("이 인물의 대사 옆 버튼을 숨깁니다.\n화자가 정해진 뒤부터 숨겨지고, 이어 듣기에서도 빠집니다.", "대사 옆 버튼 숨기기 설명")}</label>
+            <label class="sv-check sv-chat-only"><input type="checkbox" data-field="hide_button" ${entry.hide_button ? "checked" : ""}><span>대사 옆 버튼 숨기기 (이어 듣기에서도 건너뜀)</span>${infoTip("이 인물의 대사 옆 버튼을 숨깁니다.\n화자가 정해진 뒤부터 숨겨지고, 이어 듣기에서도 빠집니다.", "대사 옆 버튼 숨기기 설명")}</label>
           </span>
           <span class="sv-actions">
             ${this.castMoveButton(entry)}
