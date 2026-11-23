@@ -26,8 +26,8 @@ const MODE_LABEL = { talk: "토크", story: "사연", scenario: "시나리오" }
 // The show's music: up front and under the first line, then under the last and after it. None
 // when the file isn't there.
 const MUSIC_URL = new URL("./assets/radio-music.mp3", import.meta.url).href;
-const MUSIC_UP = 0.5;
-const MUSIC_UNDER = 0.22;
+const MUSIC_UP = 0.43;
+const MUSIC_UNDER = 0.19;
 const MUSIC_LEAD = 2.2;
 const MUSIC_TAIL = 8.2;
 const MUSIC_OUTRO_FROM = 8;
@@ -1056,7 +1056,18 @@ export const radio = {
     // Music with no voice over it counts as media too (an iPhone in silent mode: see BufferPlayer).
     const player = this.audioPlayer(true);
     player.hold?.(source);
-    source.onended = () => player.release?.(source);
+    const letGo = () => player.release?.(source);
+    source.onended = letGo;
+    // By the clock as well: a context that stopped running never says the music ended, and
+    // the silent element would stay on. Held on while the show is paused on purpose.
+    let timer = 0;
+    const letGoAfter = (seconds) => {
+      clearTimeout(timer);
+      timer = setTimeout(
+        () => (this.pauseSuspended ? letGoAfter(1) : letGo()),
+        seconds * 1000,
+      );
+    };
     const bed = {
       follow(points) {
         const now = context.currentTime;
@@ -1070,11 +1081,7 @@ export const radio = {
         } catch {
           /* already stopping */
         }
-        // A context closed meanwhile never says the music ended.
-        setTimeout(
-          () => context.state === "closed" && player.release?.(source),
-          (length + 1) * 1000,
-        );
+        letGoAfter(length + 1);
       },
       stop: () => bed.follow([[0.3, 0]]),
     };
@@ -1083,6 +1090,8 @@ export const radio = {
       gain.gain.setValueAtTime(0, now);
       for (const [time, level] of levels)
         gain.gain.linearRampToValueAtTime(level, now + time);
+      // (Until `follow` says when it ends: no longer than any show's last line could take.)
+      letGoAfter(600);
     } else bed.follow(levels);
     (this.radioBeds ||= []).push(bed);
     return bed;

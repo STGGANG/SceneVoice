@@ -134,13 +134,12 @@ export function cleanScript(script, line) {
   let value = String(script ?? "")
     .replace(/\r\n?/g, "\n")
     .trim();
-  if (!value || value.length > 12000) return "";
+  if (!value) return "";
   value = value.replace(TAG, (_, tag) => {
     const clean = cleanTag(tag);
     return clean ? `[${clean}]` : " ";
   });
-  const count = scriptTags(value).length;
-  if (!count || count > 16) return "";
+  if (!scriptTags(value).length) return "";
   // Spacing aside: a tag between Japanese words may bring a space the line didn't have.
   if (line !== undefined && !keepsLine(value, line)) return "";
   return value;
@@ -178,7 +177,7 @@ export function normalizeTags(input = {}) {
       seen.add(key);
       return true;
     })
-    .slice(0, input.script ? 16 : 4);
+    .slice(0, input.script ? Infinity : 4);
 }
 
 /** The emotion word of a tag list, for badges and filters; "default" when none matches. */
@@ -195,8 +194,7 @@ export function tagEmotion(tags, fallback = "default") {
 /** `matchScript: false` only for a saved manual edit, whose line is not sent with it. */
 export function normalizeSpeech(input, { matchScript = true } = {}) {
   const spoken = String(input.text ?? "").trim();
-  if (!spoken || spoken.length > 10000)
-    throw new UserError("대사는 1~10,000자여야 합니다.");
+  if (!spoken) throw new UserError("대사가 비어 있습니다.");
   const script = cleanScript(input.script, matchScript ? spoken : undefined);
   // A script that changed the words still says how the line starts: keep its leading tags.
   const lead = /^(?:\s*\[[^\[\]\r\n]+\])+/.exec(String(input.script || ""));
@@ -367,8 +365,6 @@ export function buildSpeechRequest(settings, raw) {
     throw new UserError(
       `${config.model}는 연기 지시 포함 ${traits.maxChars.toLocaleString("ko-KR")}자까지 지원합니다. 대사를 나눠 주십시오.`,
     );
-  if (spoken.length > 10000 && !traits)
-    throw new UserError("연기 지시를 포함한 대사가 10,000자를 초과했습니다.");
   // A line performed with more feeling than usual (intensity above 0.5) loosens the engine's own
   // consistency setting a little: up to a quarter of the way from the user's value to its loose
   // end at intensity 1. The user's value stays the rule for ordinary lines.

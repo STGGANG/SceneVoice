@@ -617,7 +617,7 @@ export const lineEdits = {
         ${fieldHtml({ id: "sv-edit-speaker", label: "화자", control: '<select id="sv-edit-speaker"></select>' })}
         ${fieldHtml({ id: "sv-edit-language", label: "언어", control: `<select id="sv-edit-language">${LANGUAGE_CHOICES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select>` })}
       </div>
-      ${fieldHtml({ id: "sv-edit-script", label: "태그 넣은 대사", control: '<textarea id="sv-edit-script" rows="3" maxlength="12000" autocomplete="off" spellcheck="false"></textarea>', hint: "대사 글자는 그대로 두고 [대괄호] 태그만 넣거나 빼십시오. 감정·말투는 맨 앞에, 소리는 커서 자리에 들어갑니다." })}
+      ${fieldHtml({ id: "sv-edit-script", label: "태그 넣은 대사", control: '<textarea id="sv-edit-script" rows="3" autocomplete="off" spellcheck="false"></textarea>', hint: "대사 글자는 그대로 두고 [대괄호] 태그만 넣거나 빼십시오. 감정·말투는 맨 앞에, 소리는 커서 자리에 들어갑니다." })}
       <p class="sv-script-check" id="sv-edit-script-check" role="status"></p>
       <div class="sv-tag-group"><span>감정·말투</span><div class="sv-tag-picks" data-place="lead" role="group" aria-label="감정·말투 태그를 맨 앞에 넣기">${chips(tagSuggestions(this.availableEmotions))}</div></div>
       <div class="sv-tag-group"><span>소리</span><div class="sv-tag-picks" data-place="cursor" role="group" aria-label="소리 태그를 커서 자리에 넣기">${chips(SOUND_TAGS)}</div></div>

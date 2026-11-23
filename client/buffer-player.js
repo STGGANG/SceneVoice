@@ -100,6 +100,8 @@ export class BufferPlayer extends EventTarget {
     this.keeper = silentLoop();
     this.blessed = false;
     this.holds = new Set();
+    // The silent element follows the sound itself: off whenever the context is not running.
+    context.addEventListener?.("statechange", () => this.sync());
     this.onended = null;
     this.onerror = null;
     this.volume = 1;
@@ -195,9 +197,16 @@ export class BufferPlayer extends EventTarget {
   bless() {
     if (this.blessed || this.node || this.holds.size) return;
     this.blessed = true;
-    Promise.resolve(this.keeper.play())
-      .then(() => this.rest())
+    const keeper = this.keeper;
+    // Muted for this one: an unmuted play, even of silence, would stop another app's music.
+    keeper.muted = true;
+    Promise.resolve(keeper.play())
+      .then(() => {
+        keeper.muted = false;
+        this.sync();
+      })
       .catch(() => {
+        keeper.muted = false;
         this.blessed = false;
       });
   }
@@ -208,17 +217,26 @@ export class BufferPlayer extends EventTarget {
    */
   hold(key) {
     this.holds.add(key);
-    Promise.resolve(this.keeper.play()).catch(() => undefined);
+    this.sync();
   }
 
   release(key) {
     this.holds.delete(key);
-    this.rest();
+    this.sync();
   }
 
-  /** The silent element stops once neither a voice nor anything held needs it. */
-  rest() {
-    if (!this.node && !this.holds.size) this.keeper.pause();
+  /**
+   * The silent element plays only while something sounds: a voice or something held, through a
+   * running context. Otherwise it is paused (left on, a phone shows the page as playing and
+   * keeps other apps' sound away for nothing).
+   */
+  sync() {
+    const sounding =
+      (this.node || this.holds.size) && this.context.state === "running";
+    if (sounding) {
+      this.keeper.muted = false;
+      Promise.resolve(this.keeper.play()).catch(() => undefined);
+    } else this.keeper.pause();
   }
 
   pause() {
@@ -246,7 +264,7 @@ export class BufferPlayer extends EventTarget {
     this.offset = from;
     this.startedAt = this.context.currentTime;
     node.start(0, from);
-    Promise.resolve(this.keeper.play()).catch(() => undefined);
+    this.sync();
     this.ticker = setInterval(
       () => this.dispatchEvent(new Event("timeupdate")),
       TICK,
@@ -259,7 +277,7 @@ export class BufferPlayer extends EventTarget {
     const node = this.node;
     this.node = null;
     if (!node) return;
-    this.rest();
+    this.sync();
     node.onended = null;
     try {
       node.stop();

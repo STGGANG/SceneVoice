@@ -261,26 +261,31 @@ export const playback = {
     const presence = context.createBiquadFilter();
     const compressor = context.createDynamicsCompressor();
     highpass.type = "highpass";
-    highpass.frequency.value = 160;
+    highpass.frequency.value = 130;
     lowpass.type = "lowpass";
-    lowpass.frequency.value = 6000;
+    lowpass.frequency.value = 7500;
     warmth.type = "lowshelf";
     warmth.frequency.value = 220;
-    warmth.gain.value = 2;
+    warmth.gain.value = 1.5;
     presence.type = "peaking";
     presence.frequency.value = 2500;
     presence.Q.value = 0.8;
-    presence.gain.value = 2.5;
+    presence.gain.value = 1.8;
     compressor.threshold.value = -18;
-    compressor.ratio.value = 3;
+    compressor.ratio.value = 2.4;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.2;
+    // The lifts and the compressor's make-up gain took a loud file past full scale: a little
+    // room is left after them.
+    const trim = context.createGain();
+    trim.gain.value = 0.9;
     highpass
       .connect(lowpass)
       .connect(warmth)
       .connect(presence)
-      .connect(compressor);
-    return [highpass, lowpass, warmth, presence, compressor];
+      .connect(compressor)
+      .connect(trim);
+    return [highpass, lowpass, warmth, presence, compressor, trim];
   },
 
   asideNodes(context) {
@@ -298,17 +303,18 @@ export const playback = {
     const lowpass = context.createBiquadFilter();
     const presence = context.createBiquadFilter();
     const compressor = context.createDynamicsCompressor();
-    // Kept light: a phone's narrower band, not a tinny line (it tired the ear at 300–4500 Hz).
+    // Kept light: a phone's narrower band, not a tinny line (it tired the ear at 300–4500 Hz;
+    // eased a little more since: 200–6000 Hz with +1.5 dB and a ratio of 2 was still a lot).
     highpass.type = "highpass";
-    highpass.frequency.value = 200;
+    highpass.frequency.value = 170;
     lowpass.type = "lowpass";
-    lowpass.frequency.value = 6000;
+    lowpass.frequency.value = 7000;
     presence.type = "peaking";
     presence.frequency.value = 1800;
     presence.Q.value = 0.9;
-    presence.gain.value = 1.5;
+    presence.gain.value = 1;
     compressor.threshold.value = -18;
-    compressor.ratio.value = 2;
+    compressor.ratio.value = 1.7;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.12;
     highpass.connect(lowpass).connect(presence).connect(compressor);
