@@ -1,5 +1,6 @@
 // Playback: two reusable audio players (see audioPlayer), the call filter and the thought
 // effect, short message tones, and voices joined into files to save.
+import { BufferPlayer } from "./buffer-player.js";
 import { stOf } from "./common.js";
 import { MOVING_SIDES, sideAt } from "../shared/place.js";
 import { pcm16, wavFromParts } from "./wav.js";
@@ -432,27 +433,36 @@ export const playback = {
   },
 
   /**
-   * The page's two audio players, kept for the whole visit: a phone browser lets an element
-   * play later (a reply voiced after a wait) only if that element already played during a tap.
-   * One plays clean; the other feeds Web Audio for the call filter and the thought effect (an
-   * element can be wired to Web Audio only once, and then always sounds through it).
+   * The page's two audio players, kept for the whole visit. The clean one is an element: a
+   * phone browser lets it play later (a reply voiced after a wait) only if it already played
+   * during a tap. The other sounds through Web Audio, for every effect and for 음량 맞춤: a
+   * BufferPlayer, or an element where there is no Web Audio.
    */
   audioPlayer(effect = false) {
     const key = effect ? "effectAudioElement" : "plainAudioElement";
     const context = this.communicationAudioContext;
-    // Wired to an audio context that was closed since: that element can't sound any more.
-    if (effect && this[key]?.svSource && this[key].svSource.context !== context)
+    // Made for an audio context that was closed since, or before there was one: a new player.
+    if (
+      effect &&
+      context &&
+      this[key] &&
+      (this[key].svSource?.context !== context ||
+        !(this[key] instanceof BufferPlayer))
+    )
       this[key] = null;
     if (!this[key]) {
-      const audio = new Audio();
-      audio.preload = "auto";
-      if (effect) audio.crossOrigin = "anonymous";
-      this[key] = audio;
+      if (effect && context) this[key] = new BufferPlayer(context);
+      else {
+        const audio = new Audio();
+        audio.preload = "auto";
+        if (effect) audio.crossOrigin = "anonymous";
+        this[key] = audio;
+      }
     }
     return this[key];
   },
 
-  /** The Web Audio source of the effect player, made once per element. */
+  /** Where the effects are wired from: the effect player's own node (see BufferPlayer). */
   mediaSource(audio, context) {
     audio.svSource ||= context.createMediaElementSource(audio);
     return audio.svSource;
@@ -491,6 +501,8 @@ export const playback = {
     const stopped = this.currentAudioStop;
     this.currentAudioStop = null;
     stopped?.();
+    this.currentAudioAway?.();
+    this.currentAudioAway = null;
     if (this.currentAudio) {
       const previous = this.currentAudio;
       this.playToken = (this.playToken || 0) + 1;
@@ -617,6 +629,8 @@ export const playback = {
       // page comes back) must not show "can't play" for audio that played fine.
       audio.onended = null;
       audio.onerror = null;
+      this.currentAudioAway?.();
+      this.currentAudioAway = null;
       this.playToken += 1;
       this.markPaused(false);
       this.markSpeaking("");
@@ -688,45 +702,88 @@ export const playback = {
       return audio.play();
     };
     const sounding = () => !audioContext || audioContext.state === "running";
-    // A phone may leave the context "interrupted" (another app, a tab switch), not just suspended,
-    // and its resume() may never settle outside a tap: playing is tried after a moment anyway.
-    const resume = sounding()
-      ? Promise.resolve()
-      : Promise.race([
-          audioContext.resume(),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
-        ]);
-    Promise.resolve(resume)
-      .then(() => {
-        if (!live() || this.playbackPaused) return;
-        if (!sounding()) return playClean();
-        const effectPlayer = audio;
-        const clock = audioContext?.currentTime;
-        // Running by its state, but its clock doesn't move: a context the browser left stuck.
-        // The next tap makes a new one (see unlockAudioForMobile).
-        if (audioContext)
-          setTimeout(() => {
-            if (!live() || this.playbackPaused || audio !== effectPlayer)
-              return;
-            const stuck = sounding() && audioContext.currentTime === clock;
-            if (!stuck && sounding()) return;
-            if (stuck) this.audioContextStuck = audioContext;
-            playClean().catch(() => undefined);
-          }, 700);
-        return audio.play();
-      })
-      .catch((error) => {
-        if (!live() || error.name === "AbortError") return;
-        this.notify(
-          error.name === "NotAllowedError"
-            ? "음성이 준비되었습니다. 브라우저에서 자동 재생을 막았으니 재생 버튼을 한 번 더 눌러 주십시오."
-            : `재생 실패: ${error.message}`,
-          error.name === "NotAllowedError" ? "info" : "error",
-        );
-        this.currentAudioStop = null;
-        cleanup();
-        onStop?.();
-      });
+    // Away from the page (another tab or app) a phone browser may leave the audio asleep or
+    // refuse to start a sound. That is not a failure: the play waits for the page to come back
+    // (a show playing in a row would otherwise end there, line after line).
+    let waitingBack = null;
+    const afterBack = (then) => {
+      document.removeEventListener("visibilitychange", waitingBack);
+      waitingBack = () => {
+        if (document.hidden) return;
+        document.removeEventListener("visibilitychange", waitingBack);
+        waitingBack = null;
+        if (live()) then();
+      };
+      document.addEventListener("visibilitychange", waitingBack);
+    };
+    const begin = () => {
+      // A phone may leave the context "interrupted", not just suspended, and its resume() may
+      // never settle outside a tap: playing is tried after a moment anyway.
+      const resume = sounding()
+        ? Promise.resolve()
+        : Promise.race([
+            audioContext.resume(),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+          ]);
+      Promise.resolve(resume)
+        .then(() => {
+          if (!live() || this.playbackPaused) return;
+          if (!sounding())
+            return document.hidden ? afterBack(begin) : playClean();
+          const effectPlayer = audio;
+          const clock = audioContext?.currentTime;
+          // Running by its state, but its clock doesn't move: a context the browser left stuck.
+          // The next tap makes a new one (see unlockAudioForMobile).
+          if (audioContext)
+            setTimeout(() => {
+              if (!live() || this.playbackPaused || audio !== effectPlayer)
+                return;
+              const stuck = sounding() && audioContext.currentTime === clock;
+              if (!stuck && sounding()) return;
+              if (document.hidden) return afterBack(begin);
+              if (stuck) this.audioContextStuck = audioContext;
+              playClean().catch(() => undefined);
+            }, 700);
+          return audio.play();
+        })
+        .catch((error) => {
+          if (!live() || error.name === "AbortError") return;
+          // A file the effect player can't decode may still play as it is.
+          if (error.svUnplayable && audio !== this.plainAudioElement)
+            return playClean().catch(() => failed());
+          if (document.hidden) return afterBack(begin);
+          this.notify(
+            error.name === "NotAllowedError"
+              ? "음성이 준비되었습니다. 브라우저에서 자동 재생을 막았으니 재생 버튼을 한 번 더 눌러 주십시오."
+              : `재생 실패: ${error.message}`,
+            error.name === "NotAllowedError" ? "info" : "error",
+          );
+          this.currentAudioStop = null;
+          cleanup();
+          onStop?.();
+        });
+    };
+    // Back on the page with the voice held where the audio fell asleep: it goes on once the
+    // audio wakes (see lifecycle's `back`), or from the clean player if it doesn't.
+    const back = () => {
+      if (document.hidden || waitingBack) return;
+      setTimeout(() => {
+        if (
+          !live() ||
+          this.playbackPaused ||
+          sounding() ||
+          audio === this.plainAudioElement
+        )
+          return;
+        playClean().catch(() => undefined);
+      }, 1500);
+    };
+    document.addEventListener("visibilitychange", back);
+    this.currentAudioAway = () => {
+      document.removeEventListener("visibilitychange", back);
+      document.removeEventListener("visibilitychange", waitingBack);
+    };
+    begin();
   },
 
   /**

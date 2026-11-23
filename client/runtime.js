@@ -405,6 +405,8 @@ export const runtime = {
     this.stopSideSounds?.();
     this.hideNowReading?.(true);
     this.syncPublicState?.({ playing: false });
+    this.currentAudioAway?.();
+    this.currentAudioAway = null;
     if (this.currentAudio) {
       this.currentAudio.onended = null;
       this.currentAudio.onerror = null;
