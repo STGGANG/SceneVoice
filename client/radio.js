@@ -15,7 +15,7 @@ import {
   radioFinal,
   radioSystem,
 } from "./prompts.js";
-import { pcm16, wavFromParts } from "./wav.js";
+import { pcm16Track, wavFromParts } from "./wav.js";
 
 const RADIO_TOKENS = { short: 1800, normal: 3200, long: 4800 };
 // 기억: the shows kept on record that the next one is given whole (newest few), and where the
@@ -1277,6 +1277,7 @@ export const radio = {
           turn,
           filter,
           radio: !line.caller,
+          place: this.radioLineSide(line),
         });
     }
     return { clips, left: show.lines.length - clips.length };
@@ -1290,7 +1291,7 @@ export const radio = {
       gap: LINE_GAP,
       lead: MUSIC_LEAD,
       tail: MUSIC_TAIL,
-      mix: (data, rate, lines) => {
+      mix: (channels, rate, lines) => {
         if (!lines.length) return;
         const source = music.getChannelData(0);
         const level = (points, time) => {
@@ -1308,15 +1309,16 @@ export const radio = {
         };
         const lay = (at, from, points) => {
           const until = Math.min(
-            data.length,
+            channels[0].length,
             Math.round((at + points.at(-1)[0]) * rate),
           );
           for (let i = Math.max(0, Math.round(at * rate)); i < until; i++) {
             const time = i / rate - at;
-            data[i] +=
+            const value =
               source[
                 Math.floor((from + time) * music.sampleRate) % source.length
               ] * level(points, time);
+            for (const data of channels) data[i] += value;
           }
         };
         lay(lines[0].start - MUSIC_LEAD, 0, introLevels());
@@ -1324,9 +1326,11 @@ export const radio = {
         lay(last.start, MUSIC_OUTRO_FROM, outroLevels(last.end - last.start));
         // Kept from clipping where the music meets a loud line.
         let peak = 0;
-        for (const value of data) peak = Math.max(peak, Math.abs(value));
+        for (const data of channels)
+          for (const value of data) peak = Math.max(peak, Math.abs(value));
         if (peak > 0.98)
-          for (let i = 0; i < data.length; i++) data[i] *= 0.98 / peak;
+          for (const data of channels)
+            for (let i = 0; i < data.length; i++) data[i] *= 0.98 / peak;
       },
     };
   },
@@ -1344,7 +1348,11 @@ export const radio = {
         await this.radioTrackOptions(context),
       );
       this.saveFile(
-        wavFromParts([pcm16(track.getChannelData(0))], track.sampleRate),
+        wavFromParts(
+          [pcm16Track(track)],
+          track.sampleRate,
+          track.numberOfChannels,
+        ),
         `${this.radioFileName(show)}.wav`,
       );
     } finally {

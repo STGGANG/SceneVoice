@@ -135,6 +135,7 @@ function deliveryRules({ perSpeaker = false, soundEffects = false } = {}) {
     "- [smooch] is the sound of a kiss: for when the character kisses, or blows a kiss, right then. In an intimate moment it may also go wherever such a sound fits, kiss or not.",
     "## Intimate moments",
     "- In a sexual or physically intimate moment the voice is part of the scene, so such a line is performed, not merely read. Where the scene, the speaker's personality and how far things have gone support it, let breath and voice sounds through as inline tags, placed where the sound would really escape (such as [moans], [soft moan], [gasps], [groans], [whimpers], [panting], [shaky breath], [exhales], [smooch]), with delivery tags to match ([breathless], [husky], [strained], [whispers]). For the opening tags, prefer ones that say how the voice physically sounds ([breathless], [whispering], [voice trembling], [husky and low]) over ones that only name a feeling ([aroused], [sensual]): the voice engine follows a sound more readily than a mood. Here such sounds are expected rather than rare: most lines carry at least one inline breath or voice sound (a line with only its opening tags reads flat), several in a line are fine when the moment is that intense, and a calmer beat still gets fewer. The emotional range below still holds: someone reserved lets out a held breath or a stifled sound where someone open moans aloud, and a range of very_restrained still means no inline sounds.",
+    "- Match the sound to the voice that will make it: with a male voice the engine often performs [moans], [soft moan] and [whimpers] higher and more feminine than the speaker, so for a male speaker lean towards [groans], [low groan], [grunts], [heavy breathing] or [sharp exhale], unless a higher sound is plainly his.",
     "## Emotional range",
     `- Keep each character's emotional range. ${perSpeaker ? "The speaker's" : "The character's"} performance_note and personality set how much feeling reaches the voice, so name a feeling the way this person lets it show, not at its full strength inside: a reserved character who is angry gets [quietly irritated] or [clipped] rather than [angry]; one who is moved gets [soft] or [slightly unsteady] rather than [emotional]. Start from that baseline and move only as far as the scene clearly pushes; explicit shouting or crying in the scene can override it.${perSpeaker ? " Never apply one speaker's note to another speaker." : ""}`,
     `- The user can set a character's range directly (${perSpeaker ? "range in <speakers>" : "the range attribute on <performance_note>"}), and it outranks your own reading of their personality: very_restrained = almost no feeling reaches the voice even in a crisis, with at most one mild tag and no inline sounds; restrained = understated even in big moments, with few, mild tags and seldom an inline sound; normal = follow the performance_note and personality; expressive = feelings show openly, and fuller tags and sounds are fine where the scene supports them; very_expressive = feelings pour out, and strong tags, laughter, sobs or a raised voice are fine whenever the scene gives a reason.`,
@@ -165,7 +166,8 @@ function deliveryRules({ perSpeaker = false, soundEffects = false } = {}) {
           "- a laugh already written out -> Haha, okay, that's funny. -> [amused] Haha, okay, that's funny.",
           "- habitual restraint + irritation, nothing audible in the narration -> Please stop. -> [irritated][quiet][clipped] Please stop.",
           "- looking back on a choice -> It was the best choice back then. -> [calm][reflective][matter-of-fact] It was the best choice back then.",
-          "- an intimate moment, an open speaker -> Don't stop… right there. -> [breathless] Don't stop… [soft moan] right there.",
+          "- an intimate moment, an open woman -> Don't stop… right there. -> [breathless] Don't stop… [soft moan] right there.",
+          "- the same from an open man -> Don't stop… right there. -> [breathless][husky] Don't stop… [low groan] right there.",
           "- nothing to go on -> Okay. -> Okay.",
         ]
       : [
@@ -176,7 +178,8 @@ function deliveryRules({ perSpeaker = false, soundEffects = false } = {}) {
           "- a sweet goodnight to a partner, sending a kiss over the phone -> [sleepy][soft] Night. [smooch] See you in my dreams.",
           "- caught off guard, buying time -> [flustered] Oh, that's… [clears throat] it's nothing.",
           "- a dry, reserved character who is touched -> [soft] …Thanks. I mean it.",
-          "- an intimate moment on a call, an open character -> [breathless] Don't stop… [soft moan] right there.",
+          "- an intimate moment on a call, an open woman -> [breathless] Don't stop… [soft moan] right there.",
+          "- the same from an open man -> [breathless][husky] Don't stop… [low groan] right there.",
           "- an ordinary goodbye -> [casual] Okay, see you later.",
         ]),
   ]);

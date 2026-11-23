@@ -717,6 +717,7 @@ export const callHistory = {
           revoke,
           turn,
           filter: this.shouldApplyCommunicationFilter("phone", turn),
+          place: this.turnPlace(turn),
         });
       else if (captions && turn.role === "user" && turn.text)
         clips.push({ silent: true, turn });

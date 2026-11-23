@@ -201,12 +201,27 @@ export function avatar(image, name, size) {
   return canvas;
 }
 
+// Bits a second for the sound, with one channel and with two.
+const SOUND_BITS = [128_000, 192_000];
+
+/** A track's channels folded into one. */
+function monoOf(track, audio) {
+  const mono = audio.createBuffer(1, track.length, track.sampleRate);
+  const out = mono.getChannelData(0);
+  for (let channel = 0; channel < track.numberOfChannels; channel++) {
+    const data = track.getChannelData(channel);
+    for (let i = 0; i < data.length; i++)
+      out[i] += data[i] / track.numberOfChannels;
+  }
+  return mono;
+}
+
 const canEncode = () =>
   ["VideoEncoder", "AudioEncoder", "VideoFrame", "AudioData"].every(
     (name) => typeof window[name] === "function",
   );
 
-async function encodesHere(rate) {
+async function encodesHere(rate, channels = 1) {
   if (!canEncode()) return false;
   try {
     const [video, sound] = await Promise.all([
@@ -214,8 +229,8 @@ async function encodesHere(rate) {
       AudioEncoder.isConfigSupported({
         codec: AUDIO_CODEC,
         sampleRate: rate,
-        numberOfChannels: 1,
-        bitrate: 128_000,
+        numberOfChannels: channels,
+        bitrate: SOUND_BITS[channels - 1],
       }),
     ]);
     return Boolean(video.supported && sound.supported);
@@ -237,6 +252,7 @@ const bytesOf = (source) =>
 /** Made directly, as fast as the browser encodes: the frames one by one and the voices at once. */
 async function encodeVideo(canvas, draw, track, duration, view) {
   const rate = track.sampleRate;
+  const channels = track.numberOfChannels;
   const video = {
     width: WIDTH,
     height: HEIGHT,
@@ -247,7 +263,7 @@ async function encodeVideo(canvas, draw, track, duration, view) {
   };
   const sound = {
     timescale: rate,
-    channels: 1,
+    channels,
     samples: [],
     durations: [],
     description: null,
@@ -283,17 +299,24 @@ async function encodeVideo(canvas, draw, track, duration, view) {
     audioEncoder.configure({
       codec: AUDIO_CODEC,
       sampleRate: rate,
-      numberOfChannels: 1,
-      bitrate: 128_000,
+      numberOfChannels: channels,
+      bitrate: SOUND_BITS[channels - 1],
     });
-    const pcm = track.getChannelData(0);
-    for (let at = 0; at < pcm.length; at += rate) {
-      const part = pcm.slice(at, Math.min(pcm.length, at + rate));
+    const pcm = Array.from({ length: channels }, (_, channel) =>
+      track.getChannelData(channel),
+    );
+    for (let at = 0; at < track.length; at += rate) {
+      const frames = Math.min(track.length, at + rate) - at;
+      // Planar: one channel's second after the other's.
+      const part = new Float32Array(frames * channels);
+      pcm.forEach((samples, channel) =>
+        part.set(samples.subarray(at, at + frames), channel * frames),
+      );
       const data = new AudioData({
         format: "f32-planar",
         sampleRate: rate,
-        numberOfFrames: part.length,
-        numberOfChannels: 1,
+        numberOfFrames: frames,
+        numberOfChannels: channels,
         timestamp: Math.round((at / rate) * 1e6),
         data: part,
       });
@@ -323,11 +346,11 @@ async function encodeVideo(canvas, draw, track, duration, view) {
     if (failed) throw failed;
     if (!video.description) throw new Error("영상 설정을 받지 못했습니다.");
     if (!sound.description) {
-      // AAC-LC, mono: the setup some encoders leave out.
+      // AAC-LC with this many channels: the setup some encoders leave out.
       const index = Math.max(0, AAC_RATES.indexOf(rate));
       sound.description = Uint8Array.from([
         (2 << 3) | (index >> 1),
-        ((index & 1) << 7) | (1 << 3),
+        ((index & 1) << 7) | (channels << 3),
       ]);
     }
     return new Blob(mp4Parts(video, sound), { type: "video/mp4" });
@@ -462,9 +485,10 @@ export const callVideo = {
   },
 
   /**
-   * The voices on one timeline (with the phone sound where it applies) and when each line plays.
-   * `lead`, `gap`, `tail`: seconds before, between and after the lines; `mix(data, rate, lines)`
-   * lays more on top (the radio's music).
+   * The voices on one timeline, each as it sounds when played (its place and the phone or radio
+   * sound: see renderClipSound), and when each line plays. `lead`, `gap`, `tail`: seconds
+   * before, between and after the lines; `mix(channels, rate, lines)` lays more on top of the
+   * track's channels (the radio's music).
    */
   async callVideoTrack(
     clips,
@@ -484,14 +508,17 @@ export const callVideo = {
       if (!response.ok)
         throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
       const bytes = await response.arrayBuffer();
-      let buffer = await new Promise((resolve, reject) =>
-        audio.decodeAudioData(bytes, resolve, reject),
+      const buffer = await this.renderClipSound(
+        await new Promise((resolve, reject) =>
+          audio.decodeAudioData(bytes, resolve, reject),
+        ),
+        clip,
       );
-      if (clip.filter)
-        buffer = await this.renderCommunicationFilter(buffer, {
-          radio: clip.radio,
-        });
-      decoded.push({ buffer, turn: clip.turn });
+      decoded.push({
+        buffer,
+        turn: clip.turn,
+        sided: this.placeSided(clip.place),
+      });
     }
     const rate = audio.sampleRate;
     const frames = (seconds) => Math.round(seconds * rate);
@@ -501,26 +528,29 @@ export const callVideo = {
       frames(lead + tail) +
       decoded.reduce((sum, item) => sum + lengthOf(item), 0) +
       frames(gap) * Math.max(0, decoded.length - 1);
-    const track = audio.createBuffer(1, total, rate);
-    const data = track.getChannelData(0);
+    // Two channels only when a line has a side: every other file is made as it always was.
+    const channels = decoded.some((item) => item.sided) ? 2 : 1;
+    const track = audio.createBuffer(channels, total, rate);
+    const data = Array.from({ length: channels }, (_, channel) =>
+      track.getChannelData(channel),
+    );
     const lines = [];
     let at = frames(lead);
     for (const item of decoded) {
-      const { buffer, turn } = item;
+      const { buffer, turn, sided } = item;
       const length = lengthOf(item);
       // A remark in the background on the call sounds fainter.
       const level = turn.aside ? 0.45 : 1;
-      for (
-        let channel = 0;
-        channel < (buffer?.numberOfChannels || 0);
-        channel++
-      ) {
+      const count = buffer?.numberOfChannels || 0;
+      // A line with a side keeps its two channels; any other goes to every channel alike.
+      const apart = sided && count === channels;
+      for (let channel = 0; channel < count; channel++) {
         const source = buffer.getChannelData(channel);
         const step = buffer.sampleRate / rate;
-        for (let i = 0; i < length; i++)
-          data[at + i] +=
-            ((source[Math.floor(i * step)] || 0) * level) /
-            buffer.numberOfChannels;
+        const share = apart ? level : level / count;
+        for (const target of apart ? [data[channel]] : data)
+          for (let i = 0; i < length; i++)
+            target[at + i] += (source[Math.floor(i * step)] || 0) * share;
       }
       lines.push({
         start: at / rate,
@@ -546,11 +576,16 @@ export const callVideo = {
       ? this.textsVideoScene(session, lines)
       : this.callVideoScene(session, lines));
     view.show(canvas);
-    if (await encodesHere(track.sampleRate)) {
+    // Two channels where the browser can encode them; the same sound in one where it can't.
+    const sound =
+      track.numberOfChannels > 1 && !(await encodesHere(track.sampleRate, 2))
+        ? monoOf(track, audio)
+        : track;
+    if (await encodesHere(sound.sampleRate, sound.numberOfChannels)) {
       view.status("영상 만드는 중…");
       view.hint("보통 금방 끝납니다. 다 될 때까지 이 화면을 띄워 두십시오.");
       try {
-        return await encodeVideo(canvas, draw, track, duration, view);
+        return await encodeVideo(canvas, draw, sound, duration, view);
       } catch (error) {
         // Recorded the slow way instead.
         console.warn("[SceneVoice] call video encoding failed", error);

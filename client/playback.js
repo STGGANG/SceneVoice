@@ -315,17 +315,57 @@ export const playback = {
     return [highpass, lowpass, presence, compressor];
   },
 
-  async renderCommunicationFilter(buffer, { radio = false } = {}) {
+  /** Whether a place leans or moves the voice to a side (with 공간감 on). */
+  placeSided(place) {
+    return Boolean(place?.side) && this.config.playback?.spatial !== false;
+  },
+
+  /**
+   * A clip as it sounds when played, for a file: its place (공간감) and the phone or radio
+   * sound, in the order playback wires them. Two channels only for a place with a side; a
+   * distant voice gets half a second more, for its room to ring out.
+   */
+  async renderClipSound(
+    buffer,
+    { filter = false, radio = false, place = null } = {},
+  ) {
+    if (this.config.playback?.spatial === false) place = null;
+    if (!filter && !place) return buffer;
     const Offline =
       window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const context = new Offline(1, buffer.length, buffer.sampleRate);
+    const rate = buffer.sampleRate;
+    const context = new Offline(
+      this.placeSided(place) ? 2 : 1,
+      buffer.length + (place?.space === "far" ? Math.round(rate * 0.5) : 0),
+      rate,
+    );
     const source = context.createBufferSource();
-    const nodes = radio
-      ? this.radioNodes(context)
-      : this.communicationNodes(context);
+    const placed = place ? this.placeNodes(context, place) : [];
+    const tone = !filter
+      ? []
+      : radio
+        ? this.radioNodes(context)
+        : this.communicationNodes(context);
     source.buffer = buffer;
-    source.connect(nodes[0]);
-    nodes.at(-1).connect(context.destination);
+    let tail = source;
+    for (const nodes of [radio ? [] : placed, tone, radio ? placed : []]) {
+      if (!nodes.length) continue;
+      tail.connect(nodes[0]);
+      tail = nodes.at(-1);
+    }
+    tail.connect(context.destination);
+    if (placed.sway) {
+      // A moving voice: where it is at every twentieth of a second of the line (as swayWith
+      // follows it while it plays).
+      const { panner, side, reach } = placed.sway;
+      const steps = Math.max(2, Math.ceil(buffer.duration * 20));
+      const curve = new Float32Array(steps);
+      for (let i = 0; i < steps; i++)
+        curve[i] =
+          sideAt(side, (i / (steps - 1)) * buffer.duration, buffer.duration) *
+          reach;
+      panner.pan.setValueCurveAtTime(curve, 0, buffer.duration);
+    }
     source.start();
     return context.startRendering();
   },
@@ -355,10 +395,12 @@ export const playback = {
       if (!response.ok)
         throw new Error(`음성 파일을 읽지 못했습니다 (${response.status}).`);
       let buffer = await decoder.decodeAudioData(await response.arrayBuffer());
-      if (clip.filter)
-        buffer = await this.renderCommunicationFilter(buffer, {
-          radio: clip.radio,
-        });
+      // (These files are one channel: a place gives its distance here, not a side.)
+      buffer = await this.renderClipSound(buffer, {
+        filter: clip.filter,
+        radio: clip.radio,
+        place: clip.place?.space ? { space: clip.place.space } : null,
+      });
       const mono = new Float32Array(buffer.length);
       for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
         const data = buffer.getChannelData(channel);

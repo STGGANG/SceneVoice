@@ -469,7 +469,7 @@ export const panel = {
         })}
         ${this.soundNames?.().length ? switchHtml({ id: "sv-sfx-in-file", cls: "sv-sfx-only", label: "효과음도 음성 파일에 저장", hint: "전화·음성 메시지에 넣은 MultiCast 확장 효과음을 목소리와 섞어 저장해 기록·보관함·내려받기에서도 함께 들립니다.", tip: "끄면 실리태번에서 들을 때만 효과음이 섞여 나오고, 기록·보관함·내려받기에서는 목소리만 들립니다.", checked: config.phone?.sfx_in_file !== false }) : ""}
         </div>
-        ${switchHtml({ id: "sv-spatial", label: "공간감 및 좌우 효과", hint: "대사가 들리는 방향과 거리를 소리에 입힙니다. 이어폰에서 잘 느껴집니다.", tip: "대사를 분석할 때 좌·우(말하면서 움직이면 그 움직임도)와 가깝게·멀게·먹먹하게를 함께 정하고, 들을 때만 효과를 줍니다(만든 음성은 그대로).\n이미 분석한 메시지는 ‘분석 다시’ 뒤부터 적용됩니다.\n전화는 거리와 먹먹함만 정합니다. 라디오는 가운데가 기본이고, 방송 내용상 필요할 때만 좌·우를 정합니다.", checked: config.playback?.spatial !== false })}
+        ${switchHtml({ id: "sv-spatial", label: "공간감 및 좌우 효과", hint: "대사가 들리는 방향과 거리를 소리에 입힙니다. 이어폰에서 잘 느껴집니다.", tip: "대사를 분석할 때 좌·우(말하면서 움직이면 그 움직임도)와 가깝게·멀게·먹먹하게를 함께 정하고, 들을 때만 효과를 줍니다(만든 음성은 그대로).\n통화·라디오를 음성 파일이나 영상으로 저장하면 이 효과도 함께 들어갑니다(좌·우가 있으면 스테레오). 채팅 대사 내려받기는 원래 음성 그대로입니다.\n이미 분석한 메시지는 ‘분석 다시’ 뒤부터 적용됩니다.\n전화는 거리와 먹먹함만 정합니다. 라디오는 가운데가 기본이고, 방송 내용상 필요할 때만 좌·우를 정합니다.", checked: config.playback?.spatial !== false })}
       </div>
       ${this.pronunciationSectionHtml(config)}
       ${subTitle("sv-sub-analysis-refs", "book-open", "분석에 참고할 자료", { cls: "sv-chat-only" })}

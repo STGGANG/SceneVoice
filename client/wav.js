@@ -9,8 +9,25 @@ export function pcm16(samples) {
   return out;
 }
 
+/** The channels of a track as 16-bit samples, side by side where there are two. */
+export function pcm16Track(track) {
+  if (track.numberOfChannels < 2) return pcm16(track.getChannelData(0));
+  const left = track.getChannelData(0);
+  const right = track.getChannelData(1);
+  const out = new Int16Array(left.length * 2);
+  const to16 = (sample) => {
+    const value = Math.max(-1, Math.min(1, sample));
+    return value < 0 ? value * 0x8000 : value * 0x7fff;
+  };
+  for (let i = 0; i < left.length; i++) {
+    out[i * 2] = to16(left[i]);
+    out[i * 2 + 1] = to16(right[i]);
+  }
+  return out;
+}
+
 /** Parts are not copied into one buffer, to spare memory on long files. */
-export function wavFromParts(parts, rate) {
+export function wavFromParts(parts, rate, channels = 1) {
   const bytes = parts.reduce((total, part) => total + part.byteLength, 0);
   const view = new DataView(new ArrayBuffer(44));
   const text = (offset, value) =>
@@ -23,10 +40,10 @@ export function wavFromParts(parts, rate) {
   text(12, "fmt ");
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
+  view.setUint16(22, channels, true);
   view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
+  view.setUint32(28, rate * 2 * channels, true);
+  view.setUint16(32, 2 * channels, true);
   view.setUint16(34, 16, true);
   text(36, "data");
   view.setUint32(40, bytes, true);
