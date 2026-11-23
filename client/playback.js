@@ -184,7 +184,7 @@ export const playback = {
       filter("lowpass", 3400);
       level(0.5);
     }
-    const reach = space === "close" ? 0.725 : 0.575;
+    const reach = space === "close" ? 0.8 : 0.65;
     const moves = MOVING_SIDES.includes(side);
     const lean = sideAt(side) * reach;
     let sway = null;
