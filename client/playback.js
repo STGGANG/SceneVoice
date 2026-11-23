@@ -1371,6 +1371,7 @@ export const playback = {
       "data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==";
     for (const effect of [false, true]) {
       const audio = this.audioPlayer(effect);
+      audio.bless?.();
       if (audio.svBlessed || this.currentAudio === audio) continue;
       audio.svBlessed = true;
       audio.muted = true;

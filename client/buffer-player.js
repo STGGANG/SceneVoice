@@ -10,6 +10,35 @@ export const decodeAudio = (context, bytes) =>
 
 const TICK = 200;
 
+// An iPhone in silent mode mutes Web Audio unless the page is also playing media. A second of
+// silence in a loop, in an element beside the voice, makes it count as that (as the voice did
+// while it was an element itself).
+let silence = "";
+const silentLoop = () => {
+  if (!silence) {
+    const bytes = new Uint8Array(44 + 8000).fill(128);
+    const view = new DataView(bytes.buffer);
+    const word = (at, text) =>
+      [...text].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+    word(0, "RIFF");
+    view.setUint32(4, 36 + 8000, true);
+    word(8, "WAVEfmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 8000, true);
+    view.setUint32(28, 8000, true);
+    view.setUint16(32, 1, true);
+    view.setUint16(34, 8, true);
+    word(36, "data");
+    view.setUint32(40, 8000, true);
+    silence = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  }
+  const audio = new Audio(silence);
+  audio.loop = true;
+  return audio;
+};
+
 /**
  * The parts of an <audio> element the extension uses (src, play, pause, currentTime, duration,
  * paused, muted, onended, timeupdate), sounding only through `svSource`: the node the effects
@@ -21,8 +50,10 @@ export class BufferPlayer extends EventTarget {
     super();
     this.context = context;
     this.svSource = context.createGain();
-    // Needs no tap of its own to be allowed to sound (see unlockAudioForMobile).
+    // Needs no tap of its own to be allowed to sound; its silent element does (see bless).
     this.svBlessed = true;
+    this.keeper = silentLoop();
+    this.blessed = false;
     this.onended = null;
     this.onerror = null;
     this.volume = 1;
@@ -117,6 +148,22 @@ export class BufferPlayer extends EventTarget {
     this.start();
   }
 
+  /**
+   * Called in a tap: the silent element plays for a moment, so a phone lets it play later
+   * beside a voice that starts by itself.
+   */
+  bless() {
+    if (this.blessed || this.node) return;
+    this.blessed = true;
+    Promise.resolve(this.keeper.play())
+      .then(() => {
+        if (!this.node) this.keeper.pause();
+      })
+      .catch(() => {
+        this.blessed = false;
+      });
+  }
+
   pause() {
     this.wanted += 1;
     if (!this.node) return;
@@ -142,6 +189,7 @@ export class BufferPlayer extends EventTarget {
     this.offset = from;
     this.startedAt = this.context.currentTime;
     node.start(0, from);
+    Promise.resolve(this.keeper.play()).catch(() => undefined);
     this.ticker = setInterval(
       () => this.dispatchEvent(new Event("timeupdate")),
       TICK,
@@ -154,6 +202,7 @@ export class BufferPlayer extends EventTarget {
     const node = this.node;
     this.node = null;
     if (!node) return;
+    this.keeper.pause();
     node.onended = null;
     try {
       node.stop();
