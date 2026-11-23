@@ -981,7 +981,12 @@ export const callHistory = {
         if (!settled.has(index))
           await Promise.all([prepare(index), prepare(index + 1)]);
         const ready = await prepare(index);
-        prepare(index + 1);
+        prepare(index + 1)?.then(
+          (next) =>
+            next &&
+            this.shouldApplyCommunicationFilter("phone", turns[index + 1]) &&
+            this.primeAudio(next.url),
+        );
         prepare(index + 2);
         if (over()) break;
         const turn = turns[index];

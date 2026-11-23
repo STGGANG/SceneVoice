@@ -2,6 +2,8 @@
 // play, and a voice louder than the quietest one known is turned down towards it. Only ever
 // down (a boost could clip), only by a little, and only in playback: the saved files stay as made.
 
+import { decodedAudio } from "./buffer-player.js";
+
 const STORE = "scenevoice_voice_levels";
 const MAX_CUT_DB = 6;
 // A difference smaller than this is left alone.
@@ -89,13 +91,9 @@ export const loudness = {
       return;
     this.measuredLines.add(url);
     try {
-      const context = this.effectContext();
+      const context = this.ensureAudioContext();
       if (!context) return;
-      const bytes = await (await fetch(url)).arrayBuffer();
-      // The callback form too: Safari before 14.1 has no promise here.
-      const audio = await new Promise((resolve, reject) => {
-        context.decodeAudioData(bytes, resolve, reject)?.catch?.(reject);
-      });
+      const audio = await decodedAudio(context, url);
       const db = activeLevel(audio.getChannelData(0), audio.sampleRate);
       if (db === null) return;
       const levels = Object.fromEntries(

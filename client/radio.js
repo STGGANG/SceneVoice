@@ -1152,7 +1152,12 @@ export const radio = {
           await Promise.all([prepare(index), prepare(index + 1)]);
         }
         const ready = await prepare(index);
-        prepare(index + 1);
+        prepare(index + 1)?.then(
+          (next) =>
+            next &&
+            this.shouldApplyCommunicationFilter("radio") &&
+            this.primeAudio(next.url),
+        );
         prepare(index + 2);
         if (over()) break;
         const music = await musicReady;

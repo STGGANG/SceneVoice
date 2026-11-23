@@ -933,6 +933,27 @@ export const dialogue = {
         ?.focus();
   },
 
+  /**
+   * The next line of a row, decoded while this one sounds: only where its play will decode it
+   * anyway (an effect, a level to turn down, or a first measuring).
+   */
+  primeLine(button) {
+    const url = button?.dataset?.audioUrl;
+    if (!url || button.dataset.status !== "ready") return;
+    const measured =
+      this.config.playback?.level === false ||
+      !this.levelKey(button) ||
+      this.measuredLines.has(url);
+    if (
+      measured &&
+      !this.wantsThoughtEffect(button) &&
+      !this.linePlace(button) &&
+      this.lineLevel(button) >= 0.99
+    )
+      return;
+    this.primeAudio(url);
+  },
+
   /** A chat line's voice (a thought with its inner-voice effect). */
   playLine(button, options = {}) {
     this.noteLineLevel(button);

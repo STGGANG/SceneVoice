@@ -8,6 +8,51 @@ export const decodeAudio = (context, bytes) =>
     context.decodeAudioData(bytes, resolve, reject)?.catch?.(reject);
   });
 
+// Decoded files by address, a few kept: a line is measured and played from one decoding, the
+// line after it can be decoded while this one sounds, and going back a line needs no new one.
+// Voice files are named by what is in them, so an address never changes its sound.
+const KEPT = 4;
+const KEPT_SECONDS = 90;
+const kept = new Map();
+const trim = () => {
+  let total = 0;
+  for (const entry of kept.values()) total += entry.seconds;
+  for (const [url, entry] of kept) {
+    if (kept.size <= 1 || (kept.size <= KEPT && total <= KEPT_SECONDS)) break;
+    kept.delete(url);
+    total -= entry.seconds;
+  }
+};
+
+/** The decoded audio at `url`, fetched once for everyone who asks while it is kept. */
+export function decodedAudio(context, url) {
+  const known = kept.get(url);
+  if (known?.context === context) {
+    // Asked for again: the last to go.
+    kept.delete(url);
+    kept.set(url, known);
+    return known.promise;
+  }
+  const entry = { context, seconds: 0, promise: null };
+  entry.promise = fetch(url)
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      return response.arrayBuffer();
+    })
+    .then((bytes) => decodeAudio(context, bytes))
+    .then((buffer) => {
+      entry.seconds = buffer.duration;
+      trim();
+      return buffer;
+    });
+  entry.promise.catch(() => {
+    if (kept.get(url) === entry) kept.delete(url);
+  });
+  kept.set(url, entry);
+  trim();
+  return entry.promise;
+}
+
 const TICK = 200;
 
 // An iPhone in silent mode mutes Web Audio unless the page is also playing media. A second of
@@ -80,18 +125,12 @@ export class BufferPlayer extends EventTarget {
     this.url = String(url || "");
     this.buffer = null;
     // Fetched now: an object URL may be released once its play is over.
-    const loading = fetch(this.url)
-      .then((response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.arrayBuffer();
-      })
-      .then((bytes) => decodeAudio(this.context, bytes))
-      .then((buffer) => {
-        if (this.loading !== loading) return buffer;
-        this.buffer = buffer;
-        this.dispatchEvent(new Event("loadedmetadata"));
-        return buffer;
-      });
+    const loading = decodedAudio(this.context, this.url).then((buffer) => {
+      if (this.loading !== loading) return buffer;
+      this.buffer = buffer;
+      this.dispatchEvent(new Event("loadedmetadata"));
+      return buffer;
+    });
     loading.catch(() => undefined);
     this.loading = loading;
   }

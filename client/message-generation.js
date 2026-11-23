@@ -288,6 +288,7 @@ export const messageGeneration = {
         }
         onLine?.(index, false);
         if (this.currentPlayButton === button) this.stopPlayback();
+        this.primeLine(buttons[index + 1]);
         const finished = await new Promise((resolve) =>
           this.playLine(button, {
             onEnded: () => resolve(true),
@@ -300,6 +301,8 @@ export const messageGeneration = {
         state.position = index + 1;
         if (state.stopped) return false;
         if (index + 1 < buttons.length) {
+          // (Made while this one played: decoded in the breath between them.)
+          this.primeLine(buttons[index + 1]);
           run.between = true;
           await orJump(new Promise((resolve) => setTimeout(resolve, 380)));
           run.between = false;

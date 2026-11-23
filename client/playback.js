@@ -1,6 +1,6 @@
 // Playback: two reusable audio players (see audioPlayer), the call filter and the thought
 // effect, short message tones, and voices joined into files to save.
-import { BufferPlayer } from "./buffer-player.js";
+import { BufferPlayer, decodedAudio } from "./buffer-player.js";
 import { stOf } from "./common.js";
 import { MOVING_SIDES, sideAt } from "../shared/place.js";
 import { pcm16, wavFromParts } from "./wav.js";
@@ -16,18 +16,6 @@ export const playback = {
     // A clip saved with the filter already in it isn't filtered twice.
     if (record === undefined) return true;
     return record?.audio_filtered !== true && record?.audio_filtered !== 1;
-  },
-
-  /** The page's audio context for effects, made on first use. */
-  effectContext() {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    if (
-      !this.communicationAudioContext ||
-      this.communicationAudioContext.state === "closed"
-    )
-      this.communicationAudioContext = new AudioContextClass();
-    return this.communicationAudioContext;
   },
 
   /**
@@ -104,7 +92,7 @@ export const playback = {
     audio,
     { aside = false, filter = true, radio = false, place = null } = {},
   ) {
-    const context = this.effectContext();
+    const context = this.ensureAudioContext();
     if (!context) return null;
     const placed = place ? this.placeNodes(context, place) : [];
     return this.wireEffects(audio, context, [
@@ -121,7 +109,7 @@ export const playback = {
 
   /** 공간감 on a chat line. Playback only; the saved file stays clean. */
   connectPlaceEffect(audio, place) {
-    const context = this.effectContext();
+    const context = this.ensureAudioContext();
     return (
       context &&
       this.wireEffects(audio, context, [this.placeNodes(context, place)])
@@ -173,9 +161,23 @@ export const playback = {
       add(context.createGain()).gain.value = value;
     };
     if (space === "close") {
-      filter("lowshelf", 220, 4);
-      filter("highshelf", 5000, 2);
-      level(1.1);
+      // At the ear, and clear rather than boomy (as a voice recorded close is): a little
+      // warmth, the consonants and the breath lifted, and the soft parts brought up towards
+      // the loud ones. The compressor's own make-up gain is the "louder", taken back a little.
+      filter("lowshelf", 200, 3.3);
+      const clear = add(context.createBiquadFilter());
+      clear.type = "peaking";
+      clear.frequency.value = 3200;
+      clear.Q.value = 0.9;
+      clear.gain.value = 1.2;
+      filter("highshelf", 6000, 2.6);
+      const press = add(context.createDynamicsCompressor());
+      press.threshold.value = -16;
+      press.knee.value = 10;
+      press.ratio.value = 2;
+      press.attack.value = 0.004;
+      press.release.value = 0.16;
+      level(0.9);
     } else if (space === "muffled") {
       filter("lowpass", 900);
       level(0.8);
@@ -184,7 +186,7 @@ export const playback = {
       filter("lowpass", 3400);
       level(0.5);
     }
-    const reach = space === "close" ? 0.8 : 0.65;
+    const reach = space === "close" ? 0.85 : 0.725;
     const moves = MOVING_SIDES.includes(side);
     const lean = sideAt(side) * reach;
     let sway = null;
@@ -401,7 +403,7 @@ export const playback = {
    * Playback only; the saved file stays clean.
    */
   connectThoughtAudioEffect(audio) {
-    const context = this.effectContext();
+    const context = this.ensureAudioContext();
     if (!context) return null;
     const source = this.mediaSource(audio, context);
     const soften = context.createBiquadFilter();
@@ -604,7 +606,7 @@ export const playback = {
       }
     } else if (leveled) {
       try {
-        const context = this.effectContext();
+        const context = this.ensureAudioContext();
         audioContext = context && this.wireEffects(audio, context, []);
       } catch (error) {
         console.warn(
@@ -786,6 +788,16 @@ export const playback = {
       document.removeEventListener("visibilitychange", waitingBack);
     };
     begin();
+  },
+
+  /**
+   * A voice about to play through the effect player is decoded ahead (see decodedAudio): the
+   * next line in a row, while the one before it sounds, so it starts without a wait.
+   */
+  primeAudio(url) {
+    const context = this.communicationAudioContext;
+    if (url && context && context.state !== "closed")
+      decodedAudio(context, url).catch(() => undefined);
   },
 
   /**

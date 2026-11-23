@@ -339,6 +339,12 @@ export const groupCall = {
     for (const [index, id] of ids.entries()) {
       const ready = await (next || make(id));
       next = ids[index + 1] ? make(ids[index + 1]) : null;
+      next?.then(
+        (coming) =>
+          coming &&
+          this.shouldApplyCommunicationFilter("phone") &&
+          this.primeAudio(coming.url),
+      );
       if (this.phoneSession?.id !== sessionId || !ready) continue;
       // The line under the names follows the voice.
       this.showGroupLine(id);
