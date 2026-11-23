@@ -22,6 +22,7 @@ export const lifecycle = {
       const context = this.communicationAudioContext;
       if (context && context.state !== "running")
         context.resume().catch(() => undefined);
+      this.watchAudioContext?.();
       this.recoverPhoneAudio?.();
     };
     for (const type of ["touchend", "click", "keydown"]) {

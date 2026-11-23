@@ -504,6 +504,7 @@ export const runtime = {
       "phoneRedrawTimer",
       "phoneFitTimer",
       "autoAnalysisTimer",
+      "contextWatchTimer",
       "autoPlayTimer",
       "nowReadingTimer",
       "textAlertTimer",

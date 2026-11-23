@@ -1053,6 +1053,10 @@ export const radio = {
     gain.gain.value = 0;
     source.connect(gain).connect(context.destination);
     source.start(0, from % music.duration);
+    // Music with no voice over it counts as media too (an iPhone in silent mode: see BufferPlayer).
+    const player = this.audioPlayer(true);
+    player.hold?.(source);
+    source.onended = () => player.release?.(source);
     const bed = {
       follow(points) {
         const now = context.currentTime;
@@ -1060,11 +1064,17 @@ export const radio = {
         gain.gain.setValueAtTime(gain.gain.value, now);
         for (const [time, level] of points)
           gain.gain.linearRampToValueAtTime(level, now + time);
+        const length = (points.at(-1)?.[0] ?? 0) + 0.1;
         try {
-          source.stop(now + (points.at(-1)?.[0] ?? 0) + 0.1);
+          source.stop(now + length);
         } catch {
           /* already stopping */
         }
+        // A context closed meanwhile never says the music ended.
+        setTimeout(
+          () => context.state === "closed" && player.release?.(source),
+          (length + 1) * 1000,
+        );
       },
       stop: () => bed.follow([[0.3, 0]]),
     };
@@ -1111,6 +1121,13 @@ export const radio = {
     const musicReady = context
       ? this.radioMusic(context)
       : Promise.resolve(null);
+    // The context of now, awake: a tap may have replaced one the browser left stuck since the
+    // show began (see unlockAudioForMobile), and music laid on the old one would not be heard.
+    const musicContext = () => {
+      const now = this.ensureAudioContext() || context;
+      if (now.state !== "running") now.resume().catch(() => undefined);
+      return now;
+    };
     this.renderRadioAir(body, show, run);
     const made = [];
     const settled = new Set();
@@ -1142,7 +1159,7 @@ export const radio = {
         // From the top: the music first, the hosts coming in over it.
         if (index === 0 && run.next === null && music && !run.introDone) {
           run.introDone = true;
-          this.radioBed(context, music, 0, introLevels());
+          this.radioBed(musicContext(), music, 0, introLevels());
           await this.listenWait(run, MUSIC_LEAD * 1000);
           if (over()) break;
         }
@@ -1157,7 +1174,7 @@ export const radio = {
         const last = index === count - 1;
         if (last && music && !outro && run.next === null)
           outro = this.radioBed(
-            context,
+            musicContext(),
             music,
             MUSIC_OUTRO_FROM,
             [[1.5, MUSIC_UNDER]],

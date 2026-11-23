@@ -448,8 +448,10 @@ export const playback = {
       this[key] &&
       (this[key].svSource?.context !== context ||
         !(this[key] instanceof BufferPlayer))
-    )
+    ) {
+      this[key].keeper?.pause();
       this[key] = null;
+    }
     if (!this[key]) {
       if (effect && context) this[key] = new BufferPlayer(context);
       else {
@@ -1352,6 +1354,32 @@ export const playback = {
   },
 
   /**
+   * After a tap, or back on the page (a phone may leave the audio dead after another tab or
+   * app): a context that runs with a clock that stands still, or that a tap's resume() did not
+   * wake (`tapped`), is marked stuck, and the next tap makes a new one. Nothing else notices
+   * it for the radio's music, which has no clean player to fall back on.
+   */
+  watchAudioContext(tapped = false) {
+    const context = this.communicationAudioContext;
+    if (!context || context.state === "closed" || this.contextWatchTimer)
+      return;
+    const clock = context.currentTime;
+    this.contextWatchTimer = setTimeout(() => {
+      this.contextWatchTimer = 0;
+      if (
+        this.communicationAudioContext !== context ||
+        document.hidden ||
+        // Held on purpose while paused (see pausePlayback).
+        this.pauseSuspended
+      )
+        return;
+      const asleep = context.state !== "running";
+      if (asleep ? tapped : context.currentTime === clock)
+        this.audioContextStuck = context;
+    }, 500);
+  },
+
+  /**
    * Called on every tap: wakes the audio context (a phone suspends or interrupts it) and, once
    * per player, plays a moment of silence so the browser lets that player sound later without a
    * tap, e.g. a call reply voiced several seconds after the user sent their line.
@@ -1367,6 +1395,7 @@ export const playback = {
     const context = this.ensureAudioContext();
     if (context && context.state !== "running")
       context.resume().catch(() => undefined);
+    this.watchAudioContext(navigator.userActivation?.isActive !== false);
     const silentWav =
       "data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==";
     for (const effect of [false, true]) {

@@ -54,6 +54,7 @@ export class BufferPlayer extends EventTarget {
     this.svBlessed = true;
     this.keeper = silentLoop();
     this.blessed = false;
+    this.holds = new Set();
     this.onended = null;
     this.onerror = null;
     this.volume = 1;
@@ -153,15 +154,32 @@ export class BufferPlayer extends EventTarget {
    * beside a voice that starts by itself.
    */
   bless() {
-    if (this.blessed || this.node) return;
+    if (this.blessed || this.node || this.holds.size) return;
     this.blessed = true;
     Promise.resolve(this.keeper.play())
-      .then(() => {
-        if (!this.node) this.keeper.pause();
-      })
+      .then(() => this.rest())
       .catch(() => {
         this.blessed = false;
       });
+  }
+
+  /**
+   * Other sound of the page that plays with no voice over it (the radio's music before the
+   * first line and after the last): the silent element stays on for it too, until released.
+   */
+  hold(key) {
+    this.holds.add(key);
+    Promise.resolve(this.keeper.play()).catch(() => undefined);
+  }
+
+  release(key) {
+    this.holds.delete(key);
+    this.rest();
+  }
+
+  /** The silent element stops once neither a voice nor anything held needs it. */
+  rest() {
+    if (!this.node && !this.holds.size) this.keeper.pause();
   }
 
   pause() {
@@ -202,7 +220,7 @@ export class BufferPlayer extends EventTarget {
     const node = this.node;
     this.node = null;
     if (!node) return;
-    this.keeper.pause();
+    this.rest();
     node.onended = null;
     try {
       node.stop();
