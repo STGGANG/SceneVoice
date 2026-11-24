@@ -416,7 +416,8 @@ export const calls = {
     this.phonePendingEvent = null;
     // Its ringing screen gives way to the one seen before it (or home).
     if (this.phoneActiveTab === "call" && !this.phoneSession)
-      this.phoneActiveTab = this.ringReturnTab || "home";
+      this.phoneActiveTab =
+        this.ringReturnTab || (this.visitOf ? "message" : "home");
     this.ringReturnTab = null;
     let session = null;
     try {
@@ -1269,7 +1270,8 @@ export const calls = {
       this.phoneSession = data.session;
       await this.persistPhoneSessionToMessage();
       this.phoneSession = null;
-      this.phoneActiveTab = "history";
+      // A visited card (visit.js) shows only its texts.
+      this.phoneActiveTab = this.visitOf ? "message" : "history";
       await this.renderSmartphone();
     } catch (error) {
       this.notify(error.message || "통화를 종료할 수 없습니다.", "error");

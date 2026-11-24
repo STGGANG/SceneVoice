@@ -234,6 +234,7 @@ export const dialogue = {
                 await this.settleChatLine();
                 await this.adoptRenamedChat();
                 await this.settleAwayTexts();
+                await this.settleAwayCalls();
                 await this.refreshOtherUnread();
               });
             }

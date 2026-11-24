@@ -1,13 +1,15 @@
 // 다른 봇카드의 문자: people of a bot card whose chat isn't open text me too (선연락 · 시간 방식),
-// and the phone can show and answer those texts without leaving the chat that is open.
+// and the phone can show and answer those texts without leaving the chat that is open. From such
+// a conversation I can phone them, and they can phone back about something of mine (a text, a
+// voicemail) while the phone shows it; they never ring out of nowhere.
 //
 // A card that isn't open is worked on through a "view" of the app: an object that inherits
 // everything from it but sees that card's chat as the open one (scopeContext, read through
 // common.js: stOf) and keeps its own per-chat state. So the texts code runs as it is: written
 // with that card's profile, people and chat, saved under that chat's id. What reaches into the
 // chat on screen (chat memory, line buttons, marks on chat messages) is switched off in a view;
-// the chat memory of texts made this way is written when that chat is next opened
-// (settleAwayTexts).
+// the chat memory of texts and calls made this way is written when that chat is next opened
+// (settleAwayTexts, settleAwayCalls).
 
 import { escapeHtml } from "./common.js";
 import { playback } from "./playback.js";
@@ -40,6 +42,7 @@ const QUIET = [
   "announceCallRecord",
   "bindPhoneShelf",
   "settleAwayTexts",
+  "settleAwayCalls",
   "adoptRenamedChat",
 ];
 // Kept in the chat's own messages: left for when that chat is open.
@@ -51,11 +54,10 @@ const LATER = [
   "rewriteSwipeMemory",
   "forgetSwipeMemory",
 ];
-// Only texts come from a card that isn't open.
+// Nobody of a card that isn't open phones first (see callBackOn in a view), and nothing is overheard.
 const OFF = [
   "autoCallOn",
   "callsFirstOn",
-  "canCallAfterText",
   "overheardCallsOn",
   "overheardTextsOn",
   "selfTextsOn",
@@ -174,6 +176,20 @@ export const visit = {
       phonePendingEvent: null,
       phoneOperationToken: 0,
       phoneBusy: false,
+      phoneContactKey: "",
+      phoneTimer: null,
+      phoneAudioBusyTurnId: "",
+      phoneAudioJob: 0,
+      phoneAudioStartedAt: 0,
+      callReplyDraft: "",
+      ringTimer: null,
+      ringReturnTab: null,
+      callAfterTimer: null,
+      groupCallPicker: null,
+      groupCallShown: null,
+      callListenOpen: null,
+      ghostwriteBusy: "",
+      voicemailAnswers: new Map(),
       voiceMessageBusy: false,
       textReplyTimers: new Map(),
       textReplyBusy: "",
@@ -236,6 +252,43 @@ export const visit = {
       updatePhoneLauncherVisibility: () => app.updatePhoneLauncherVisibility(),
       announceText: (key, name, text, kind) =>
         app.announceOtherText(view, key, name, text, kind),
+      // The open chat's line: a call there, and nobody here rings or is rung.
+      otherLineBusy: () => Boolean(app.phoneSession || app.phonePendingEvent),
+      // They phone back only while the phone shows this card, with their calls switched on.
+      callBackOn: () =>
+        app.visiting === view &&
+        !view.otherLineBusy() &&
+        app.callsFirstOn.call(view) &&
+        app.config.phone?.call_me !== false,
+      createPhoneSession: (record) =>
+        app.createPhoneSession.call(view, { ...record, away: true }),
+      /** Their call takes the screen of the visit (the open chat's top bar can't announce it). */
+      async ringIncomingCall(...args) {
+        if (app.visiting !== view) return;
+        const before = view.phoneActiveTab;
+        await app.ringIncomingCall.apply(view, args);
+        if (!view.phonePendingEvent || app.visiting !== view) return;
+        view.ringReturnTab = before && before !== "call" ? before : "message";
+        view.phoneActiveTab = "call";
+        await view.renderSmartphone();
+      },
+      /** I phone the person whose texts are open. */
+      async callFromVisit(key, button) {
+        if (view.otherLineBusy()) {
+          app.notify("지금 채팅의 통화가 끝난 뒤에 걸 수 있습니다.");
+          return;
+        }
+        if (view.phoneBusy || view.phoneSession || view.phonePendingEvent)
+          return;
+        view.phoneContactKey = key;
+        view.phoneActiveTab = "call";
+        await app.startOutgoingCall.call(view, button);
+        // Not connected (no connection profile, a failed request): back to the texts.
+        if (!view.phoneSession && !view.voicemailBox && app.visiting === view) {
+          view.phoneActiveTab = "message";
+          await view.renderSmartphone();
+        }
+      },
       renderSmartphone() {
         return app.visiting === view
           ? app.renderSmartphone.call(view)
@@ -286,10 +339,17 @@ export const visit = {
 
   /** The chat on screen changed: what was going on for other cards is dropped. */
   dropCardViews() {
-    this.leaveVisit({ draw: false });
+    // A call going on there is not hung up (the chat it belongs to is gone from under it): it is
+    // still open when that chat is next opened.
+    if (this.otherLineBusy()) this.stopPlayback?.();
+    this.leaveVisit({ draw: false, hangUp: false });
     this.otherThreadsKept = null;
     for (const view of this.cardViews?.values() || []) {
       view.textReplyTimers.forEach((timer) => clearTimeout(timer));
+      view.voicemailAnswers.forEach((timer) => clearTimeout(timer));
+      clearTimeout(view.ringTimer);
+      clearTimeout(view.callAfterTimer);
+      view.stopPhoneTimer();
       view.chatController.abort(
         new DOMException("채팅이 바뀌어 작업을 취소했습니다.", "AbortError"),
       );
@@ -519,18 +579,39 @@ export const visit = {
     await view.loadChat();
     this.textAlert = null;
     this.visiting = view;
-    view.phoneActiveTab = "message";
-    view.messageThreadKey = threadKey;
+    const calling =
+      view.phoneSession || view.phonePendingEvent || view.voicemailBox;
+    view.phoneActiveTab = calling ? "call" : "message";
+    if (!calling || threadKey) view.messageThreadKey = threadKey;
     view.phoneShelf = {};
     await this.openSmartphone("message");
   },
 
-  /** Back to the phone of the chat that is open. */
-  leaveVisit({ draw = true } = {}) {
+  /** A call with the card the phone shows: going on, ringing, or at their voicemail. */
+  otherLineBusy() {
+    const view = this.visiting;
+    return Boolean(
+      view &&
+      view !== this &&
+      (view.phoneSession || view.phonePendingEvent || view.voicemailBox),
+    );
+  },
+
+  /** Back to the phone of the chat that is open; a call with the visited card ends with it. */
+  leaveVisit({ draw = true, hangUp = true } = {}) {
     const view = this.visiting;
     if (!view) return;
     this.visiting = null;
     this.otherThreadsKept = null;
+    if (hangUp && (view.phoneSession || view.phonePendingEvent)) {
+      this.stopPlayback?.();
+      this.run(async () => {
+        if (view.phoneSession) await view.endPhoneSession("ended");
+        else await view.closeIncomingCall("missed");
+        if (this.visiting !== view) view.phoneActiveTab = "";
+      });
+    }
+    view.voicemailBox = null;
     view.phoneActiveTab = "";
     view.messageThreadKey = "";
     const shell = document.getElementById("sv-smartphone");
@@ -599,6 +680,33 @@ export const visit = {
         chat_id: this.getStateIdentity().chatId,
         ids: away.map((item) => item.id),
       }),
+    });
+  },
+
+  /** The same for calls made while another chat was open; one still going on waits its end. */
+  async settleAwayCalls() {
+    if (this.visitOf || !this.phoneOn() || !this.hasCharacterChat()) return;
+    const operation = this.captureChat();
+    const chatId = this.getStateIdentity().chatId;
+    const response = await this.request(
+      `/api/plugins/scenevoice/phone/sessions?chat_id=${encodeURIComponent(chatId)}&limit=1000`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const away = ((await response.json()).items || []).filter(
+      (session) =>
+        session.away && !["active", "ringing"].includes(session.status),
+    );
+    if (!away.length) return;
+    for (const session of away) {
+      this.assertChat(operation);
+      await this.keepCallMemory(session);
+    }
+    this.assertChat(operation);
+    await this.request("/api/plugins/scenevoice/phone/sessions/settled", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, ids: away.map((s) => s.id) }),
     });
   },
 };

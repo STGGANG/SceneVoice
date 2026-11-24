@@ -266,6 +266,7 @@ export const voicemail = {
             character_name: box.contact.name,
             text,
             language: this.scriptLanguage(text) || this.chatLanguage(),
+            ...(this.visitOf ? { away: true } : {}),
           }),
         },
       );
@@ -278,7 +279,7 @@ export const voicemail = {
       await this.persistPhoneSessionToMessage(session);
     } finally {
       if (this.voicemailBox === box) this.voicemailBox = null;
-      this.phoneActiveTab = "history";
+      this.phoneActiveTab = this.visitOf ? "message" : "history";
       await this.renderSmartphone();
     }
     // My message in my persona's voice, made now so it's ready in 통화 기록.
@@ -323,7 +324,7 @@ export const voicemail = {
       : `${me} called while they were busy and couldn't pick up (no message left). Now they get back to ${me}.`;
     const free =
       !this.phoneSession && !this.phonePendingEvent && !this.voicemailBox;
-    if (this.autoCallOn() && free && Math.random() < 0.5) {
+    if (this.callBackOn() && free && Math.random() < 0.5) {
       await this.ringIncomingCall(
         {
           candidate: { type: "incoming_call", urgency: "normal", reason },

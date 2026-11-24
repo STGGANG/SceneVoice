@@ -9,7 +9,7 @@ const SEEN_KEY = "scenevoice_seen_update";
 // (folded) instead of shown open.
 export const UPDATE_NOTES = [
   {
-    version: "1.4.2",
+    version: "1.4.3",
     sections: [
       [
         "새로 생긴 것",

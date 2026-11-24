@@ -1505,6 +1505,8 @@ export class SceneService {
         id: newId(),
         status,
         ...(others.length ? { others } : {}),
+        // Made while its chat wasn't open: its chat memory is written when that chat opens.
+        ...(body.away === true ? { away: true } : {}),
         call_direction: body.direction === "incoming" ? "incoming" : "outgoing",
         situation: text(body.situation, 4000),
         started_at: stamp,
@@ -1522,6 +1524,7 @@ export class SceneService {
         ...who,
         id: newId(),
         status: "missed",
+        ...(body.away === true ? { away: true } : {}),
         call_direction: "outgoing",
         situation: "",
         started_at: stamp,
@@ -1916,6 +1919,16 @@ export class SceneService {
         });
       item.reactions = item.reactions.slice(-12);
       if (!item.reactions.length) delete item.reactions;
+      return { status: "success" };
+    }
+    if (path === "/phone/sessions/settled" && method === "POST") {
+      const ids = new Set(
+        (Array.isArray(body.ids) ? body.ids : []).map((id) => String(id)),
+      );
+      for (const item of data.sessions.filter((x) => ids.has(x.id))) {
+        checkChat(item, body);
+        delete item.away;
+      }
       return { status: "success" };
     }
     if (path === "/voice-messages/settled" && method === "POST") {

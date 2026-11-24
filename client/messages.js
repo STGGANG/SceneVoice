@@ -821,6 +821,7 @@ export const messages = {
               : ""
           }</span></div>
           <button type="button" class="sv-msg-aloud ${aloud ? "sv-playing" : ""}" data-thread-aloud aria-pressed="${aloud}" aria-label="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기"}" title="${aloud ? "듣기 멈추기" : "최근 답장 한 번에 듣기: 가장 최근에 받은 문자 뭉치를 음성으로 만들며 차례로 재생합니다"}"><i class="fa-solid ${aloud ? (this.threadPlayback.making ? "fa-spinner fa-spin" : "fa-stop") : "fa-headphones"}" aria-hidden="true"></i></button>
+          ${this.visitOf && !contact.group ? '<button type="button" class="sv-msg-aloud" data-visit-call aria-label="전화 걸기" title="전화 걸기"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
           ${contact.group && !this.messageGroup(key)?.without_user && contact.members.length > 1 ? '<button type="button" class="sv-msg-aloud" data-group-call-room aria-label="단체 통화" title="단체 통화: 이 방 사람들에게 한꺼번에 전화합니다"><i class="fa-solid fa-phone" aria-hidden="true"></i></button>' : ""}
           <button type="button" class="sv-msg-group-edit" data-thread-more aria-haspopup="menu" aria-label="더 보기" title="더 보기: 내려받기 · 기억에서 빼기${contact.group ? " · 단체방 설정" : ""}"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
         </header>
@@ -1037,6 +1038,11 @@ export const messages = {
     body
       .querySelector("[data-group-stop]")
       ?.addEventListener("click", () => this.stopTextReply(key));
+    body
+      .querySelector("[data-visit-call]")
+      ?.addEventListener("click", (event) =>
+        this.run(() => this.callFromVisit(key, event.currentTarget)),
+      );
     body
       .querySelector("[data-group-call-room]")
       ?.addEventListener("click", () =>
@@ -1601,6 +1607,11 @@ export const messages = {
     }
   },
 
+  /** Calls of theirs that answer something of mine (a text, a voicemail); visit.js has its own. */
+  callBackOn() {
+    return this.autoCallOn();
+  },
+
   /**
    * Whether someone texting one to one may say they'll call right away (call_after): calls of
    * theirs are switched on (나에게 전화), they are a contact who reaches out, and the
@@ -1609,7 +1620,7 @@ export const messages = {
   canCallAfterText(key) {
     return (
       !this.isGroupThread(key) &&
-      this.autoCallOn() &&
+      this.callBackOn() &&
       !this.phoneSession &&
       !this.phonePendingEvent &&
       !this.config.character_voices?.[key]?.no_state &&
@@ -1633,7 +1644,7 @@ export const messages = {
             this.phoneSession ||
             this.phonePendingEvent ||
             this.generatingSince ||
-            !this.autoCallOn()
+            !this.callBackOn()
           )
             return;
           await this.ringIncomingCall(
@@ -1700,9 +1711,10 @@ export const messages = {
     if (!response.ok)
       throw new Error(data.detail || "문자를 보내지 못했습니다.");
     this.playMessageTone("send");
-    await this.persistTextThreadMemory(key, anchor.index);
     this.cardWaiting = reply ? "" : key;
+    // Drawn before the chat memory is written: that saves the chat, slow in a long one.
     await this.renderSmartphone();
+    await this.persistTextThreadMemory(key, anchor.index);
     if (reply) this.queueTextReply(key);
   },
 

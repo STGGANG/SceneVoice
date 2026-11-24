@@ -9443,7 +9443,8 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   height: 60px;
   font-size: 22px;
 }
-/* Whoever's voice sounds now on a call or radio screen: their picture breathes, faintly. */
+/* Whoever's voice sounds now on a call or radio screen: a ring around their picture breathes,
+   faintly. The picture itself stays still. */
 #sv-smartphone .sv-call-screen .sv-call-identity .sv-phone-avatar.sv-speaking {
   animation: sv-speaking 1.5s ease-in-out infinite;
 }
@@ -9451,11 +9452,9 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   from,
   to {
     box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-    transform: scale(1);
   }
   50% {
     box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.2);
-    transform: scale(1.035);
   }
 }
 @media (prefers-reduced-motion: reduce) {

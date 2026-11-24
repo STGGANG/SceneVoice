@@ -318,7 +318,9 @@ export const outreach = {
 
   /** A call ringing or going on: nobody else can call now, but a text still comes. */
   onCall() {
-    return Boolean(this.phonePendingEvent || this.phoneSession);
+    return Boolean(
+      this.phonePendingEvent || this.phoneSession || this.otherLineBusy?.(),
+    );
   },
 
   /**
@@ -831,6 +833,8 @@ export const outreach = {
     { candidate, callerKey, caller, prewritten = null },
     sourceMessageId,
   ) {
+    // One call at a time, whichever bot card it belongs to (visit.js).
+    if (this.otherLineBusy?.()) return;
     const identity = this.getStateIdentity();
     const sourceIndex = String(
       this.phoneAnchorFromSource(sourceMessageId).index,

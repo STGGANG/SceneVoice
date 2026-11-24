@@ -698,7 +698,9 @@ export const shell = {
       const [first] = this.otherUnread.values();
       return this.visitCard(first.card, first.key);
     }
-    if (tab !== "message") this.leaveVisit({ draw: false });
+    // Opened again during a call with a visited card: that call's screen.
+    if (tab !== "message" && !this.otherLineBusy?.())
+      this.leaveVisit({ draw: false });
     const open = document.getElementById("sv-smartphone");
     const before =
       open && !open.classList.contains("hidden") ? this.phoneActiveTab : "home";
@@ -910,7 +912,8 @@ export const shell = {
   },
 
   closeSmartphone() {
-    this.leaveVisit({ draw: false });
+    // A call with a visited card goes on with the phone put away, as any call does.
+    if (!this.otherLineBusy?.()) this.leaveVisit({ draw: false });
     document.getElementById("sv-smartphone")?.classList.add("hidden");
     this.stopPhoneTimer();
     this.stopPhoneClock();
