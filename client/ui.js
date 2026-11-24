@@ -71,6 +71,9 @@ function shownBlocks(container, blocks = []) {
  * section's heading next drops its dashed line. Run again whenever what shows changes.
  */
 export function tidySettingLines(root) {
+  // Everything is looked at first and changed after: a class changed between two looks makes
+  // the browser work out every style on the page again (seconds, under a large theme).
+  const changes = [];
   for (const container of root.querySelectorAll(
     ".sv-pane:not([data-pane='people']) :is(.sv-group-body, .sv-sub-body), .sv-cast-phone > .sv-sub-body",
   )) {
@@ -78,12 +81,13 @@ export function tidySettingLines(root) {
     blocks.forEach((block, index) => {
       if (!block.matches(LINE)) return;
       const next = blocks[index + 1];
-      block.classList.toggle(
-        "sv-line-end",
-        !next || next.matches(".sv-sub-sec"),
-      );
+      const end = !next || next.matches(".sv-sub-sec");
+      if (block.classList.contains("sv-line-end") !== end)
+        changes.push([block, end]);
     });
   }
+  for (const [block, end] of changes)
+    block.classList.toggle("sv-line-end", end);
 }
 
 export function groupHtml({
