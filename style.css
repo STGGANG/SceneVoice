@@ -263,6 +263,13 @@
 }
 
 /* ----- 3. 창 ----- */
+/* Behind the open settings the chat's animations rest (see openPanel). */
+body.sv-settings-open #chat *,
+body.sv-settings-open #chat *::before,
+body.sv-settings-open #chat *::after {
+  animation-play-state: paused !important;
+}
+
 #sv-overlay {
   position: fixed;
   inset: 0;

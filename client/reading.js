@@ -1,6 +1,6 @@
 import { escapeHtml } from "./common.js";
 import { DEFAULT_READING_RULES } from "../shared/segments.js";
-import { infoTip, subTitle } from "./ui.js";
+import { infoTip, setText, subTitle } from "./ui.js";
 
 // "읽을 구간": which marked regions of a message get a play button, and how they are read.
 
@@ -102,10 +102,7 @@ export const reading = {
         row.dataset.kind = event.target.value;
       const open = row.querySelector('[data-rule-field="open"]').value.trim();
       const close = row.querySelector('[data-rule-field="close"]').value.trim();
-      row.querySelector(".sv-read-name").textContent = ruleName({
-        open,
-        close,
-      });
+      setText(row.querySelector(".sv-read-name"), ruleName({ open, close }));
       // A new row is saved once both marks are filled in.
       row.classList.toggle("sv-read-incomplete", !open || !close);
     });

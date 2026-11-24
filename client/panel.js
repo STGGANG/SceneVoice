@@ -20,6 +20,7 @@ import {
   closeTips,
   choiceListHtml,
   emptyHtml,
+  setText,
   subTitle,
   SUB_END,
   tidySettingLines,
@@ -922,6 +923,17 @@ export const panel = {
                 <div class="sv-tab-content hidden" id="sv-favorites-tab" role="tabpanel"><div class="sv-loading-line">보관함을 불러오는 중…</div></div>
             </section>`;
     document.body.appendChild(overlay);
+    // The page behind is dimmed: its endless animations rest while the settings are open (a theme
+    // that animates every chat message keeps the browser restyling each frame, which is felt as
+    // stutter when the settings are scrolled). They go on once the overlay is gone, however it went.
+    document.body.classList.add("sv-settings-open");
+    const gone = new MutationObserver(() => {
+      if (document.getElementById("sv-overlay")) return;
+      document.body.classList.remove("sv-settings-open");
+      gone.disconnect();
+    });
+    gone.observe(document.body, { childList: true });
+
     this.bindPanelEvents();
     this.renderCastingSettings();
     this.updateEngineSections();
@@ -1521,7 +1533,7 @@ export const panel = {
         const mine = Boolean(applied()[field]);
         const text = promptPlain(box.querySelector("[data-prompt-text]").value);
         const state = box.querySelector(".sv-prompt-state");
-        state.textContent = mine ? "수정됨" : "기본값";
+        setText(state, mine ? "수정됨" : "기본값");
         state.classList.toggle("sv-badge-on", mine);
         fold
           .querySelector(`input[name="sv-prompt-pick"][value="${field}"]`)
@@ -1533,7 +1545,7 @@ export const panel = {
         custom ||= mine;
       });
       const badge = document.getElementById("sv-prompt-badge");
-      badge.textContent = custom ? "수정됨" : "기본값";
+      setText(badge, custom ? "수정됨" : "기본값");
       badge.classList.toggle("sv-badge-on", custom);
     };
     // One wording shows at a time; a dot on its name says it was rewritten.
@@ -1549,7 +1561,7 @@ export const panel = {
       const status = event.target
         .closest("[data-prompt]")
         ?.querySelector("[data-prompt-status]");
-      if (status) status.textContent = "";
+      setText(status, "");
       sync();
     });
     fold.addEventListener("click", (event) => {
@@ -1600,10 +1612,12 @@ export const panel = {
         this.voiceName(value) || (box?.value.trim() ? box.value.trim() : value)
       );
     };
-    note.textContent =
+    const text =
       document.getElementById("sv-enabled")?.checked === false
         ? ""
         : `기본 목소리: 남성 ${name("male") || "없음"} · 여성 ${name("female") || "없음"}`;
+    // Asked for on every step of a slider.
+    setText(note, text);
   },
 
   /** 저장됨 / 키 없음 beside each engine's key. */

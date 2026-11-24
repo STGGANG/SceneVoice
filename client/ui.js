@@ -289,17 +289,40 @@ export function bindInfoTips(root) {
   );
 }
 
+/**
+ * Text written only when it says something else. Any change to the page, even the same words
+ * written again, makes the browser go over every style under some stylesheets (실리태번's own
+ * look inside :has()), which is felt on each key or slider step.
+ */
+export function setText(element, text) {
+  if (element && element.textContent !== text) element.textContent = text;
+}
+
 /* ---------- range + number pairs ---------- */
 
+// A slider's filled part is a whole percent kept in an attribute, with one rule per percent.
+// Written into the slider's own style, every step of a drag made the page work out all its
+// styles again (실리태번's stylesheet looks at style attributes inside :has()): 0.1 s a step.
+function fillRules() {
+  if (document.getElementById("sv-range-fills")) return;
+  const style = document.createElement("style");
+  style.id = "sv-range-fills";
+  style.textContent = Array.from(
+    { length: 101 },
+    (_, fill) =>
+      `input[type="range"][data-sv-fill="${fill}"]{--sv-fill:${fill}%}`,
+  ).join("");
+  document.head.append(style);
+}
+
 function paintRange(range) {
+  fillRules();
   const min = Number(range.min) || 0;
   const max = Number(range.max) || 1;
   const value = Number(range.value);
   const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
-  range.style.setProperty(
-    "--sv-fill",
-    `${Math.min(100, Math.max(0, percent))}%`,
-  );
+  const fill = String(Math.round(Math.min(100, Math.max(0, percent))));
+  if (range.dataset.svFill !== fill) range.dataset.svFill = fill;
 }
 
 /** The number input keeps the saved value; the slider is a shortcut that mirrors it. */
