@@ -451,6 +451,9 @@ export const contacts = {
   /** This person's card lets them know the real date and time in calls and texts. */
   realtimeFor(key) {
     const voices = this.config.character_voices || {};
+    const card = voices[key]?.card ? voices[voices[key].card] : voices[key];
+    // Not with 채팅 AI가 직접 (the setting isn't offered then).
+    if (card?.chat_tags) return false;
     return Boolean(
       voices[key]?.realtime || voices[voices[key]?.card]?.realtime,
     );

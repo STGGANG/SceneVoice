@@ -129,16 +129,14 @@ export function chatTagPrompt(me, people) {
       .filter((name) => name && name !== person.name);
   return [
     "<phone_contact>",
-    "## Phones in this story",
-    `The people of this story may have smartphones or something like them, and sometimes one of them texts or phones ${me}. When that happens, write it in your reply with a tag.`,
+    `The people of this story may have smartphones or something like them, and sometimes one of them texts or phones ${me}. Only when contact is truly needed or fits the context naturally, write a tag at that point. Most replies need none.`,
     "",
     "## Tags",
-    `- A text: <sv_text from="NAME">the message exactly as typed on the phone</sv_text>`,
+    `- A text: <sv_text from="NAME">the message</sv_text>`,
     `- A call: <sv_call from="NAME"/> at the moment their call starts ringing. Write nothing of the call itself: ${me} may or may not pick up, the call goes on on a separate screen, and its outcome is given to you with the next reply.`,
-    "One tag is one message sent. Several short lines sent in a row go in one tag, each on its own line. Messages sent at different moments of the reply, or by different people, each get their own tag where they happen.",
+    "One tag is one message sent. Several short lines sent in a row go in one tag, each on its own line. Messages sent at different moments, or by different people, get separate tags.",
     "",
     "## Example",
-    "(A and B stand for names.)",
     "She frowned at the screen.",
     `<sv_text from="A">where are you`,
     `call me when you see this</sv_text>`,
@@ -152,12 +150,9 @@ export function chatTagPrompt(me, people) {
             const also = others(person);
             return `- ${person.name}${also.length ? ` (also: ${also.join(", ")})` : ""}`;
           }),
-          "For anyone on this list, NAME must be one of the names on that person's line, written exactly as it is there: the one that fits the language you are writing in, and no other nickname, title or spelling. Only someone who is truly not on the list gets a new name.",
+          "For anyone on this list, NAME must be one of the names on that person's line, written exactly as it is there; pick the one that fits the language you are writing in. Only someone not on the list gets a new name.",
         ]
       : ["Anyone in the story can be named."]),
-    "",
-    "## When",
-    "Use a tag only when contact is called for, at the point where it fits the context naturally. Most replies need none. Keep a text as short as a real one.",
     "</phone_contact>",
   ].join("\n");
 }

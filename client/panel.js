@@ -2226,14 +2226,16 @@ export const panel = {
   },
 
   /** Opens the settings at one group: its part shown, the group unfolded and brought up. */
-  /** 캐릭터 → 봇카드 공통 설정 → 스마트폰, at its 선연락 받기 switch. */
+  /** 캐릭터 → 봇카드 공통 설정 → 스마트폰, at its 먼저 오는 연락 choice. */
   openCardOutreach() {
     this.showSettingsPane("people");
     const section = document.querySelector("#sv-cast-panel .sv-cast-phone");
     if (!section) return;
     section.open = true;
-    const box = document.getElementById("sv-cast-outreach");
-    (box?.closest(".sv-switch-row") || section).scrollIntoView({
+    const box = section.querySelector(
+      'input[name="sv-cast-reach"]:checked, input[name="sv-cast-reach"]',
+    );
+    (box?.closest(".sv-cast-reach") || section).scrollIntoView({
       block: "center",
     });
     box?.focus({ preventScroll: true });

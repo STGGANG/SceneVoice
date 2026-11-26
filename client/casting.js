@@ -7,7 +7,7 @@ import {
   setText,
   stOf,
 } from "./common.js";
-import { fieldHtml, switchHtml, infoTip } from "./ui.js";
+import { fieldHtml, switchHtml, infoTip, choiceListHtml } from "./ui.js";
 import { TIME_ZONES, cardHoldsPerson, cardStandIn } from "../shared/casting.js";
 import { voicePickHtml } from "./voice-picker.js";
 import { bindCastOrder } from "./cast-order.js";
@@ -756,23 +756,57 @@ export const casting = {
         <details class="sv-sub-sec sv-cast-phone" ${cardPhoneOpen() ? "open" : ""}>
           <summary class="sv-sub-title"><i class="fa-solid fa-mobile-screen" aria-hidden="true"></i><span>스마트폰</span><small data-card-phone></small><i class="fa-solid fa-chevron-down sv-sub-chevron" aria-hidden="true"></i></summary>
           <div class="sv-sub-body">
-        ${switchHtml({ id: "sv-cast-outreach", label: "선연락 받기", hint: "켜면 이 봇카드에서 인물이 먼저 전화·문자하고, 음성 메모와 엿듣는 통화도 저절로 생깁니다.", tip: "스마트폰 탭의 ‘선연락’에서 켜 둔 것만 옵니다.\n꺼 두어도 내가 거는 전화와 보내는 문자는 그대로입니다.", checked: entry.outreach === true, attrs: 'data-field="outreach"' })}
+        <div class="sv-row sv-cast-reach">
+          ${choiceListHtml({
+            name: "sv-cast-reach",
+            label: "먼저 오는 연락",
+            value: entry.chat_tags
+              ? "chat_tags"
+              : entry.outreach
+                ? "outreach"
+                : "",
+            tip: "선연락: 씬보이스의 보조모델이 채팅을 읽고, 이 봇카드의 인물이 먼저 전화·문자할지 정합니다. ‘채팅 기억 연동’을 꺼 두면 본 서사 채팅을 작성하는 AI는 이 연락을 전혀 모르고, 이야기에도 영향을 주지 않습니다. 켜 두면 연락 내용을 기억하고 이야기에 이어 갈 수 있지만, 다소 흐름이 어색할 수 있습니다. 스마트폰 탭의 ‘선연락’에서 켜 둔 것만 오고, 음성 메모와 엿듣는 통화도 저절로 생깁니다.\n\n채팅 AI가 직접 (베타): 본 채팅에서 서사를 진행하는 AI가 이야기 흐름에 맞을 때 직접 씬보이스로 문자를 보내거나 전화를 겁니다. 켜면 이 봇카드의 채팅 요청마다 안내문(약 350토큰)과 연락처 명단(한 명당 약 10~15토큰)이 함께 들어갑니다. AI가 답변 안에 문자나 전화를 표시하면, 본문 그 자리에 작은 말풍선으로 남고 스마트폰에도 실제 문자·걸려 오는 전화로 나타납니다.\n메시지를 직접 고쳐서 그 문자의 내용을 바꾸거나 지우면 스마트폰의 문자도 따라 바뀝니다. 반대로 스마트폰에서 그 문자를 고치거나 지우면 채팅 메시지도 따라 바뀝니다.\n벨 울림에는 보조모델 요청이 들지 않습니다(받은 뒤의 통화는 평소처럼 듭니다).\n연락처에 없는 이름으로 연락하면 그 이름의 인물이 이 봇카드에 자동으로 추가됩니다. 목소리가 없는 동안에는 그 인물의 음성을 자동으로 만들지 않습니다.\nAI가 내 캐릭터의 문자를 쓰면 그 문자방의 내 위치에 들어갑니다.\n이 기능을 켜 둔 동안에는 음성 메모와 엿듣는 통화도 저절로 생기지 않습니다. 끄면 ‘선연락 받기’는 켜기 전 상태로 돌아갑니다.\n모델에 따라 형식을 틀리거나 너무 자주 쓸 수 있습니다.\n\n어느 쪽이든 내가 거는 전화와 보내는 문자는 그대로입니다.",
+            choices: [
+              [
+                "",
+                "bell-slash",
+                "받지 않음",
+                "내가 먼저 걸거나 보낼 때만 연락합니다",
+              ],
+              [
+                "outreach",
+                "mobile-screen-button",
+                "선연락",
+                "씬보이스의 보조모델이 채팅을 읽고 연락할지 정합니다",
+              ],
+              [
+                "chat_tags",
+                "comment-dots",
+                "채팅 AI가 직접 (베타)",
+                "본 채팅 AI가 이야기 속에서 연락합니다",
+              ],
+            ],
+          })}
+        </div>
         <div class="sv-row sv-cast-mode" ${entry.outreach ? "" : "hidden"}>
           ${fieldHtml({ id: "sv-cast-mode", label: "연락 방식", tip: "이 봇카드에서만 다른 방식으로 연락받을 수 있습니다.\n각 방식의 세부 설정(주기, 빈도, 간격)은 스마트폰 탭의 ‘선연락’에서 그 방식을 골라 바꿉니다.", control: `<select id="sv-cast-mode" data-field="outreach_mode">${OUTREACH_MODES.map(([value, name]) => `<option value="${value}" ${(entry.outreach_mode || "") === value ? "selected" : ""}>${name}</option>`).join("")}</select>` })}
         </div>
-        ${switchHtml({ id: "sv-cast-realtime", label: "실제 시간 인식", hint: "켜면 이 봇카드의 인물들이 전화·문자에서 지금 날짜와 시각을 압니다.", tip: "밤늦은 시간, 주말, 메시지 사이에 흐른 시간처럼 실제 시각을 대화에 자연스럽게 반영합니다.\n전화·문자 기록에도 시각이 남습니다.", checked: entry.realtime === true, attrs: 'data-field="realtime"' })}
-        <div class="sv-row sv-cast-zones" ${entry.realtime ? "" : "hidden"}>
+        <div class="sv-row sv-cast-memory-row" ${entry.chat_tags ? "hidden" : ""}>
+          ${switchHtml({ id: "sv-cast-memory", label: "채팅 기억 연동", hint: "켜면 전화·문자 내용이 채팅 화면에 보이고, 이 봇카드의 캐릭터가 그 내용을 기억합니다.", tip: "끝난 전화·음성 메시지·주고받은 문자는 스위치와 상관없이 늘 그때의 채팅 메시지에 기록해 둡니다.\n켜면 그 기록을 메시지 아래 ‘전화·문자 채팅 기억’에 보여 주고, 이후 실리태번 채팅에서 서사를 이어갈 때도 활용합니다. 꺼 두었다가 켜도 그동안의 기록이 바로 반영됩니다.\n되돌렸거나 다른 스와이프에서 주고받은 기록은 넣지 않습니다(스마트폰의 미적용 기억).\n끄면 AI에게 보내지 않을 뿐, 기록은 남아 있습니다.", checked: entry.chat_tags === true || (entry.chat_memory ?? Boolean(this.config.chat_memory?.enabled)), attrs: `data-field="chat_memory"${entry.chat_tags ? " disabled" : ""}` })}
+        </div>
+        <div class="sv-row sv-cast-realtime-row" ${entry.chat_tags ? "hidden" : ""}>
+          ${switchHtml({ id: "sv-cast-realtime", label: "실제 시간 인식", hint: "켜면 이 봇카드의 인물들이 전화·문자에서 지금 날짜와 시각을 압니다.", tip: "밤늦은 시간, 주말, 메시지 사이에 흐른 시간처럼 실제 시각을 대화에 자연스럽게 반영합니다.\n전화·문자 기록에도 시각이 남습니다.", checked: entry.realtime === true, attrs: 'data-field="realtime"' })}
+        </div>
+        <div class="sv-row sv-cast-zones" ${entry.realtime && !entry.chat_tags ? "" : "hidden"}>
           ${fieldHtml({ id: "sv-cast-zone", label: "인물들이 사는 곳의 시간", tip: "이 봇카드의 인물들이 아는 ‘지금 시각’입니다.\n서머타임은 자동으로 반영됩니다.", control: `<select id="sv-cast-zone" data-field="time_zone"><option value="">이 기기의 시간과 같게</option>${TIME_ZONES.map(([value, name]) => `<option value="${value}" ${entry.time_zone === value ? "selected" : ""}>${name}</option>`).join("")}</select>` })}
           ${fieldHtml({ id: "sv-cast-user-zone", label: "내 캐릭터가 사는 곳의 시간", tip: "인물들과 다른 곳을 고르면 서로 시차가 있다는 것을 압니다.", control: `<select id="sv-cast-user-zone" data-field="user_time_zone"><option value="">이 기기의 시간과 같게</option>${TIME_ZONES.map(([value, name]) => `<option value="${value}" ${entry.user_time_zone === value ? "selected" : ""}>${name}</option>`).join("")}</select>` })}
         </div>
-        <div class="sv-row sv-cast-quiet" ${entry.outreach ? "" : "hidden"}>
+        <div class="sv-row sv-cast-quiet" ${entry.outreach && entry.realtime ? "" : "hidden"}>
           <div class="sv-field">
             <div class="sv-label-line"><span id="sv-cast-quiet-label">연락하지 않는 시간</span>${infoTip("이 시간에는 이 봇카드의 인물들이 먼저 연락하지 않습니다(랜덤·시간 방식).\n‘실제 시간 인식’에서 고른 인물들이 사는 곳의 시각으로 따지고, 고르지 않았으면 이 기기의 시각입니다.\n내가 먼저 건 전화나 보낸 문자에는 이 시간에도 답합니다.\n상태 추적 방식은 이야기 속 상황(자는 중 등)으로 판단하므로 해당하지 않습니다.\n두 칸을 비우면 쓰지 않습니다.", "연락하지 않는 시간 설명")}</div>
             <div class="sv-range-pair" role="group" aria-labelledby="sv-cast-quiet-label"><input type="time" data-field="quiet_from" value="${escapeHtml(entry.quiet_from || "")}" aria-label="연락하지 않는 시간 시작"><span>~</span><input type="time" data-field="quiet_to" value="${escapeHtml(entry.quiet_to || "")}" aria-label="연락하지 않는 시간 끝"></div>
           </div>
         </div>
-        ${switchHtml({ id: "sv-cast-memory", label: "채팅 기억 연동", hint: "켜면 전화·문자 내용이 채팅 화면에 보이고, 이 봇카드의 캐릭터가 그 내용을 기억합니다.", tip: "끝난 전화·음성 메시지·주고받은 문자는 스위치와 상관없이 늘 그때의 채팅 메시지에 기록해 둡니다.\n켜면 그 기록을 메시지 아래 ‘전화·문자 채팅 기억’에 보여 주고, 이후 실리태번 채팅에서 서사를 이어갈 때도 활용합니다. 꺼 두었다가 켜도 그동안의 기록이 바로 반영됩니다.\n되돌렸거나 다른 스와이프에서 주고받은 기록은 넣지 않습니다(스마트폰의 미적용 기억).\n끄면 AI에게 보내지 않을 뿐, 기록은 남아 있습니다.", checked: entry.chat_tags === true || (entry.chat_memory ?? Boolean(this.config.chat_memory?.enabled)), attrs: `data-field="chat_memory"${entry.chat_tags ? " disabled" : ""}` })}
-        ${switchHtml({ id: "sv-cast-chat-tags", attrs: 'data-field="chat_tags"', extra: '<span class="sv-badge">베타</span>', label: "채팅 AI가 직접 연락", hint: "본 채팅에서 서사를 진행하는 AI가 이야기 흐름에 맞을 때 직접 씬보이스로 문자를 보내거나 전화를 겁니다. 켜면 ‘채팅 기억 연동’이 함께 켜지고 ‘선연락 받기’는 꺼집니다. 선연락은 다시 켜서 함께 쓸 수 있지만 연락이 겹칠 수 있습니다.", tip: "켜면 이 봇카드의 채팅 요청마다 안내문(약 350토큰)과 연락처 명단(한 명당 약 10~15토큰)이 함께 들어갑니다. AI가 답변 안에 문자나 전화를 표시하면, 본문 그 자리에 작은 말풍선으로 남고 스마트폰에도 실제 문자·걸려 오는 전화로 나타납니다.\n메시지를 직접 고쳐서 그 문자의 내용을 바꾸거나 지우면 스마트폰의 문자도 따라 바뀝니다. 반대로 스마트폰에서 그 문자를 고치거나 지우면 채팅 메시지도 따라 바뀝니다.\n벨 울림에는 보조모델 요청이 들지 않습니다(받은 뒤의 통화는 평소처럼 듭니다).\n연락처에 없는 이름으로 연락하면 그 이름의 인물이 이 봇카드에 자동으로 추가됩니다. 목소리가 없는 동안에는 그 인물의 음성을 자동으로 만들지 않습니다.\nAI가 내 캐릭터의 문자를 쓰면 그 문자방의 내 위치에 들어갑니다.\n‘선연락 받기’가 꺼져 있는 동안에는 음성 메모와 엿듣는 통화도 저절로 생기지 않습니다. 이 기능을 끄면 선연락 받기는 켜기 전 상태로 돌아갑니다.\n모델에 따라 형식을 틀리거나 너무 자주 쓸 수 있습니다.", checked: entry.chat_tags === true })}
         ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고", hint: "고른 월드인포 항목을 전화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다.\n상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 전화·문자에 나올 때만 보냅니다.\n형식이나 문체를 바꾸는 지시가 든 항목은 가급적 꺼 두십시오.\n대필에도 씁니다.", checked: loreOn })}
         <details class="sv-lore-fold" ${loreOn ? "" : "hidden"}><summary><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>참고할 월드인포 고르기</span><i class="fa-solid fa-chevron-down sv-lore-chevron" aria-hidden="true"></i></summary><div id="sv-lore-picker" class="sv-lore-picker"></div></details>
           </div>
@@ -912,16 +946,66 @@ export const casting = {
         ...checked([["sv-cast-single", "목소리 하나"]]),
       ].join(" · "),
     );
+    const reach = document.querySelector(
+      '#sv-cast-panel input[name="sv-cast-reach"]:checked',
+    )?.value;
     setText(
       document.querySelector("#sv-cast-panel [data-card-phone]"),
-      checked([
-        ["sv-cast-outreach", "선연락"],
-        ["sv-cast-realtime", "실제 시간"],
-        ["sv-cast-memory", "채팅 기억"],
-        ["sv-cast-chat-tags", "AI 직접 연락"],
-        ["sv-cast-lore", "월드인포"],
-      ]).join(" · "),
+      [
+        ...(reach === "outreach" ? ["선연락"] : []),
+        ...(reach === "chat_tags" ? ["AI 직접 연락"] : []),
+        ...checked([
+          ...(reach === "chat_tags" ? [] : [["sv-cast-realtime", "실제 시간"]]),
+          // On by itself with 채팅 AI가 직접 연락 (its switch hidden then): named once.
+          ...(reach === "chat_tags" ? [] : [["sv-cast-memory", "채팅 기억"]]),
+          ["sv-cast-lore", "월드인포"],
+        ]),
+      ].join(" · "),
     );
+  },
+
+  /**
+   * 먼저 오는 연락 of the card being edited: 받지 않음, 선연락 or 채팅 AI가 직접 (one or the other).
+   * 채팅 AI가 직접 switches 채팅 기억 연동 on (its switch hidden then, `updateCastEntry`).
+   */
+  setCastReach(key, value) {
+    // Leaving 채팅 AI가 직접: the chat memory it switched on goes back to off (the default).
+    if (this.voiceDraft[key]?.chat_tags && value !== "chat_tags") {
+      this.updateCastEntry(key, "chat_memory", false);
+      const memory = document.getElementById("sv-cast-memory");
+      if (memory) memory.checked = false;
+    }
+    this.updateCastEntry(key, "chat_tags", value === "chat_tags");
+    this.updateCastEntry(key, "outreach", value === "outreach");
+    this.syncCastReach(key);
+  },
+
+  /** The rows that follow 먼저 오는 연락: 연락 방식 and 연락하지 않는 시간, 채팅 기억 연동. */
+  syncCastReach(key) {
+    const entry = this.voiceDraft[key] || {};
+    const reaching = entry.outreach === true;
+    const tagging = entry.chat_tags === true;
+    const value = tagging ? "chat_tags" : reaching ? "outreach" : "";
+    const radio = document.querySelector(
+      `#sv-cast-panel input[name="sv-cast-reach"][value="${value}"]`,
+    );
+    if (radio) radio.checked = true;
+    const panel = document.getElementById("sv-cast-panel");
+    const memory = panel?.querySelector(".sv-cast-memory-row");
+    if (memory) memory.hidden = tagging;
+    const mode = panel?.querySelector(".sv-cast-mode");
+    if (mode) mode.hidden = !reaching;
+    // 실제 시간 인식 isn't offered with 채팅 AI가 직접 (the chat's own model keeps the story's time).
+    const realtime = entry.realtime === true && !tagging;
+    const realtimeRow = panel?.querySelector(".sv-cast-realtime-row");
+    if (realtimeRow) realtimeRow.hidden = tagging;
+    const zones = panel?.querySelector(".sv-cast-zones");
+    if (zones) zones.hidden = !realtime;
+    // 연락하지 않는 시간 goes by the real time: with 선연락 and 실제 시간 인식 both on.
+    const quiet = panel?.querySelector(".sv-cast-quiet");
+    if (quiet) quiet.hidden = !(reaching && realtime);
+    this.noteCardOptions();
+    this.syncOutreachView?.();
   },
 
   onCastInput(event) {
@@ -929,6 +1013,13 @@ export const casting = {
     const field = event.target.dataset?.field;
     if (!field) {
       // 월드인포 참고 for this card: on, and its list can be opened.
+      if (event.target.name === "sv-cast-reach" && event.type === "change") {
+        const card =
+          event.target.closest(".sv-cast-card")?.dataset.key ||
+          this.editingCard;
+        if (card) this.setCastReach(card, event.target.value);
+        return;
+      }
       if (event.target.id === "sv-cast-lore" && event.type === "change") {
         this.loreDraft ||= structuredClone(
           this.config.phone?.world_info_choice || {},
@@ -987,22 +1078,12 @@ export const casting = {
     );
     // 선연락 받기 on this card (switched here, or with 채팅 AI가 직접 연락): the note under 선연락
     // 사용 follows.
-    if (["outreach", "chat_tags"].includes(field)) {
-      const reaching = this.voiceDraft[key]?.outreach === true;
-      const outreach = document.getElementById("sv-cast-outreach");
-      if (outreach) outreach.checked = reaching;
-      const mode = document.querySelector("#sv-cast-panel .sv-cast-mode");
-      if (mode) mode.hidden = !reaching;
-      const quiet = document.querySelector("#sv-cast-panel .sv-cast-quiet");
-      if (quiet) quiet.hidden = !reaching;
-      this.noteCardOptions();
-    }
-    if (["outreach", "outreach_mode", "chat_tags"].includes(field))
-      this.syncOutreachView?.();
+    if (["outreach", "chat_tags"].includes(field)) this.syncCastReach(key);
+    if (field === "outreach_mode") this.syncOutreachView?.();
     // 실제 시간 인식 on: where everyone lives can be chosen.
     if (field === "realtime") {
+      this.syncCastReach(key);
       const zones = document.querySelector("#sv-cast-panel .sv-cast-zones");
-      if (zones) zones.hidden = !value;
       // Switched off, the places chosen go with it.
       if (!value) {
         for (const zone of ["time_zone", "user_time_zone"])
@@ -1195,16 +1276,17 @@ export const casting = {
         delete entry.outreach_paused;
       }
       const memory = document.getElementById("sv-cast-memory");
-      if (memory) {
-        if (value) memory.checked = true;
-        memory.disabled = Boolean(value);
-      }
+      if (memory && value) memory.checked = true;
       return;
     }
     if (value === false || value === "") delete entry[field];
     else entry[field] = value;
-    // Switched by hand: it stays as the user left it.
-    if (field === "outreach") delete entry.outreach_paused;
+    // Switched by hand: it stays as the user left it. On, it takes the place of 채팅 AI가 직접 연락
+    // (one or the other; the chat memory it switched on stays on).
+    if (field === "outreach") {
+      delete entry.outreach_paused;
+      if (value) delete entry.chat_tags;
+    }
     if (!entry.name && !isPerson) entry.name = this.castDefaultName(key);
     const unused =
       !isPerson &&
