@@ -476,7 +476,7 @@ export const casting = {
         ${synced ? '<div class="sv-notice"><i class="fa-solid fa-link" aria-hidden="true"></i><span>MultiCast 확장과 연동된 인물입니다. 목소리·성별·항상 붙일 태그·말투·연기 메모·감정 표현은 MultiCast에서 정하고, 지우려면 MultiCast에서 지우십시오. 여기서는 아래 항목만 추가 지정 가능합니다.</span></div>' : ""}
         <div class="sv-row sv-row-3">
           ${fieldHtml({ id: `${prefix}-name`, label: "이름", control: `<input id="${prefix}-name" data-field="name" maxlength="120" value="${escapeHtml(entry.name || "")}" autocomplete="off">` })}
-          ${fieldHtml({ id: `${prefix}-aliases`, label: "별명·다른 표기", control: `<input id="${prefix}-aliases" data-field="aliases" maxlength="600" value="${escapeHtml(entry.aliases || "")}" placeholder="쉼표로 구분: 사토루, Gojo, 선생님" autocomplete="off">` })}
+          ${fieldHtml({ id: `${prefix}-aliases`, label: "별명, 다른 언어 표기", control: `<input id="${prefix}-aliases" data-field="aliases" maxlength="600" value="${escapeHtml(entry.aliases || "")}" placeholder="쉼표로 구분: 하루, Haru, ハル" autocomplete="off">` })}
           ${fieldHtml({ id: `${prefix}-role`, label: "역할", tip: "페르소나는 내가 연기하는 인물입니다.\n내 메시지와 내가 보낸 문자를 이 목소리로 읽고, 스마트폰 연락처·상태 추적에서는 빠집니다.", control: `<select id="${prefix}-role" data-field="persona"><option value="">봇(등장인물)</option><option value="persona" ${entry.persona ? "selected" : ""}>페르소나(내 캐릭터)</option></select>` })}
         </div>
         ${
@@ -771,7 +771,8 @@ export const casting = {
             <div class="sv-range-pair" role="group" aria-labelledby="sv-cast-quiet-label"><input type="time" data-field="quiet_from" value="${escapeHtml(entry.quiet_from || "")}" aria-label="연락하지 않는 시간 시작"><span>~</span><input type="time" data-field="quiet_to" value="${escapeHtml(entry.quiet_to || "")}" aria-label="연락하지 않는 시간 끝"></div>
           </div>
         </div>
-        ${switchHtml({ id: "sv-cast-memory", attrs: 'data-field="chat_memory"', label: "채팅 기억 연동", hint: "켜면 전화·문자 내용이 채팅 화면에 보이고, 이 봇카드의 캐릭터가 그 내용을 기억합니다.", tip: "끝난 전화·음성 메시지·주고받은 문자는 스위치와 상관없이 늘 그때의 채팅 메시지에 기록해 둡니다.\n켜면 그 기록을 메시지 아래 ‘전화·문자 채팅 기억’에 보여 주고, 이후 실리태번 채팅에서 서사를 이어갈 때도 활용합니다. 꺼 두었다가 켜도 그동안의 기록이 바로 반영됩니다.\n되돌렸거나 다른 스와이프에서 주고받은 기록은 넣지 않습니다(스마트폰의 미적용 기억).\n끄면 AI에게 보내지 않을 뿐, 기록은 남아 있습니다.", checked: entry.chat_memory ?? Boolean(this.config.chat_memory?.enabled) })}
+        ${switchHtml({ id: "sv-cast-memory", label: "채팅 기억 연동", hint: "켜면 전화·문자 내용이 채팅 화면에 보이고, 이 봇카드의 캐릭터가 그 내용을 기억합니다.", tip: "끝난 전화·음성 메시지·주고받은 문자는 스위치와 상관없이 늘 그때의 채팅 메시지에 기록해 둡니다.\n켜면 그 기록을 메시지 아래 ‘전화·문자 채팅 기억’에 보여 주고, 이후 실리태번 채팅에서 서사를 이어갈 때도 활용합니다. 꺼 두었다가 켜도 그동안의 기록이 바로 반영됩니다.\n되돌렸거나 다른 스와이프에서 주고받은 기록은 넣지 않습니다(스마트폰의 미적용 기억).\n끄면 AI에게 보내지 않을 뿐, 기록은 남아 있습니다.", checked: entry.chat_tags === true || (entry.chat_memory ?? Boolean(this.config.chat_memory?.enabled)), attrs: `data-field="chat_memory"${entry.chat_tags ? " disabled" : ""}` })}
+        ${switchHtml({ id: "sv-cast-chat-tags", attrs: 'data-field="chat_tags"', extra: '<span class="sv-badge">베타</span>', label: "채팅 AI가 직접 연락", hint: "본 채팅에서 서사를 진행하는 AI가 이야기 흐름에 맞을 때 직접 씬보이스로 문자를 보내거나 전화를 겁니다. 켜면 ‘채팅 기억 연동’이 함께 켜지고 ‘선연락 받기’는 꺼집니다. 선연락은 다시 켜서 함께 쓸 수 있지만 연락이 겹칠 수 있습니다.", tip: "켜면 이 봇카드의 채팅 요청마다 안내문(약 350토큰)과 연락처 명단(한 명당 약 10~15토큰)이 함께 들어갑니다. AI가 답변 안에 문자나 전화를 표시하면, 본문 그 자리에 작은 말풍선으로 남고 스마트폰에도 실제 문자·걸려 오는 전화로 나타납니다.\n메시지를 직접 고쳐서 그 문자의 내용을 바꾸거나 지우면 스마트폰의 문자도 따라 바뀝니다. 반대로 스마트폰에서 그 문자를 고치거나 지우면 채팅 메시지도 따라 바뀝니다.\n벨 울림에는 보조모델 요청이 들지 않습니다(받은 뒤의 통화는 평소처럼 듭니다).\n연락처에 없는 이름으로 연락하면 그 이름의 인물이 이 봇카드에 자동으로 추가됩니다. 목소리가 없는 동안에는 그 인물의 음성을 자동으로 만들지 않습니다.\nAI가 내 캐릭터의 문자를 쓰면 그 문자방의 내 위치에 들어갑니다.\n‘선연락 받기’가 꺼져 있는 동안에는 음성 메모와 엿듣는 통화도 저절로 생기지 않습니다. 이 기능을 끄면 선연락 받기는 켜기 전 상태로 돌아갑니다.\n모델에 따라 형식을 틀리거나 너무 자주 쓸 수 있습니다.", checked: entry.chat_tags === true })}
         ${switchHtml({ id: "sv-cast-lore", label: "월드인포 참고", hint: "고른 월드인포 항목을 전화·문자 AI 요청에 맥락 참고용으로 보냅니다.", tip: "참고할 월드인포와 항목을 고릅니다.\n상시 항목은 늘, 키워드 항목은 그 키워드가 최근 채팅이나 지금 전화·문자에 나올 때만 보냅니다.\n형식이나 문체를 바꾸는 지시가 든 항목은 가급적 꺼 두십시오.\n대필에도 씁니다.", checked: loreOn })}
         <details class="sv-lore-fold" ${loreOn ? "" : "hidden"}><summary><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>참고할 월드인포 고르기</span><i class="fa-solid fa-chevron-down sv-lore-chevron" aria-hidden="true"></i></summary><div id="sv-lore-picker" class="sv-lore-picker"></div></details>
           </div>
@@ -917,6 +918,7 @@ export const casting = {
         ["sv-cast-outreach", "선연락"],
         ["sv-cast-realtime", "실제 시간"],
         ["sv-cast-memory", "채팅 기억"],
+        ["sv-cast-chat-tags", "AI 직접 연락"],
         ["sv-cast-lore", "월드인포"],
       ]).join(" · "),
     );
@@ -983,14 +985,19 @@ export const casting = {
       field,
       field === "persona" ? value === "persona" || value === true : value,
     );
-    // 선연락 받기 on this card: the note under 선연락 사용 follows.
-    if (field === "outreach") {
+    // 선연락 받기 on this card (switched here, or with 채팅 AI가 직접 연락): the note under 선연락
+    // 사용 follows.
+    if (["outreach", "chat_tags"].includes(field)) {
+      const reaching = this.voiceDraft[key]?.outreach === true;
+      const outreach = document.getElementById("sv-cast-outreach");
+      if (outreach) outreach.checked = reaching;
       const mode = document.querySelector("#sv-cast-panel .sv-cast-mode");
-      if (mode) mode.hidden = !value;
+      if (mode) mode.hidden = !reaching;
       const quiet = document.querySelector("#sv-cast-panel .sv-cast-quiet");
-      if (quiet) quiet.hidden = !value;
+      if (quiet) quiet.hidden = !reaching;
+      this.noteCardOptions();
     }
-    if (["outreach", "outreach_mode"].includes(field))
+    if (["outreach", "outreach_mode", "chat_tags"].includes(field))
       this.syncOutreachView?.();
     // 실제 시간 인식 on: where everyone lives can be chosen.
     if (field === "realtime") {
@@ -1171,8 +1178,33 @@ export const casting = {
       entry.chat_memory = Boolean(value);
       return;
     }
+    // 채팅 AI가 직접 연락 needs the chat memory (the model learns from it what was sent): on with it.
+    // 선연락 받기 goes off with it, so two models don't both reach out (it can be switched back on
+    // by hand), and comes back when this is switched off again.
+    if (field === "chat_tags") {
+      if (value) {
+        entry.chat_tags = true;
+        entry.chat_memory = true;
+        if (entry.outreach) {
+          delete entry.outreach;
+          entry.outreach_paused = true;
+        }
+      } else {
+        delete entry.chat_tags;
+        if (entry.outreach_paused) entry.outreach = true;
+        delete entry.outreach_paused;
+      }
+      const memory = document.getElementById("sv-cast-memory");
+      if (memory) {
+        if (value) memory.checked = true;
+        memory.disabled = Boolean(value);
+      }
+      return;
+    }
     if (value === false || value === "") delete entry[field];
     else entry[field] = value;
+    // Switched by hand: it stays as the user left it.
+    if (field === "outreach") delete entry.outreach_paused;
     if (!entry.name && !isPerson) entry.name = this.castDefaultName(key);
     const unused =
       !isPerson &&
@@ -1181,6 +1213,7 @@ export const casting = {
       !entry.realtime &&
       !entry.outreach &&
       entry.chat_memory === undefined &&
+      !entry.chat_tags &&
       !cardHoldsPerson(entry, this.noteDraft[key]);
     if (unused) delete this.voiceDraft[key];
   },

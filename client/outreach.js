@@ -830,7 +830,7 @@ export const outreach = {
 
   /** A person's call rings: saved as ringing (anchored to the message that led to it). */
   async ringIncomingCall(
-    { candidate, callerKey, caller, prewritten = null },
+    { candidate, callerKey, caller, prewritten = null, waits = false },
     sourceMessageId,
   ) {
     // One call at a time, whichever bot card it belongs to (visit.js).
@@ -850,6 +850,7 @@ export const outreach = {
         direction: "incoming",
         status: "ringing",
         situation: candidate.reason || "",
+        ...(waits ? { waits: true } : {}),
       });
       if (made.existing) return;
       sessionId = made.session?.id || "";
@@ -864,6 +865,7 @@ export const outreach = {
       sourceMessageId,
       sessionId,
       createdAt: new Date().toISOString(),
+      ...(waits ? { waits: true } : {}),
       // The opening line, when it was written before the ring (gone after a reload: asked then).
       ...(prewritten?.text ? { prewritten } : {}),
     };

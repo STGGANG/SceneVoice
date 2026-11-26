@@ -2968,7 +2968,9 @@ i.sv-reach-all::after {
   position: fixed;
   right: 20px;
   bottom: 24px;
-  z-index: 2147483500;
+  /* Just over the chat (실리태번's #sheld and #form_sheld are 30): its drawers (3000), top bar,
+     popups and other extensions' windows all come over it. */
+  z-index: 31;
   display: grid;
   place-items: center;
   width: 38px;
@@ -7377,8 +7379,7 @@ i.sv-reach-all::after {
   border-radius: 12px;
   background: var(--ph-surface);
 }
-/* Nothing in it shows (the room isn't one without me): no empty box. */
-.sv-room-alone-options:not(:has(> :not([hidden]))),
+/* Nothing in it shows (the room isn't one without me): no empty box (hidden by groups.js). */
 .sv-room-alone-options[hidden] {
   display: none;
 }
@@ -7990,9 +7991,23 @@ body.sv-hide-line-buttons
   .sv-inline-actions:has(> .sv-play-btn.sv-playing):not(.sv-line-skipped) {
   display: inline-flex !important;
 }
+/* Named one by one: anything unnamed after :has() makes the browser restyle the whole page on
+   every change to it (DEVELOPMENT.md, 2026-11-26). */
 body.sv-hide-line-buttons
   .sv-inline-actions:has(> .sv-play-btn.sv-playing)
-  > :not(.sv-play-btn) {
+  > .sv-more-btn,
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing)
+  > .sv-reroll-btn,
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing)
+  > .sv-edit-btn,
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing)
+  > .sv-download-btn,
+body.sv-hide-line-buttons
+  .sv-inline-actions:has(> .sv-play-btn.sv-playing)
+  > .sv-speaker-select {
   display: none !important;
 }
 #sv-panel.sv-phone-off
@@ -8253,8 +8268,10 @@ body.sv-hide-line-buttons
   opacity: 0.2;
   cursor: default;
 }
-/* Under the incoming-call banner when both are up. */
-body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
+/* Under the incoming-call banner when both are up (both sit in body, in either order). Not
+   body:has(): that makes every change on the page a :has() change (DEVELOPMENT.md, 2026-11-26). */
+#sv-call-banner ~ #sv-now-reading:not(.sv-at-bottom),
+#sv-now-reading:not(.sv-at-bottom):has(~ #sv-call-banner) {
   top: calc(var(--topBarBlockSize, 46px) + 92px + env(safe-area-inset-top));
 }
 /* The speaker's name sits on the strip's top edge, small. */
@@ -9487,7 +9504,7 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   opacity: 0.35;
   cursor: default;
 }
-#sv-smartphone .sv-listen-controls:has(> div:nth-child(4)) {
+#sv-smartphone .sv-listen-controls:has(> .sv-listen-control:nth-child(4)) {
   gap: 16px;
 }
 #sv-smartphone .sv-listen-later {
@@ -10696,7 +10713,15 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
 #sv-settings-tab
   :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
   .sv-row:has(+ .sv-sub-sec)
-  > :last-child,
+  > .sv-field:last-child,
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row:has(+ .sv-sub-sec)
+  > .sv-switch-row:last-child,
+#sv-settings-tab
+  :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
+  .sv-row:has(+ .sv-sub-sec)
+  > .sv-stack:last-child,
 #sv-settings-tab
   :is(.sv-pane:not([data-pane="people"]), .sv-cast-phone)
   .sv-switch-row:has(+ :is(.sv-sub-sec, .sv-basic-on)) {
@@ -11462,4 +11487,47 @@ body:has(#sv-call-banner) #sv-now-reading:not(.sv-at-bottom) {
   background: var(--sv-soft2);
   font-size: 0.8em;
   vertical-align: 0.05em;
+}
+
+/* ---------- 채팅 AI가 직접 연락: a text or a call written in a chat message ---------- */
+/* Drawn where it stands, in the theme's own colours. */
+#chat .mes_text :is([data-sv-text], [data-sv-call]) {
+  display: inline-block;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 0.3em 0.8em;
+  border: 1px solid var(--SmartThemeBorderColor, currentColor);
+  border-radius: 1em;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font-size: 0.95em;
+  font-style: normal;
+  line-height: 1.45;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+#chat .mes_text :is([data-sv-text], [data-sv-call])::before {
+  margin-right: 0.5em;
+  font-family: "Font Awesome 6 Free";
+  font-size: 0.8em;
+  font-weight: 900;
+  opacity: 0.6;
+  content: "\f075";
+}
+#chat .mes_text [data-sv-call]::before {
+  content: "\f095";
+}
+#chat .mes_text [data-sv-call]::after {
+  content: "전화";
+  opacity: 0.75;
+}
+#chat .mes_text [data-sv-from] {
+  margin-right: 0.5em;
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.7;
+}
+/* Written as my own character. */
+#chat .mes_text [data-sv-mine] {
+  border-color: var(--SmartThemeQuoteColor, currentColor);
 }

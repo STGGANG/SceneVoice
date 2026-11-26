@@ -49,6 +49,7 @@ import { radio } from "./radio.js";
 import { otherChats } from "./other-chats.js";
 import { timedOutreach } from "./timed-outreach.js";
 import { visit } from "./visit.js";
+import { chatTags } from "./chat-tags.js";
 import { chatLine } from "./chat-line.js";
 
 export const SceneVoice = {
@@ -135,6 +136,7 @@ export const SceneVoice = {
   ...otherChats,
   ...timedOutreach,
   ...visit,
+  ...chatTags,
   ...casting,
   ...shell,
   ...calls,

@@ -309,6 +309,8 @@ export const groups = {
         ["#sv-room-burst", uses.burst],
       ])
         body.querySelector(selector).hidden = !(editor.custom && used);
+      const box = body.querySelector(".sv-room-alone-options");
+      box.hidden = ![...box.children].some((child) => !child.hidden);
       body.querySelector(".sv-room-hint").textContent = editor.without_user
         ? "자기들끼리 대화할 사람을 두 명 이상 고르십시오."
         : "함께 대화할 사람을 두 명 이상 고르십시오.";

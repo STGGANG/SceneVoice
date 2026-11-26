@@ -593,8 +593,9 @@ export const messages = {
     const remove = button("sv-msg-delete", "fa-trash-can", "삭제");
     const voice = (item.kind || "voice") === "voice";
     // Only the newest message can be asked for again: later ones would no longer follow from it.
+    // (Nor a text of the chat's own reply: it is written again by swiping that reply.)
     const again =
-      latest && item.role !== "user"
+      latest && item.role !== "user" && !Number.isInteger(item.chat_tag)
         ? button(
             "sv-msg-again",
             "fa-arrows-rotate",
@@ -1936,13 +1937,18 @@ export const messages = {
       {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: item.chat_id }),
+        body: JSON.stringify({
+          chat_id: item.chat_id,
+          // A text of the chat's own reply: the ones after it in that reply close up.
+          ...(Number.isInteger(item.chat_tag) ? { shift_tags: true } : {}),
+        }),
       },
     );
     const data = await response.json();
     if (!response.ok)
       throw new Error(data.detail || "문자를 지우지 못했습니다.");
     await this.forgetMessageMemory(item);
+    await this.chatMessageFollows?.(item, { removed: true });
     await this.renderSmartphone();
   },
 
@@ -2262,6 +2268,7 @@ export const messages = {
     threadKey = "",
     round = "",
     thread = null,
+    chatTag = null,
   }) {
     const draft = this.normalizePhoneDraft(parsed, reason);
     // A text may answer a card of mine or bring a card of its own (one or the other), and quote a
@@ -2315,6 +2322,7 @@ export const messages = {
           ...(family ? { family: family.family } : {}),
           // Written while this card's chat wasn't open (visit.js): its chat memory comes later.
           ...(this.visitOf ? { away: true } : {}),
+          ...(chatTag === null ? {} : { chat_tag: chatTag }),
         }),
       },
     );
@@ -2357,7 +2365,11 @@ export const messages = {
         type: "voice_message",
         reason,
       });
-    if (kind === "voice" && this.config.voice_message?.auto_generate_audio)
+    if (
+      kind === "voice" &&
+      this.config.voice_message?.auto_generate_audio &&
+      !this.voiceLeftUnmade?.(character.key)
+    )
       await this.generateArrivedVoice(record);
     return record;
   },
@@ -2406,6 +2418,7 @@ export const messages = {
     const data = await response.json();
     if (!response.ok)
       throw new Error(data.detail || "문자를 고치지 못했습니다.");
+    await this.chatMessageFollows?.(data.item);
     // Chat memory keeps what was actually sent, so it follows the edit.
     if ((data.item.kind || "voice") === "text" || data.item.origin === "reply")
       await this.persistTextThreadMemory(

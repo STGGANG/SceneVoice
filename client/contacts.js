@@ -162,7 +162,12 @@ export const contacts = {
   cardIsPerson(cardKey) {
     const voices = this.config.character_voices || {};
     if (voices[cardKey]?.single_voice === true) return true;
-    if (this.cardPeople(cardKey).length || this.cardStandIn(cardKey))
+    // Someone the chat's model brought in (chat-tags.js) is a contact beside the card, not one
+    // of the people it is made of: the card stays the person it was.
+    if (
+      this.cardPeople(cardKey).some((key) => !voices[key]?.from_chat) ||
+      this.cardStandIn(cardKey)
+    )
       return false;
     if (voices[cardKey]?.voice_id) return true;
     return !Object.entries(voices).some(
@@ -184,6 +189,8 @@ export const contacts = {
     if (!this.hasCharacterChat()) return [];
     const list = [];
     const add = (key) => {
+      // Someone the chat's model brought in on another swipe isn't here (chat-tags.js).
+      if (this.chatPersonAway?.(key)) return;
       if (!list.some((contact) => contact.key === key))
         list.push(this.phoneContact(key));
     };

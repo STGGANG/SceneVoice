@@ -53,20 +53,36 @@ function restoreMemoryScroll(position) {
     container.scrollTop += anchor.getBoundingClientRect().top - position.top;
 }
 
-function placeMemoryAfterText(details, text) {
+// Where a record box goes under its message, in steps taken for every box of the chat together
+// (memoryPlaceAll): a style read after a write makes the browser work the styles out again,
+// under some themes for the whole page, so a box placed on its own cost three of those.
+
+/** What the box takes from the text it follows (read before anything is moved). */
+const memoryOrderOf = (text) => {
+  const order = getComputedStyle(text).order;
+  return order === "0" ? "" : order;
+};
+
+/** The box after its text, with no place of its own in a grid yet (writes only). */
+function memoryPlaceReset(details, text, order) {
   if (text.nextElementSibling !== details) text.after(details);
+  if (details.style.order !== order) details.style.order = order;
+  if (details.style.gridRow) details.style.gridRow = "";
+  if (details.style.gridColumn) details.style.gridColumn = "";
+}
+
+/** Its row and column where a theme lays the message out as a grid, "" otherwise (reads only). */
+function memoryPlaceMeasure(details, text) {
+  const place = { gridColumn: "", gridRow: "" };
   const textStyle = getComputedStyle(text);
-  details.style.order = textStyle.order === "0" ? "" : textStyle.order;
   let host = text.parentElement;
   while (host && getComputedStyle(host).display === "contents")
     host = host.parentElement;
-  details.style.gridRow = "";
-  details.style.gridColumn = "";
-  if (!host || !/grid/.test(getComputedStyle(host).display)) return;
+  if (!host || !/grid/.test(getComputedStyle(host).display)) return place;
 
   // A theme can flatten message wrappers into a grid. Use the rendered row boundaries so
   // named areas, numeric rows, and other records below the text all keep their own space.
-  details.style.gridColumn =
+  place.gridColumn =
     textStyle.gridColumn === "auto / auto" ? "1 / -1" : textStyle.gridColumn;
   const items = [];
   const collect = (parent) => {
@@ -84,7 +100,7 @@ function placeMemoryAfterText(details, text) {
   collect(host);
   const hostStyle = getComputedStyle(host);
   const tracks = hostStyle.gridTemplateRows.match(/\d+(?:\.\d+)?px/g);
-  if (!tracks?.length) return;
+  if (!tracks?.length) return place;
   const bottom = Math.max(
     text.getBoundingClientRect().bottom,
     ...items.map((node) => node.getBoundingClientRect().bottom),
@@ -100,7 +116,25 @@ function placeMemoryAfterText(details, text) {
     edge += parseFloat(track) + gap;
     row++;
   }
-  details.style.gridRow = String(row);
+  place.gridRow = String(row);
+  return place;
+}
+
+/** Every box of the chat placed: all read, then all moved, then all measured, then all set. */
+function memoryPlaceAll(pairs) {
+  if (!pairs.length) return;
+  const orders = pairs.map(([, text]) => memoryOrderOf(text));
+  pairs.forEach(([details, text], at) =>
+    memoryPlaceReset(details, text, orders[at]),
+  );
+  const places = pairs.map(([details, text]) =>
+    memoryPlaceMeasure(details, text),
+  );
+  pairs.forEach(([details], at) => {
+    const { gridColumn, gridRow } = places[at];
+    if (gridColumn) details.style.gridColumn = gridColumn;
+    if (gridRow) details.style.gridRow = gridRow;
+  });
 }
 
 export const memory = {
@@ -369,6 +403,8 @@ export const memory = {
     const items = (await this.loadMessages({ all: away })).filter(
       (item) =>
         !forgotten.has(String(item.id)) &&
+        // Made from a tag of the chat message (chat-tags.js): the message says it itself.
+        !Number.isInteger(item.chat_tag) &&
         this.messageThreadOf(item) === key &&
         String(item.anchor_message_id) === anchor &&
         (!away ||
@@ -568,7 +604,10 @@ export const memory = {
       key.startsWith("character:"),
     );
     return cards.length
-      ? cards.some((key) => voices[key]?.chat_memory ?? before)
+      ? cards.some(
+          (key) =>
+            voices[key]?.chat_tags || (voices[key]?.chat_memory ?? before),
+        )
       : before;
   },
 
@@ -614,6 +653,8 @@ export const memory = {
       this.chatMemoryRenderedKey = chatKey;
       messages = null;
     }
+    // Placed together once all are drawn (memoryPlaceAll).
+    const placed = [];
     (messages || document.querySelectorAll("#chat .mes[mesid]")).forEach(
       (messageElement) => {
         if (!messageElement.matches?.("#chat .mes[mesid]")) return;
@@ -648,7 +689,7 @@ export const memory = {
           existing.dataset.chatKey === chatKey
         ) {
           existing.dataset.messageId = String(index);
-          placeMemoryAfterText(existing, text);
+          placed.push([existing, text]);
           return;
         }
         const wasOpen = Boolean(existing?.open);
@@ -709,9 +750,10 @@ export const memory = {
                       .join("")}
                 </div>`;
         existing?.replaceWith(details);
-        placeMemoryAfterText(details, text);
+        placed.push([details, text]);
       },
     );
+    memoryPlaceAll(placed);
     restoreMemoryScroll(scroll);
   },
 
@@ -760,6 +802,7 @@ export const memory = {
   },
 
   async refreshChatMemory() {
+    this.syncChatTagPrompt?.();
     this.syncChatMemoryPrompts();
     this.renderChatMemoryDecorations();
   },

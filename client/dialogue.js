@@ -1,5 +1,6 @@
 // 채팅 대사 버튼: finds the lines to read in each chat message, puts play buttons on them and
 // makes each line's voice.
+import { withoutChatTags } from "./chat-tags.js";
 import { contentKey } from "../shared/hash.js";
 import { extractSegments } from "../shared/segments.js";
 import {
@@ -212,6 +213,21 @@ export const dialogue = {
               }
               return;
             }
+            // 채팅 AI가 직접 연락: the reply's phone tags leave it before anything reads it.
+            if (eventName === events.MESSAGE_RECEIVED)
+              this.syncChatTags(messageId, { arrived: true });
+            // An edited message: the phone follows what its tags say now (after this event has
+            // reset the chat's work, which would take the following with it).
+            if (
+              [events.MESSAGE_EDITED, events.MESSAGE_UPDATED].includes(
+                eventName,
+              )
+            )
+              setTimeout(() => this.syncChatTags(messageId), 0);
+            this.scheduleChatTagDraw();
+            // Its instruction follows the chat that is open and who can be reached in it.
+            this.syncChatTagPrompt();
+            this.scheduleChatPeople();
             const reloaded =
               eventName === events.CHAT_CHANGED && this.sameChatReloaded();
             if (reloaded) {
@@ -423,6 +439,8 @@ export const dialogue = {
   },
 
   scan() {
+    // A translation put over a message, or taken off: its phone bubbles are drawn again first.
+    this.drawChatTags?.();
     const all = this.scanAll || !this.scanTargets?.size;
     const targets = all ? [] : [...this.scanTargets];
     this.scanAll = false;
@@ -509,9 +527,11 @@ export const dialogue = {
     const written = context.chat?.[Number(messageId)];
     // (Under a translation the marks are those of the translation, which is what is drawn.)
     const raw = withoutVoiceTags(
-      ((source ? source.shown : this.translationShown(container, written))
-        ? written?.extra?.display_text
-        : written?.mes) || "",
+      withoutChatTags(
+        ((source ? source.shown : this.translationShown(container, written))
+          ? written?.extra?.display_text
+          : written?.mes) || "",
+      ),
     );
     // Markdown turns *…* and _…_ into emphasis and removes the marks. Only decorate emphasis
     // whose text matches a region marked that way in the message source.
@@ -642,7 +662,7 @@ export const dialogue = {
   sourceHost(messageId, message, shown = false) {
     const context = stOf(this) || {};
     const written = withoutVoiceTags(
-      shown ? message.extra.display_text : message.mes,
+      withoutChatTags(shown ? message.extra.display_text : message.mes),
     );
     const text =
       typeof context.substituteParams === "function"
@@ -771,7 +791,7 @@ export const dialogue = {
       if (run.length) runs.push(run);
       run = [];
     };
-    const left = `script,style,textarea,input,button,select,code,pre,.voice-bubble,.sv-inline-actions,${skip}`;
+    const left = `script,style,textarea,input,button,select,code,pre,.voice-bubble,.sv-inline-actions,[data-sv-text],[data-sv-call],${skip}`;
     const visit = (parent) => {
       for (const child of parent.childNodes) {
         if (child.nodeType === Node.TEXT_NODE) {

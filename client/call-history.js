@@ -1114,7 +1114,7 @@ export const callHistory = {
         ? session.turns?.[run.position]
         : null;
     const control = (attrs, icon, label, cls = "sv-listen-back") =>
-      `<div><button type="button" class="sv-call-end ${cls}" ${attrs} aria-label="${label}" ${writing ? "disabled" : ""}><i class="fa-solid ${icon}" aria-hidden="true"></i></button><small>${label}</small></div>`;
+      `<div class="sv-listen-control"><button type="button" class="sv-call-end ${cls}" ${attrs} aria-label="${label}" ${writing ? "disabled" : ""}><i class="fa-solid ${icon}" aria-hidden="true"></i></button><small>${label}</small></div>`;
     body.innerHTML = `
       <div class="sv-call-screen sv-listen-screen${many ? " sv-listen-between" : ""}${members.length > 2 ? " sv-listen-many" : ""}" data-phone-wallpaper data-session="${escapeHtml(session.id)}">
         <div class="sv-call-identity">

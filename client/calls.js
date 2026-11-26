@@ -387,12 +387,14 @@ export const calls = {
 
   /**
    * A call of theirs ringing goes on for RING_SECONDS from when it began (also after a reload);
-   * not picked up by then it is missed.
+   * not picked up by then it is missed. One that `waits` (written in the chat's own reply, which
+   * the user reads before deciding) rings until it is picked up or declined.
    */
   armRingTimeout() {
     clearTimeout(this.ringTimer);
     const pending = this.phonePendingEvent;
     if (pending?.type !== "incoming_call" || !pending.sessionId) return;
+    if (pending.waits) return;
     const began = new Date(pending.createdAt).getTime();
     const left = Number.isFinite(began)
       ? began + RING_SECONDS * 1000 - Date.now()
@@ -500,7 +502,10 @@ export const calls = {
       await this.persistPhoneSessionToMessage(saved);
       this.announceCallRecord(saved, "voicemail");
       // Made now and kept with it (heard later from 통화 기록).
-      if (this.config.phone?.auto_voice !== false)
+      if (
+        this.config.phone?.auto_voice !== false &&
+        !this.voiceLeftUnmade?.(character.key)
+      )
         await this.makePhoneTurnAudio(saved, saved.turns[0])
           .then((made) => made && URL.revokeObjectURL(made.audioUrl))
           .catch((error) => {
@@ -566,6 +571,7 @@ export const calls = {
             sessionId: openSession.id,
             callerKey: openSession.character_key,
             createdAt: openSession.started_at,
+            ...(openSession.waits ? { waits: true } : {}),
             restored: true,
           };
           // Ringing again (its banner and the floating button show it) for what is left of its
@@ -1038,6 +1044,7 @@ export const calls = {
     await this.renderSmartphone();
     // Like a real call: the reply is voiced and played as soon as it arrives (setting, on by default).
     if (this.config.phone?.auto_voice === false) return;
+    if (this.voiceLeftUnmade?.(speaker.key)) return;
     if (made.length > 1) void this.voiceGroupRound(made.filter(Boolean));
     else if (this.phoneSession?.turns?.at(-1)?.role === "character")
       void this.handlePhoneTurnPlayback(made[0]);

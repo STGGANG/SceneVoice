@@ -787,7 +787,7 @@ export const radio = {
     const frequency = this.radioFrequency(show);
     const needle = Math.round(((Number(frequency) - 88) / 20) * 1000) / 10;
     const control = (attrs, icon, label, cls) =>
-      `<div><button type="button" class="sv-call-end ${cls}" ${attrs} aria-label="${label}"><i class="fa-solid ${icon}" aria-hidden="true"></i></button><small>${label}</small></div>`;
+      `<div class="sv-listen-control"><button type="button" class="sv-call-end ${cls}" ${attrs} aria-label="${label}"><i class="fa-solid ${icon}" aria-hidden="true"></i></button><small>${label}</small></div>`;
     body.innerHTML = `
       <div class="sv-call-screen sv-radio-air${run?.sounding && !ended ? " sv-radio-live" : ""}${hosts.length > 1 ? " sv-listen-between" : ""}${hosts.length > 2 ? " sv-listen-many" : ""}" data-phone-wallpaper>
         <div class="sv-radio-set" aria-hidden="true">

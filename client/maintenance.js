@@ -342,7 +342,7 @@ export const maintenance = {
               .join("")
           : '<p class="sv-hint">남아 있는 예전 봇카드를 찾지 못했습니다. 아래에 예전 이름을 적어 주십시오.</p>'
       }</div>
-      <label class="sv-field"><span class="sv-label-line">또는 예전 이름</span><input type="text" id="sv-relink-name" placeholder="예: 고죠 (예전 카드 파일 이름, .png는 빼고)" autocomplete="off"></label>
+      <label class="sv-field"><span class="sv-label-line">또는 예전 이름</span><input type="text" id="sv-relink-name" placeholder="예: 서하루 (예전 카드 파일 이름, .png는 빼고)" autocomplete="off"></label>
       <footer class="sv-dialog-actions"><button type="submit" class="sv-btn">취소</button><button type="button" class="sv-btn sv-btn-primary" data-relink><i class="fa-solid fa-link" aria-hidden="true"></i><span>옮기기</span></button></footer>
     </form>`;
     document.body.append(dialog);

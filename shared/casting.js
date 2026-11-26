@@ -125,8 +125,14 @@ export function validateVoices(value) {
       // 채팅 기억 연동 for this card; unset follows the old switch for every card.
       if (typeof profile.chat_memory === "boolean")
         result.chat_memory = profile.chat_memory;
+      // 채팅 AI가 직접 연락 (베타) for this card; a person its chat's model brought in.
+      if (profile.chat_tags) result.chat_tags = true;
+      if (profile.from_chat) result.from_chat = true;
       // A card whose people may call or text first (스마트폰 사용 시 선연락 받기; off unless set).
       if (profile.outreach) result.outreach = true;
+      // Switched off by 채팅 AI가 직접 연락 coming on: back on when that goes off.
+      else if (profile.outreach_paused && profile.chat_tags)
+        result.outreach_paused = true;
       // Its own 연락 방식; unset follows the one chosen in the settings.
       if (["state", "random", "time"].includes(profile.outreach_mode))
         result.outreach_mode = profile.outreach_mode;
@@ -268,7 +274,11 @@ export function resolveVoice(settings, input) {
   ) {
     const people = Object.entries(voices).filter(
       ([other, entry]) =>
-        other !== key && entry?.card === key && !entry.persona,
+        other !== key &&
+        entry?.card === key &&
+        !entry.persona &&
+        // Brought in by the chat's model: a contact, not who the card speaks as.
+        !entry.from_chat,
     );
     // The person named like the card when there is one, otherwise the first registered.
     const cardName = text(input.speaker_name, 120) || profile?.name || "";

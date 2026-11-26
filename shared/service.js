@@ -1507,6 +1507,8 @@ export class SceneService {
         ...(others.length ? { others } : {}),
         // Made while its chat wasn't open: its chat memory is written when that chat opens.
         ...(body.away === true ? { away: true } : {}),
+        // Rings until it is picked up or declined (a call written in the chat's own reply).
+        ...(body.waits === true && status === "ringing" ? { waits: true } : {}),
         call_direction: body.direction === "incoming" ? "incoming" : "outgoing",
         situation: text(body.situation, 4000),
         started_at: stamp,
@@ -1763,6 +1765,13 @@ export class SceneService {
         ...(text(body.family, 64) ? { family: text(body.family, 64) } : {}),
         // Exchanged while its chat wasn't open: its chat memory is written when the chat is.
         ...(body.away === true ? { away: true } : {}),
+        // Made from a phone tag of its chat message (which one, counted from 0): the message
+        // itself holds it, so the chat memory leaves it out.
+        ...(Number.isInteger(body.chat_tag) &&
+        body.chat_tag >= 0 &&
+        body.chat_tag < 1000
+          ? { chat_tag: body.chat_tag }
+          : {}),
         created_at: stamp,
       };
       // A new answer for a message set aside (답변 재생성): the earlier answers come along as
@@ -2110,6 +2119,19 @@ export class SceneService {
       const item = find(data.messages, removeMessage[1]);
       checkChat(item, body);
       data.messages = data.messages.filter((x) => x.id !== item.id);
+      // A text of a chat reply's own tags, taken out with its tag: the later ones of that reply
+      // move up a place.
+      if (body.shift_tags === true && Number.isInteger(item.chat_tag))
+        for (const x of data.messages)
+          if (
+            x.chat_id === item.chat_id &&
+            String(x.anchor_message_id) === String(item.anchor_message_id) &&
+            (x.anchor_tag || "") === (item.anchor_tag || "") &&
+            x.anchor_swipe === item.anchor_swipe &&
+            Number.isInteger(x.chat_tag) &&
+            x.chat_tag > item.chat_tag
+          )
+            x.chat_tag -= 1;
       return { status: "success" };
     }
     // A group's rounds: one hidden while another of its versions is shown (답변 재생성, ‹ ›).
